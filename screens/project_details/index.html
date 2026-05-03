@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Project Details | ProjectIntel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface": "#f7f9fb",
+                        "on-secondary-fixed": "#00201d",
+                        "tertiary": "#0d0097",
+                        "primary-container": "#1e3a8a",
+                        "surface-container": "#eceef0",
+                        "surface-dim": "#d8dadc",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#005049",
+                        "on-primary-fixed-variant": "#264191",
+                        "background": "#f7f9fb",
+                        "on-secondary": "#ffffff",
+                        "outline": "#757682",
+                        "on-background": "#191c1e",
+                        "outline-variant": "#c5c5d3",
+                        "tertiary-fixed": "#e1e0ff",
+                        "secondary-fixed": "#89f5e7",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "primary-fixed": "#dce1ff",
+                        "on-tertiary-container": "#a1a4ff",
+                        "tertiary-container": "#2724b8",
+                        "surface-bright": "#f7f9fb",
+                        "surface-container-high": "#e6e8ea",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#444651",
+                        "secondary-container": "#86f2e4",
+                        "on-tertiary-fixed": "#07006c",
+                        "error": "#ba1a1a",
+                        "secondary-fixed-dim": "#6bd8cb",
+                        "inverse-on-surface": "#eff1f3",
+                        "secondary": "#006a61",
+                        "on-secondary-container": "#006f66",
+                        "primary": "#00236f",
+                        "inverse-surface": "#2d3133",
+                        "surface-variant": "#e0e3e5",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-primary-container": "#90a8ff",
+                        "on-surface": "#191c1e",
+                        "on-primary-fixed": "#00164e",
+                        "inverse-primary": "#b6c4ff",
+                        "surface-tint": "#4059aa",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-error-container": "#93000a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "48px",
+                        "container-max": "1440px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "base": "4px",
+                        "xs": "4px",
+                        "sm": "8px",
+                        "gutter": "20px"
+                    },
+                    "fontFamily": {
+                        "code": ["Inter"],
+                        "h2": ["Manrope"],
+                        "body-sm": ["Inter"],
+                        "h3": ["Manrope"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "h1": ["Manrope"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "code": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h3": ["20px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "h1": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-background selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col pt-4 pb-6 z-50 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 w-64">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-lg">smart_toy</span>
+</div>
+<div class="flex flex-col">
+<span class="text-lg font-bold text-blue-900 dark:text-blue-100 font-h3 leading-none">ProjectIntel</span>
+<span class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Enterprise AI</span>
+</div>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300 border-r-4 border-blue-900 dark:border-blue-500 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">folder_managed</span>
+                Projects
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">rule</span>
+                Tasks
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">article</span>
+                Documents
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+                AI Assistant
+            </a>
+</nav>
+<div class="mt-auto px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+<a class="flex items-center gap-3 px-3 py-2.5 font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-blue-900 dark:hover:text-blue-100 transition-all scale-98 duration-100 ease-in-out" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+                Account
+            </a>
+</div>
+</aside>
+<!-- Main Content Shell -->
+<div class="ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-64 flex items-center justify-between px-6 z-40 bg-white/80 backdrop-blur-md h-16 border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="w-full bg-slate-50 border-none rounded-lg py-1.5 pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary/20" placeholder="Search projects..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
+<div class="flex items-center gap-3 pl-2">
+<div class="text-right hidden sm:block">
+<p class="text-xs font-bold text-blue-900 leading-none">Alex Rivera</p>
+<p class="text-[10px] text-slate-500 uppercase tracking-tighter">Admin</p>
+</div>
+<img alt="User avatar" class="w-8 h-8 rounded-full border border-slate-200 object-cover" data-alt="Professional portrait of a middle-aged man with short dark hair and a confident smile, wearing a modern blue suit jacket" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTEpitD0BMHJVGi25CI37Zef0NgTw6luf684D0TCC1NFhoZifkFVtVc-nColNmE3l83GLPfoQsPmTqMV3iDA9_6NsNDLGXSMk4yoPF0qyiaXMRmILw6v_j8EEL4l3zS5GSnHLtsuNyc5daacsSHbhnVKeTZPSgWnO6kM69cJoCuu9fgo-xA-P0YjFWt-P-H2_p9gYS8oFHxNCK5xNMxBrj3kU88viGi02miXXzCfod6j4Mo8lw1SXZnw9ZYwGpuIvNzb5CllMVHq4"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="mt-16 p-lg flex-1">
+<div class="max-w-container-max mx-auto space-y-lg">
+<!-- Page Header & Bento Hero -->
+<div class="grid grid-cols-12 gap-lg">
+<!-- Left: Breadcrumbs & Primary Project Title -->
+<div class="col-span-12 lg:col-span-8 space-y-md">
+<nav class="flex items-center gap-2 text-label-md text-slate-500">
+<a class="hover:text-primary transition-colors" href="#">Projects</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-background">System-9 AI Integration</span>
+</nav>
+<div class="flex items-center justify-between">
+<div class="space-y-1">
+<h1 class="font-h1 text-h1 text-blue-900 tracking-tight">System-9 AI Integration</h1>
+<p class="text-body-lg text-slate-600 max-w-2xl">Enterprise-wide deployment of generative models for real-time document analysis and predictive risk assessment.</p>
+</div>
+<div class="flex flex-col items-end gap-2">
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container text-label-md rounded-full font-bold">IN PROGRESS</span>
+<span class="text-body-sm text-slate-500">Updated 2h ago</span>
+</div>
+</div>
+</div>
+<!-- Right: Quick Stats Bento -->
+<div class="col-span-12 lg:col-span-4 grid grid-cols-2 gap-md">
+<div class="p-md bg-white border border-outline-variant rounded-xl flex flex-col justify-between">
+<span class="text-label-md text-slate-500 uppercase">completion</span>
+<div class="flex items-end justify-between">
+<span class="text-h2 font-h2 text-blue-900">74%</span>
+<div class="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+<div class="bg-secondary h-full w-[74%]"></div>
+</div>
+</div>
+</div>
+<div class="p-md bg-white border border-outline-variant rounded-xl flex flex-col justify-between">
+<span class="text-label-md text-slate-500 uppercase">priority</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">error</span>
+<span class="text-h3 font-h2 text-on-background">Critical</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-12 gap-lg">
+<!-- Main Content Column -->
+<div class="col-span-12 lg:col-span-8 space-y-lg">
+<!-- Rich Text Requirements Card -->
+<div class="bg-white border border-outline-variant rounded-xl overflow-hidden">
+<div class="px-lg py-md border-b border-outline-variant flex items-center justify-between">
+<h3 class="font-h3 text-h3 text-blue-900 flex items-center gap-2">
+<span class="material-symbols-outlined">description</span>
+                                    Project Requirements
+                                </h3>
+<button class="text-primary hover:bg-primary/5 px-3 py-1 rounded text-label-md transition-colors">EDIT</button>
+</div>
+<div class="p-lg prose prose-slate max-w-none">
+<h4 class="font-h3 text-body-lg mb-2 text-on-background">Phase 1: Knowledge Base Ingestion</h4>
+<p class="text-body-md text-slate-600 mb-4">Integrate the System-9 vector database with existing unstructured data lakes. Ensure SOC2 compliance on all data handling procedures during the transformation phase.</p>
+<ul class="space-y-2 list-disc list-inside text-body-md text-slate-600 mb-6">
+<li>Automated PII scrubbing on all incoming PDF documents.</li>
+<li>L2 Latency optimization for semantic search queries.</li>
+<li>Multi-modal support for architectural blueprints (vision models).</li>
+</ul>
+<h4 class="font-h3 text-body-lg mb-2 text-on-background">Phase 2: Human-in-the-loop (HITL) Validation</h4>
+<p class="text-body-md text-slate-600">Establish a baseline accuracy of 96.4% across the core legal and compliance dataset before promoting to production environment.</p>
+</div>
+</div>
+<!-- Documents List Table -->
+<div class="bg-white border border-outline-variant rounded-xl">
+<div class="px-lg py-md border-b border-outline-variant flex items-center justify-between">
+<h3 class="font-h3 text-h3 text-blue-900 flex items-center gap-2">
+<span class="material-symbols-outlined">folder</span>
+                                    Associated Documents
+                                </h3>
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-label-md font-bold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">upload_file</span>
+                                    UPLOAD NEW
+                                </button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="bg-slate-50 text-label-md uppercase text-slate-500">
+<tr>
+<th class="px-lg py-3 font-semibold">Name</th>
+<th class="px-lg py-3 font-semibold">Type</th>
+<th class="px-lg py-3 font-semibold">Size</th>
+<th class="px-lg py-3 font-semibold">Added</th>
+<th class="px-lg py-3 font-semibold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-lg py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-600">picture_as_pdf</span>
+<span class="text-body-md font-medium text-blue-900">Project_Charter_v2.pdf</span>
+</div>
+</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">PDF</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">2.4 MB</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">Oct 12, 2023</td>
+<td class="px-lg py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-lg py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-green-600">description</span>
+<span class="text-body-md font-medium text-blue-900">Compliance_Checklist.docx</span>
+</div>
+</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">Word</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">142 KB</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">Oct 14, 2023</td>
+<td class="px-lg py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-lg py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-red-600">table_chart</span>
+<span class="text-body-md font-medium text-blue-900">System_Benchmarks.xlsx</span>
+</div>
+</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">Excel</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">1.1 MB</td>
+<td class="px-lg py-4 text-body-sm text-slate-500">Yesterday</td>
+<td class="px-lg py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Sidebar Column -->
+<div class="col-span-12 lg:col-span-4 space-y-lg">
+<!-- AI API Settings Card -->
+<div class="bg-primary-container p-lg rounded-xl text-white space-y-md relative overflow-hidden shadow-lg">
+<div class="relative z-10">
+<h3 class="font-h3 text-h3 flex items-center gap-2 text-on-primary-container">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span>
+                                    AI API Configuration
+                                </h3>
+<p class="text-body-sm opacity-80 mt-1">Primary endpoint for this project's intelligence layer.</p>
+<div class="mt-6 space-y-4">
+<div class="space-y-2">
+<label class="text-label-md uppercase opacity-60 tracking-wider">API Key</label>
+<div class="relative">
+<input class="w-full bg-white/10 border border-white/20 rounded-lg py-3 px-4 text-code font-code focus:outline-none focus:border-white/40" readonly="" type="password" value="sk-intel-992038475510293847"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">visibility</span>
+</button>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-label-md uppercase opacity-60 tracking-wider">Model Variant</label>
+<div class="p-3 bg-white/10 border border-white/20 rounded-lg text-body-md font-medium">
+                                            intellect-deep-v4.2-pro
+                                        </div>
+</div>
+<button class="w-full bg-white text-primary py-3 rounded-lg font-bold text-label-md uppercase hover:bg-slate-50 transition-all active:scale-95">
+                                        REGENERATE KEY
+                                    </button>
+</div>
+</div>
+<!-- Decorative background pattern -->
+<div class="absolute top-0 right-0 -mr-12 -mt-12 opacity-10">
+<span class="material-symbols-outlined text-[200px]" style="font-variation-settings: 'FILL' 1;">api</span>
+</div>
+</div>
+<!-- Team Members / Activity Feed -->
+<div class="bg-white border border-outline-variant rounded-xl p-lg">
+<h3 class="font-h3 text-h3 text-blue-900 mb-lg">Project Team</h3>
+<div class="space-y-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img alt="Team member" class="w-10 h-10 rounded-full object-cover grayscale hover:grayscale-0 transition-all duration-300" data-alt="Close-up portrait of a young woman with smiling eyes and natural lighting in a bright modern office" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZJjS_ANF0xvH-yOVsyX9c-12_lcRcf7So22juSFtSQ1rxQ9teqPzFf_YJnp38xifO2b_z7XG6IZrbrrMEmyfCo128sLaoZWzAUwEkvsyiuCQTRpWXEXeaucEg_Zk6_LVXRvM_YL6Nki_u5qmkzxR--2uNlL6f9c9fx63y3eL4ZHKJ2VoexZ1CmVQW7mrcijH3X-zkR0szbTvSCuI45GMLykgFfeeXkc3ytusx_CQW_VEIezAEMRZK44ysQNAv8cOGBYHTHqZ0W3Y"/>
+<div>
+<p class="text-body-md font-bold text-blue-900">Sarah Chen</p>
+<p class="text-body-sm text-slate-500">Lead Architect</p>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img alt="Team member" class="w-10 h-10 rounded-full object-cover grayscale hover:grayscale-0 transition-all duration-300" data-alt="Professional profile photo of a young man with glasses and a friendly expression, soft office background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUdSuCFP7KHf-0FpcNd_iy31RQv3bEU3rvPhMqm51AthyRt9WfGjtQ0r73o4YnlhqPeTqDE6Mwg0-bfS-b4AcaxA8Yt9VjYrjy7F35C9h580PV7ZCJOpWMR0tDK_XJ9nVjjpejD-Fv2Zt2VbfZvjHfCN5Bx0QI9OkHHrYxJyC145dKjFxrKAVrQ0cOkvDJn2rdAykZaLG7jsg9nsNNU7j0wYs2vngoic6xnpmk57Bho7VC9YA9uSg6-rjWW-hLYTjbGBGl8C1X_Bk"/>
+<div>
+<p class="text-body-md font-bold text-blue-900">Markus Weber</p>
+<p class="text-body-sm text-slate-500">ML Engineer</p>
+</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-slate-300"></span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined">add</span>
+</div>
+<p class="text-body-md font-medium text-slate-400 italic">Invite contributor...</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Project Timeline Summary -->
+<div class="bg-white border border-outline-variant rounded-xl p-lg">
+<h3 class="font-h3 text-h3 text-blue-900 mb-lg">Upcoming Milestones</h3>
+<div class="space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-200">
+<div class="relative pl-8">
+<div class="absolute left-0 top-1.5 w-6 h-6 bg-white border-2 border-secondary rounded-full z-10 flex items-center justify-center">
+<div class="w-2 h-2 bg-secondary rounded-full"></div>
+</div>
+<p class="text-label-md font-bold text-secondary">NOV 14</p>
+<p class="text-body-md font-bold text-blue-900">Alpha Dataset Freeze</p>
+</div>
+<div class="relative pl-8 opacity-60">
+<div class="absolute left-0 top-1.5 w-6 h-6 bg-white border-2 border-slate-300 rounded-full z-10 flex items-center justify-center">
+</div>
+<p class="text-label-md font-bold text-slate-500">DEC 02</p>
+<p class="text-body-md font-medium text-slate-700">Production Integration</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

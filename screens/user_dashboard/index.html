@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nexus AI - ProjectIntel Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-container": "#ffdad6",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary-container": "#86f2e4",
+                    "primary-fixed-dim": "#b6c4ff",
+                    "primary": "#00236f",
+                    "on-secondary-container": "#006f66",
+                    "on-secondary-fixed": "#00201d",
+                    "error": "#ba1a1a",
+                    "on-surface-variant": "#444651",
+                    "secondary": "#006a61",
+                    "tertiary-container": "#2724b8",
+                    "secondary-fixed-dim": "#6bd8cb",
+                    "on-error-container": "#93000a",
+                    "surface": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "background": "#f7f9fb",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-primary-fixed-variant": "#264191",
+                    "on-primary-container": "#90a8ff",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-surface": "#191c1e",
+                    "surface-dim": "#d8dadc",
+                    "surface-container-low": "#f2f4f6",
+                    "on-secondary": "#ffffff",
+                    "primary-fixed": "#dce1ff",
+                    "inverse-on-surface": "#eff1f3",
+                    "secondary-fixed": "#89f5e7",
+                    "outline-variant": "#c5c5d3",
+                    "inverse-surface": "#2d3133",
+                    "primary-container": "#1e3a8a",
+                    "on-background": "#191c1e",
+                    "on-secondary-fixed-variant": "#005049",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-error": "#ffffff",
+                    "surface-tint": "#4059aa",
+                    "surface-bright": "#f7f9fb",
+                    "on-tertiary-container": "#a1a4ff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "on-primary-fixed": "#00164e",
+                    "surface-container-high": "#e6e8ea",
+                    "on-tertiary": "#ffffff",
+                    "tertiary": "#0d0097",
+                    "inverse-primary": "#b6c4ff",
+                    "outline": "#757682",
+                    "surface-variant": "#e0e3e5",
+                    "surface-container": "#eceef0",
+                    "on-tertiary-fixed": "#07006c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "4px",
+                    "xl": "48px",
+                    "md": "16px",
+                    "base": "4px",
+                    "sm": "8px",
+                    "gutter": "20px",
+                    "lg": "24px",
+                    "container-max": "1440px"
+            },
+            "fontFamily": {
+                    "h1": ["Manrope"],
+                    "label-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "h3": ["Manrope"],
+                    "h2": ["Manrope"],
+                    "code": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "h1": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-md": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "body-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                    "h3": ["20px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600"}],
+                    "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "code": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                    "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { @apply bg-background text-on-background font-body-md; }
+        .material-symbols-outlined { font-size: 24px; }
+        .nav-item-active { @apply bg-[#f1f5fe] text-[#00236f]; }
+        .nav-item { @apply text-[#55637e] hover:bg-slate-50 transition-colors; }
+    </style>
+</head>
+<body class="min-h-screen flex">
+<!-- SideNavBar Component -->
+<aside class="fixed left-0 top-0 h-full w-64 border-r bg-white border-slate-200 z-50 flex flex-col pt-8 font-['Manrope']">
+<div class="px-6 mb-10 flex items-center gap-4">
+<div class="w-10 h-10 rounded-md bg-[#00236f] flex items-center justify-center">
+<span class="text-white font-bold text-lg">PI</span>
+</div>
+<div>
+<h2 class="text-xl font-extrabold text-[#00236f] leading-tight">ProjectIntel</h2>
+<p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">ENTERPRISE AI</p>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-2">
+<!-- Active State: Dashboard -->
+<a class="nav-item-active flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-bold text-base">Dashboard</span>
+</a>
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">folder_managed</span>
+<span class="font-bold text-base">Projects</span>
+</a>
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">checklist</span>
+<span class="font-bold text-base">Tasks</span>
+</a>
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-bold text-base">Documents</span>
+</a>
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-bold text-base">AI Assistant</span>
+</a>
+</nav>
+<div class="px-4 pb-8 space-y-2 border-t border-slate-50 pt-4">
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-bold text-base text-[#55637e]">Settings</span>
+</a>
+<a class="nav-item flex items-center px-4 py-3 rounded-xl gap-4" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="font-bold text-base text-[#55637e]">Account</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-64 min-h-screen">
+<!-- TopAppBar Component -->
+<header class="flex justify-between items-center px-8 w-full sticky top-0 z-40 bg-white h-20 border-b border-slate-100 font-['Manrope'] antialiased">
+<div class="flex items-center gap-4 flex-1 max-w-xl">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full bg-[#f8f9fb] border-none rounded-xl pl-12 pr-4 py-3 text-sm focus:ring-1 focus:ring-primary-container" placeholder="Search projects, files or tasks..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-6 text-[#55637e]">
+<button class="hover:bg-slate-50 p-2 rounded-full transition-colors cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="hover:bg-slate-50 p-2 rounded-full transition-colors cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="hover:bg-slate-50 p-2 rounded-full transition-colors cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">help</span>
+</button>
+</div>
+<div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
+<div class="flex items-center gap-3">
+<h1 class="text-lg font-extrabold tracking-tight text-[#00236f]">ProjectIntel</h1>
+<div class="w-10 h-10 rounded-2xl bg-black overflow-hidden flex items-center justify-center border-2 border-slate-200">
+<img alt="User Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9lMzq3gt0_lCPgTt6pXpUGeYPizXqBirtmpedIBmVUL8bbiVm6-LwMlPjkDfgqf9qHLa0tRWxPgr5pMcPM_9BC3NgVrSU_6brXt1J1dnpFanlxKg1231DunZj2gxyAKz8vgG_d5ICH0dAm0IGQ0bdXR0fqlk3aRPIzxerON8vYFXANOSdOLPtdpIOC9aFclhJwaMxBJwhFjcMsX2Iu7szyB1RWqV6iUA5caTFhQdFZScUPSxcgqPH1xxurvi6xj71WVS85TiA1_I"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Canvas -->
+<div class="p-8 max-w-[1440px] mx-auto">
+<!-- Dashboard Header -->
+<div class="flex justify-between items-end mb-10">
+<div>
+<h2 class="font-h1 text-h1 text-on-surface">Active Projects</h2>
+<p class="font-body-md text-body-md text-outline mt-1">Manage and monitor your ongoing architectural initiatives.</p>
+</div>
+<button class="bg-primary text-on-primary px-8 py-4 rounded-xl font-bold flex items-center gap-2 hover:opacity-95 active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                    Create New Project
+                </button>
+</div>
+<!-- Dashboard Grid (Bento Style Layout) -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Main Project List -->
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<!-- Project Card 1: In Progress -->
+<div class="bg-white border border-slate-200 rounded-2xl p-6 hover:border-primary-container transition-all cursor-pointer group shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-4">
+<div class="w-14 h-14 rounded-xl bg-secondary-container/20 flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[28px]">architecture</span>
+</div>
+<div>
+<h3 class="font-h3 text-h3 text-on-surface group-hover:text-primary transition-colors">Vertical Forest Residential</h3>
+<p class="text-body-sm text-outline">Updated 2 hours ago by Maria G.</p>
+</div>
+</div>
+<span class="bg-[#dcfce7] text-[#166534] px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider">In Progress</span>
+</div>
+<p class="text-body-md text-on-surface-variant mb-6 leading-relaxed">
+                            Implementation of sustainable HVAC systems and integrated irrigation for the exterior greenery modules. Phase 2 structural audit pending.
+                        </p>
+<div class="flex justify-between items-center pt-6 border-t border-slate-100">
+<div class="flex -space-x-3">
+<img class="w-9 h-9 rounded-full border-2 border-white object-cover" data-alt="close-up portrait of a woman with curly hair smiling in bright natural light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzehE32H1p4UlEJKfEPR89FFOHOWa_pjJG7-MBmchSVwKfDiwgwTlbvHsiFzTAvTiOOK9Xld_woigGsXTKkT51eUj0HViCuyMnUxGpF17FnXt-Okm2e_T88Uf6F36LO_2nSvZXmmWozNeIYWABOuLbVCiJs1HxaCF_HNrCbY4jT31cdCk7vq6UszB0-T4Y9b_JUGl0wxdLSVPDqczxKWPFQtNZfwPIBfPaUlXSGPqGk_K1oLthDVt9m3NDDoFjFQyQdOCe3pFG9_s"/>
+<img class="w-9 h-9 rounded-full border-2 border-white object-cover" data-alt="headshot of a young man with glasses and a beard against a neutral studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQlvGyU_u94_o0uOzXvMJLTT-lMHgi18-7rvcCJT5Er9wSL0hcih0dqd_IiG7ZsCrDleZfJ7vs37BeDuv3OAYjjVPjlxxCl0b5GNP39NZNmv7Snmgj6c7goUe8fkfbLILIUZ56k_nLwhclL4J6NPoyTYQ3NamUbze0lMpTp7JyMFOTG8ARC7VxRHFqSYhLm7UCb8myCSspLy5hwpzQa7SEEhCsFD8K_SWKMAAp5zPxmfvN5Hcn1icFpNq2uh8QcCgNJASpU3pKYvo"/>
+<div class="w-9 h-9 rounded-full border-2 border-white bg-slate-50 flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm">+4</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-[18px]">task_alt</span>
+<span class="text-xs font-bold">12/24</span>
+</div>
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-[18px]">attach_file</span>
+<span class="text-xs font-bold">8</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Project Card 2: Pending -->
+<div class="bg-white border border-slate-200 rounded-2xl p-6 hover:border-primary-container transition-all cursor-pointer group shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-4">
+<div class="w-14 h-14 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[28px]">stadium</span>
+</div>
+<div>
+<h3 class="font-h3 text-h3 text-on-surface group-hover:text-primary transition-colors">Neo-Classic Civic Arena</h3>
+<p class="text-body-sm text-outline">Created 3 days ago</p>
+</div>
+</div>
+<span class="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider">Pending</span>
+</div>
+<p class="text-body-md text-on-surface-variant mb-6 leading-relaxed">
+                            Awaiting environmental impact report and local municipality clearance. Initial concept sketches and site surveys are uploaded.
+                        </p>
+<div class="flex justify-between items-center pt-6 border-t border-slate-100">
+<div class="flex -space-x-3">
+<img class="w-9 h-9 rounded-full border-2 border-white object-cover" data-alt="middle-aged man with graying hair in professional attire looking directly at camera" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0ZTM7IgLoh0o7_bB-Fn57rZxVuqR2jfLWhcA2_VZxoAcFA1NjWl0RO4KFHTKvqySoos4zoxSh3xQPvLpMFB3TGO6Oaozec5LuXSdJ5H3HT3b2JObnJawWC-LsJNCY1YXgfOJFtNvoastCzUKHoGU4_KZvUjO2FddrdPrIiqFkuwCvfgoYc9SkblZZs0_bDq-llXIe9V54ZOz-44-H2998YNH7If6CVy84LKv3oQuGowWFCAISBA4CzOEmYLM0s41_POJCWcNlmZc"/>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-[18px]">task_alt</span>
+<span class="text-xs font-bold">0/15</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Project Card 3: Done -->
+<div class="bg-white border border-slate-200 rounded-2xl p-6 hover:border-primary-container transition-all cursor-pointer group shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-4">
+<div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">corporate_fare</span>
+</div>
+<div>
+<h3 class="font-h3 text-h3 text-on-surface group-hover:text-primary transition-colors">Nexus Corporate HQ</h3>
+<p class="text-body-sm text-outline">Completed Last Month</p>
+</div>
+</div>
+<span class="bg-[#00236f] text-white px-4 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider">Done</span>
+</div>
+<p class="text-body-md text-on-surface-variant mb-6 leading-relaxed">
+                            Full-scale smart building integration completed. Occupancy permits issued and handover documented. Final budget reconciliation complete.
+                        </p>
+<div class="flex justify-between items-center pt-6 border-t border-slate-100">
+<div class="flex -space-x-3">
+<img class="w-9 h-9 rounded-full border-2 border-white object-cover" data-alt="young professional woman in a blazer smiling warmly in a bright office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBW2FYieLJV6nzmFM32r9DzzLBydF4_AEtDGmN0PTmRwuEW70WPdA-fJNju3iCLV6uTHfDXV9SaESzoSM2ze5LT3o6b29JWSt-2zFqYDErW9Hnyc5BawzEy560eWL1_6fLTAZDJoFv_BIajlpNRQM7adgEDnrNztqeud41pYDEqOGfYiWLLPW9e3YUtoYTdP841VvWJT0DggWIts21dlOt3qU8tbE6ASYjPu4tVpczYkMvHy3j_4Pitg7nu2YsvFboVxypwdgEKU-E"/>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-xs font-bold text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+                                    Archived
+                                </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Content -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Quick Stats Bento Card -->
+<div class="bg-[#00236f] text-white rounded-[2rem] p-8 relative overflow-hidden shadow-2xl">
+<div class="relative z-10">
+<p class="font-label-md text-[11px] uppercase tracking-[0.2em] text-white/60 mb-3">Portfolio Health</p>
+<h4 class="text-2xl font-bold mb-6">Project Velocity</h4>
+<div class="flex items-end gap-3 mb-8">
+<span class="text-5xl font-extrabold">+18%</span>
+<span class="text-xs text-white/50 mb-2">vs last quarter</span>
+</div>
+<div class="space-y-4">
+<div class="w-full bg-white/10 h-2.5 rounded-full overflow-hidden">
+<div class="bg-[#00c49a] h-full w-[75%] rounded-full"></div>
+</div>
+<div class="flex justify-between text-[12px] font-semibold text-white/60">
+<span>75% Capacity Reached</span>
+<span>Target: 90%</span>
+</div>
+</div>
+</div>
+<!-- Abstract Background Decoration -->
+<div class="absolute -right-12 -bottom-12 w-48 h-48 bg-white/5 rounded-full blur-3xl"></div>
+<div class="absolute right-12 top-12 w-24 h-24 bg-white/5 rounded-full blur-2xl"></div>
+</div>
+<!-- Upcoming Tasks List -->
+<div class="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+<h4 class="text-xl font-bold text-on-surface mb-8 flex items-center justify-between">
+                            Urgent Tasks
+                            <span class="text-[11px] text-[#ba1a1a] bg-[#ba1a1a]/10 px-3 py-1 rounded-full uppercase font-bold">4 Due</span>
+</h4>
+<div class="space-y-6">
+<div class="flex gap-4 items-start p-4 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer border-l-[6px] border-[#ba1a1a]">
+<div class="flex-1">
+<p class="text-body-lg font-bold text-on-surface leading-tight">Finalize HVAC Specs</p>
+<p class="text-[12px] text-outline mt-1">Vertical Forest • 2h left</p>
+</div>
+<span class="material-symbols-outlined text-[#ba1a1a]" style="font-variation-settings: 'FILL' 1;">priority_high</span>
+</div>
+<div class="flex gap-4 items-start p-4 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer border-l-[6px] border-[#00c49a]">
+<div class="flex-1">
+<p class="text-body-lg font-bold text-on-surface leading-tight">Upload Site Survey</p>
+<p class="text-[12px] text-outline mt-1">Civic Arena • Today</p>
+</div>
+</div>
+<div class="flex gap-4 items-start p-4 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer border-l-[6px] border-slate-300">
+<div class="flex-1">
+<p class="text-body-lg font-bold text-on-surface leading-tight">Stakeholder Update</p>
+<p class="text-[12px] text-outline mt-1">Nexus HQ • Tomorrow</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 text-[#00236f] font-bold text-sm border border-[#00236f]/10 rounded-xl hover:bg-[#00236f]/5 transition-colors">
+                            View All Tasks
+                        </button>
+</div>
+<!-- Visual Summary/Map Card -->
+<div class="bg-white border border-slate-200 rounded-2xl p-1.5 h-72 relative overflow-hidden group shadow-sm">
+<div class="absolute inset-0 z-0 grayscale hover:grayscale-0 transition-all duration-700 opacity-90" data-alt="stylized architectural blueprints and site maps overlaid on a neutral background with soft grid lines" data-location="San Francisco" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB6MmpQ09zK_QttXJXeYTxYOfxef_WPIGnhpGNoMZy72cNumylhmGm2Cr_rNiP0CQat8oTUEYpVQ4VzHRZc76OJ1PJwNWMAux7vIM96HK9_YUb9Z9_beBaBbX-yoSFpq2m8Et7Vrv0mqxxQaYhcT0RfaotetWpVgKstPGDMUegqAOzj7MbHcdxZJLEfLUWYaafngQQv6DzbfQ8hV63XaWaJfvFP0WJDOxBWCYL8MzlnZ6G7FF8QAOtqoMgOr3pNYp1mWaRHylUx_PY'); background-size: cover; background-position: center;">
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent z-10"></div>
+<div class="absolute bottom-6 left-6 z-20 text-white">
+<h5 class="font-extrabold text-base">Site Activity Heatmap</h5>
+<p class="text-[12px] text-white/80 font-medium">3 Active construction sites</p>
+</div>
+<div class="absolute top-6 right-6 z-20">
+<span class="material-symbols-outlined text-white bg-black/30 p-3 rounded-2xl backdrop-blur-md border border-white/20">map</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

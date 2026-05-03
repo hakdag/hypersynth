@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Register - ProjectIntel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "tertiary": "#0d0097",
+                        "surface-bright": "#f7f9fb",
+                        "surface-tint": "#4059aa",
+                        "surface-container-highest": "#e0e3e5",
+                        "inverse-surface": "#2d3133",
+                        "surface-dim": "#d8dadc",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "secondary-fixed-dim": "#6bd8cb",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "outline": "#757682",
+                        "on-background": "#191c1e",
+                        "on-secondary-fixed-variant": "#005049",
+                        "primary-fixed": "#dce1ff",
+                        "on-primary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f7f9fb",
+                        "tertiary-fixed": "#e1e0ff",
+                        "outline-variant": "#c5c5d3",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-container": "#a1a4ff",
+                        "secondary-fixed": "#89f5e7",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#00164e",
+                        "on-secondary-container": "#006f66",
+                        "surface-container-low": "#f2f4f6",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eff1f3",
+                        "primary": "#00236f",
+                        "on-surface": "#191c1e",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#e0e3e5",
+                        "secondary": "#006a61",
+                        "on-primary-fixed-variant": "#264191",
+                        "tertiary-container": "#2724b8",
+                        "surface-container-high": "#e6e8ea",
+                        "surface-container": "#eceef0",
+                        "background": "#f7f9fb",
+                        "on-surface-variant": "#444651",
+                        "on-secondary-fixed": "#00201d",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#90a8ff",
+                        "secondary-container": "#86f2e4",
+                        "inverse-primary": "#b6c4ff",
+                        "primary-container": "#1e3a8a",
+                        "on-tertiary-fixed": "#07006c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "xs": "4px",
+                        "xl": "48px",
+                        "gutter": "20px",
+                        "sm": "8px",
+                        "base": "4px",
+                        "md": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "h3": ["Manrope"],
+                        "h2": ["Manrope"],
+                        "body-md": ["Inter"],
+                        "h1": ["Manrope"],
+                        "label-md": ["Inter"],
+                        "code": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h3": ["20px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h1": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "code": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "body-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f7f9fb;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(220, 100%, 95%, 1) 0, transparent 50%), 
+                radial-gradient(at 100% 100%, hsla(210, 100%, 92%, 1) 0, transparent 50%);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-body-md antialiased">
+<!-- Header / TopAppBar Suppressed based on Registration intent -->
+<main class="flex-grow flex items-center justify-center px-lg py-xl">
+<div class="w-full max-w-md">
+<!-- Branding -->
+<div class="text-center mb-lg">
+<div class="inline-flex items-center justify-center p-sm bg-primary rounded-xl mb-md">
+<span class="material-symbols-outlined text-white text-3xl" data-icon="hub">hub</span>
+</div>
+<h1 class="font-h2 text-h2 text-primary tracking-tighter">ProjectIntel</h1>
+<p class="font-body-md text-on-surface-variant mt-xs">Enterprise-grade intelligence orchestration</p>
+</div>
+<!-- Registration Card -->
+<div class="bg-white border border-outline-variant rounded-xl shadow-sm overflow-hidden">
+<div class="p-lg">
+<div class="mb-lg">
+<h2 class="font-h3 text-h3 text-on-surface mb-xs">Create Account</h2>
+<p class="font-body-sm text-on-surface-variant">Get started with your collaborative workspace</p>
+</div>
+<form class="space-y-md">
+<!-- Full Name -->
+<div class="space-y-xs">
+<label class="block font-label-md text-label-md text-on-surface-variant uppercase tracking-wider" for="name">Full Name</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 pl-md flex items-center text-outline pointer-events-none">
+<span class="material-symbols-outlined text-body-lg" data-icon="person">person</span>
+</span>
+<input class="w-full pl-xl pr-md py-md bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all placeholder:text-outline-variant" id="name" name="name" placeholder="John Doe" type="text"/>
+</div>
+</div>
+<!-- Email Address -->
+<div class="space-y-xs">
+<label class="block font-label-md text-label-md text-on-surface-variant uppercase tracking-wider" for="email">Email Address</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 pl-md flex items-center text-outline pointer-events-none">
+<span class="material-symbols-outlined text-body-lg" data-icon="mail">mail</span>
+</span>
+<input class="w-full pl-xl pr-md py-md bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all placeholder:text-outline-variant" id="email" name="email" placeholder="name@company.com" type="email"/>
+</div>
+</div>
+<!-- Password -->
+<div class="space-y-xs">
+<label class="block font-label-md text-label-md text-on-surface-variant uppercase tracking-wider" for="password">Password</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 pl-md flex items-center text-outline pointer-events-none">
+<span class="material-symbols-outlined text-body-lg" data-icon="lock">lock</span>
+</span>
+<input class="w-full pl-xl pr-md py-md bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all placeholder:text-outline-variant" id="password" name="password" placeholder="Min. 8 characters" type="password"/>
+</div>
+</div>
+<!-- Terms -->
+<div class="flex items-start space-x-sm pt-xs">
+<input class="mt-1 w-4 h-4 text-primary border-outline-variant rounded focus:ring-primary" id="terms" type="checkbox"/>
+<label class="font-body-sm text-on-surface-variant leading-tight" for="terms">
+                                I agree to the <a class="text-primary font-medium hover:underline" href="#">Terms of Service</a> and <a class="text-primary font-medium hover:underline" href="#">Privacy Policy</a>.
+                            </label>
+</div>
+<!-- Submit Button -->
+<button class="w-full bg-primary text-white font-h3 text-body-md py-md rounded-lg hover:bg-on-primary-fixed-variant active:scale-[0.98] transition-all duration-200 shadow-sm flex items-center justify-center space-x-sm mt-lg" type="submit">
+<span>Create Account</span>
+<span class="material-symbols-outlined text-body-lg" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</form>
+</div>
+<!-- Footer Link -->
+<div class="bg-surface-container-low px-lg py-md border-t border-outline-variant text-center">
+<p class="font-body-sm text-on-surface-variant">
+                        Already have an account? 
+                        <a class="text-primary font-semibold hover:underline ml-xs" href="#">Sign In</a>
+</p>
+</div>
+</div>
+<!-- Social/Integration Badges (Subtle) -->
+<div class="mt-xl text-center">
+<p class="font-label-md text-label-md text-outline mb-md uppercase tracking-widest">Trusted by industry leaders</p>
+<div class="flex justify-center items-center space-x-lg opacity-40 grayscale">
+<img alt="Partner Logo 1" class="h-6 w-auto" data-alt="minimalist tech company logo for enterprise brand trust" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1deLYdrePZ4WHNzl_OsrcRPpyFBjtA7wNcizfrmT1EY7Shh9SXbTzaj0RQwZIWfVPoHWVKoLdZ2jFjNPdMJK8k3xS9Wlp3EKn-uSwjA8EUorKEnJszwiW2CJArdhdbnOmfR429tQKhlLAxg8YDQ4XiIPg_CGXvl8VIW-O1cbWvNhPYehdvjEBlkeQ8HD3I1O0F1ca3lys8nbh7Vshal5BmwCsT6KYuDN1M5KZQZ2707j9kU9ZxC66OhoOqbsm_tC6J-Ba6dw3TTM"/>
+<img alt="Partner Logo 2" class="h-6 w-auto" data-alt="clean geometric software company logo in grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBN5maw8dvDstuOGoRs8IgH-0DE_5MwhNP8NWqYpP5SxIHHglWAMaNqdUQGalvlqQZOAL3j9tg95qZ8-PeN88q3FfP-Wa4iB2TBA4auDS7Wq70s5kGu6HYS5bOQJN4TZStvMLwFzHvCmGyLRbFeceJjLfUFoSIznlmaTdJ834AH_RjsiDjfQ0pxx6xV6jpcTBF4yZTrudPKHh2lOS_Zkuac2iDtp1N3I7HjuwSqI8ZZm8NdaWvl3HOWu6TzI0iGB6VoNlNYnZLUbI8"/>
+<img alt="Partner Logo 3" class="h-6 w-auto" data-alt="modern corporate emblem for technology partnership representation" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDA4hb8ZeK2JSQMXDtgX8emSLBeP4S1JyRXCDXZkE4GhdNhY4pThkY52RD6MVwL3WD2C5yUhGtf-D0xjWiwwUjmXavB5vVHCPxOncGTmp2_f5OmfdQ7PdEb_7QZJUhr5dSsxFg7JdqokIOJEbgTwfXmfy1GM5tvo9DpY_AfEYrlI_zrB72JDNi3DvKUzpHaG0xuxrZtoFLF0oX8LB8_HUDOJz-JPCoqbdHmjRY9bvt2rDsuhcimKjj5zokfn_xTNkBSFkXOxmtivCc"/>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Segment -->
+</body></html>
