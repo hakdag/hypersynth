@@ -1,6 +1,7 @@
 mod app_state;
 mod auth_route;
 mod configs;
+mod project_route;
 mod register_route;
 mod types;
 
@@ -13,10 +14,22 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
+use project_route::{create_project, list_projects};
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
+use tower_http::trace::TraceLayer;
 use types::{BootstrapResponse, HealthResponse};
+
+fn init_http_logging() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new("info,tower_http=debug,hypersynth_api=debug")
+    });
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .init();
+}
 
 /// Loads `src/.env` relative to this crate (`src/backend` → parent `src` + `.env`).
 fn load_src_env() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,6 +50,8 @@ fn load_src_env() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    init_http_logging();
+
     load_src_env()?;
     let config = AppConfig::from_env().map_err(|e| format!("configuration error: {}", e))?;
 
@@ -77,7 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route("/api/v1/projects", get(list_projects).post(create_project))
         .with_state(state)
+        .layer(TraceLayer::new_for_http())
         .layer(cors);
 
     let addr = format!("0.0.0.0:{}", config.port);

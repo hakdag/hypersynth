@@ -18,6 +18,10 @@ use crate::types::{ApiErrorBody, CurrentUserBody, LoginRequest};
 const SESSION_COOKIE: &str = "hypersynth_session";
 const GENERIC_AUTH_FAILURE: &str = "Invalid email or password.";
 
+pub(crate) fn has_session_cookie(jar: &CookieJar) -> bool {
+    jar.get(SESSION_COOKIE).is_some()
+}
+
 #[derive(sqlx::FromRow)]
 struct UserAuthRow {
     id: Uuid,
@@ -120,6 +124,21 @@ pub async fn current_user(
 ) -> Result<Json<CurrentUserBody>, (StatusCode, Json<ApiErrorBody>)> {
     match resolve_current_user(&state.pool, &jar).await {
         Some(u) => Ok(Json(u)),
+        None => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(ApiErrorBody {
+                message: "You need to sign in to continue.".into(),
+            }),
+        )),
+    }
+}
+
+pub(crate) async fn require_authenticated_user(
+    pool: &PgPool,
+    jar: &CookieJar,
+) -> Result<CurrentUserBody, (StatusCode, Json<ApiErrorBody>)> {
+    match resolve_current_user(pool, jar).await {
+        Some(u) => Ok(u),
         None => Err((
             StatusCode::UNAUTHORIZED,
             Json(ApiErrorBody {

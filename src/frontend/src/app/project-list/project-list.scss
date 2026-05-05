@@ -16,6 +16,24 @@
   color: var(--muted);
 }
 
+.primary-cta {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9375rem;
+}
+
+.primary-cta:hover {
+  filter: brightness(1.05);
+}
+
 .state-block {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
@@ -63,8 +81,10 @@
 .state-banner.error {
   border: 1px solid rgb(219 109 117 / 0.7);
   background: rgb(253 239 239);
-  display: grid;
-  gap: 0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .empty-card {
@@ -80,4 +100,64 @@
 
 .empty-card .ghost-link {
   color: var(--primary);
+}
+
+.retry-btn {
+  margin-left: 0;
+  padding: 0.25rem 0.6rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: 1px solid var(--outline);
+  border-radius: 0.35rem;
+  background: var(--surface);
+  color: var(--foreground-soft);
+}
+
+.retry-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.project-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 1px solid var(--outline-soft);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.project-row {
+  border-bottom: 1px solid var(--outline-soft);
+}
+
+.project-row:last-child {
+  border-bottom: none;
+}
+
+.project-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.project-link:hover {
+  background: var(--chip-bg);
+}
+
+.project-name {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.project-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: capitalize;
 }

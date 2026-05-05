@@ -7,7 +7,7 @@ edition = "2021"
 argon2 = "0.5"
 axum = "0.8"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
-chrono = "0.4.44"
+chrono = { version = "0.4.44", features = ["serde"] }
 dotenvy = "0.15"
 hex = "0.4.3"
 password-hash = "0.5"
@@ -17,5 +17,7 @@ time = "0.3"
 sha2 = "0.11.0"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "tls-native-tls", "migrate", "uuid", "chrono"] }
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde", "v4"] }

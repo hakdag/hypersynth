@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
 import { Login } from './login/login';
+import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
 import { ProjectList } from './project-list/project-list';
 import { Register } from './register/register';
@@ -19,6 +20,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'projects' },
       { path: 'projects', component: ProjectList },
+      { path: 'projects/new', component: ProjectCreate },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'account', component: AccountPlaceholder },
     ],
