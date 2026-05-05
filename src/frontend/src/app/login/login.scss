@@ -1,0 +1,261 @@
+@use 'sass:color';
+
+// Tokens aligned with screens/login/DESIGN.md (Deep Intel)
+$surface-page: #f7f9fb;
+$surface-lowest: #ffffff;
+$surface-low: #f2f4f6;
+$outline-variant: #c5c5d3;
+$outline: #757682;
+$primary: #00236f;
+$on-primary: #ffffff;
+$on-surface: #191c1e;
+$on-surface-variant: #444651;
+$error: #ba1a1a;
+
+:host {
+  display: block;
+  min-height: 100vh;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: $on-surface;
+  background-color: $surface-page;
+  background-image:
+    radial-gradient(at 0% 0%, hsla(220, 100%, 95%, 0.3) 0, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(220, 100%, 80%, 0.1) 0, transparent 50%);
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+.login-main {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+}
+
+.login-column {
+  width: 100%;
+  max-width: 440px;
+}
+
+.brand-block {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.brand-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: $primary;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.brand-icon {
+  color: $on-primary;
+  font-size: 28px;
+}
+
+.brand-title {
+  margin: 0;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: $primary;
+}
+
+.brand-tagline {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: $on-surface-variant;
+}
+
+.card {
+  background: $surface-lowest;
+  border: 1px solid $outline-variant;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(25 33 61 / 0.06);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 24px;
+}
+
+.alert-error {
+  padding: 12px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  background: #ffdad6;
+  color: #93000a;
+  border: 1px solid #ffaba8;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: $on-surface-variant;
+}
+
+.label-inline {
+  margin: 0;
+}
+
+.forgot-link {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: $primary;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.input-wrap {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+  color: $outline;
+  font-size: 20px;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px 12px 48px;
+  font: inherit;
+  color: $on-surface;
+  background: $surface-lowest;
+  border: 1px solid $outline-variant;
+  border-radius: 4px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &::placeholder {
+    color: $outline-variant;
+  }
+
+  &:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 2px rgb(0 35 111 / 0.25);
+  }
+}
+
+.field-error {
+  margin: 0;
+  font-size: 13px;
+  color: $error;
+}
+
+.submit {
+  width: 100%;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: $on-primary;
+  background: $primary;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(25 33 61 / 0.08);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background: color.adjust($primary, $lightness: 8%);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+}
+
+.submit-icon {
+  font-size: 20px;
+}
+
+.card-footer {
+  background: $surface-low;
+  padding: 12px 24px;
+  border-top: 1px solid $outline-variant;
+  text-align: center;
+}
+
+.footer-text {
+  margin: 0;
+  font-size: 13px;
+  color: $on-surface-variant;
+}
+
+.footer-link {
+  margin-left: 4px;
+  color: $primary;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

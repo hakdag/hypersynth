@@ -6,7 +6,10 @@
         Projects
       </a>
       <a routerLink="/app/account" routerLinkActive="nav-link-active">Account</a>
-      <a class="linklike" routerLink="/login">Session (placeholder)</a>
+      @if (currentUser(); as u) {
+        <span class="session-user" title="{{ u.email }}">{{ u.fullname }}</span>
+      }
+      <button type="button" class="linklike logout-btn" (click)="logout()">Sign out</button>
     </nav>
   </header>
 
