@@ -98,13 +98,85 @@ Users can hold multiple roles simultaneously. Enhancement Operators cannot appro
 
 ```
 hypersynth/
-└── features/
-    ├── phase0/   # PRD — core system requirements
-    ├── phase1/   # FRD — SaaS foundation
-    ├── phase2/   # FRD — project management enhancements
-    ├── phase3/   # FRD — AI workflow engine
-    └── phase4/   # FRD — enterprise features
+├── backend/              # Rust HTTP API (Axum, SF-00 bootstrap + health)
+├── frontend/             # Angular application shell (SF-00)
+├── docker-compose.yml    # PostgreSQL for local development
+├── .env.example          # Compose + backend defaults (copy to `.env` if desired)
+├── features/
+│   ├── phase0/           # PRD — core system requirements
+│   ├── phase1/           # FRD — SaaS foundation
+│   ├── phase2/           # FRD — project management enhancements
+│   ├── phase3/           # FRD — AI workflow engine
+│   └── phase4/           # FRD — enterprise features
+└── screens/              # UX reference mockups / design notes
 ```
+
+---
+
+## Local development (SF-00 shell)
+
+### Prerequisites
+
+- **Node.js** 22+ with **npm** (Angular workspace lives in `frontend/`)
+- **Rust** stable toolchain
+- **Docker** and **Docker Compose** (PostgreSQL runs in a container)
+
+### One-time setup
+
+1. Optionally copy `.env.example` to `.env` at the repository root so you can override PostgreSQL ports or passwords for `docker compose`.
+2. Start the database:
+
+   ```bash
+   docker compose up -d
+   ```
+
+3. Install frontend packages:
+
+   ```bash
+   cd frontend && npm install
+   ```
+
+4. Build or fetch backend dependencies:
+
+   ```bash
+   cargo build --manifest-path backend/Cargo.toml
+   ```
+
+### Run the backend
+
+If [`src/.env`](src/.env) exists next to [`src/backend/`](src/backend/), variables from that file (`DATABASE_URL`, `PORT`, `CORS_ORIGIN`, etc.) are loaded before `std::env` is read — you can omit manual `export` when using that layout. Otherwise set them in your shell:
+
+```bash
+export DATABASE_URL=postgres://hypersynth:hypersynth@localhost:5432/hypersynth
+export PORT=3000
+export CORS_ORIGIN=http://localhost:4200   # Angular dev server
+cargo run --manifest-path src/backend/Cargo.toml
+```
+
+Environment variables already set in the process still apply; `.env` only fills unset keys (via `dotenvy` semantics for loaded file).
+
+The API listens on `PORT` (default `3000`) and terminates immediately if PostgreSQL cannot be reached — ensure `docker compose` is healthy before starting the backend.
+
+Bootstrap endpoints exposed for the shell:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/health` | Process liveness and database probe (`SELECT 1`) |
+| `GET` | `/api/v1/bootstrap` | Application name plus Phase 0 status label ordering |
+
+Responses are plain JSON shaped for Angular clients (`camelCase` fields on bootstrap).
+
+### Run the frontend
+
+From `frontend/`:
+
+```bash
+npm start
+```
+
+Open `http://localhost:4200`. The login route is an SF-00 placeholder; choose **Continue to app** (or bookmark `/app/projects`) to inspect the navigation shell.
+
+The SPA calls `environment.apiBaseUrl` (currently `http://localhost:3000` in [`frontend/src/environments/environment.ts`](frontend/src/environments/environment.ts)). Change this when you expose the API on another host during deployment.
 
 ---
 

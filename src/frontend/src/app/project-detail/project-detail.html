@@ -1,0 +1,33 @@
+<section class="surface">
+  <a routerLink="/app/projects" class="back">← Back to projects list</a>
+
+  <header class="header">
+    <h1 class="heading">Project workspace</h1>
+    <p class="subhead">{{ subtitle() }}</p>
+  </header>
+
+  @if (bootstrapApi.loadState() === 'loading') {
+    <div class="state-banner loading">Fetching shared configuration<span class="spinner"></span></div>
+  }
+
+  @if (bootstrapApi.loadState() === 'error') {
+    <div class="state-banner error">
+      Configuration degraded — features will still show fallback labels locally.
+      <span>{{ bootstrapApi.lastError() }}</span>
+    </div>
+  }
+
+  @if (bootstrapApi.loadState() === 'success') {
+    <div class="state-banner ok">Synced with bootstrap API successfully.</div>
+  }
+
+  <div class="empty-card">
+    <h2>No feature or task records</h2>
+    <p>Future modules will populate this workspace with hierarchies of features and tasks.</p>
+    <ul class="label-preview">
+      @for (label of bootstrapApi.statusLabels(); track label) {
+        <li>{{ label }}</li>
+      }
+    </ul>
+  </div>
+</section>

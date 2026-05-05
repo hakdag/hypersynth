@@ -1,0 +1,99 @@
+mod configs;
+mod types;
+
+use std::path::Path;
+
+use axum::extract::State;
+use axum::http::HeaderValue;
+use axum::routing::get;
+use axum::{Json, Router};
+use configs::AppConfig;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
+use tower_http::cors::CorsLayer;
+use types::{BootstrapResponse, HealthResponse};
+
+#[derive(Clone)]
+struct AppState {
+    pool: PgPool,
+}
+
+/// Loads `src/.env` relative to this crate (`src/backend` → parent `src` + `.env`).
+fn load_src_env() -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join(".env");
+    if path.exists() {
+        dotenvy::from_path(&path).map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
+        eprintln!("loaded environment from {}", path.display());
+    } else {
+        eprintln!(
+            "note: {} not found; using process environment only",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    load_src_env()?;
+    let config = AppConfig::from_env().map_err(|e| format!("configuration error: {}", e))?;
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&config.database_url)
+        .await?;
+
+    sqlx::query_scalar::<_, i32>("SELECT 1")
+        .fetch_one(&pool)
+        .await?;
+
+    let cors = CorsLayer::new()
+        .allow_origin(config.cors_origin.parse::<HeaderValue>()?)
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers(tower_http::cors::Any);
+
+    let state = AppState { pool };
+
+    let app = Router::new()
+        .route("/api/v1/health", get(health))
+        .route("/api/v1/bootstrap", get(bootstrap))
+        .with_state(state)
+        .layer(cors);
+
+    let addr = format!("0.0.0.0:{}", config.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    eprintln!("listening on http://{}", addr);
+    axum::serve(listener, app).await?;
+
+    Ok(())
+}
+
+async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
+    let database = match sqlx::query_scalar::<_, i32>("SELECT 1")
+        .fetch_one(&state.pool)
+        .await
+    {
+        Ok(_) => "ok",
+        Err(_) => "unavailable",
+    };
+
+    Json(HealthResponse {
+        status: "ok",
+        database,
+    })
+}
+
+async fn bootstrap() -> Json<BootstrapResponse> {
+    Json(BootstrapResponse {
+        app_name: "HyperSynth",
+        status_labels: ["Pending", "In Progress", "Done"],
+    })
+}

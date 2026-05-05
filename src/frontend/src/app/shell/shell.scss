@@ -1,0 +1,107 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background: var(--surface-page);
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  gap: 1rem;
+  background: var(--toolbar-surface);
+  border-bottom: 1px solid var(--outline-soft);
+}
+
+.brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--foreground);
+}
+
+.nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.nav a,
+.linklike {
+  color: var(--foreground-soft);
+  text-decoration: none;
+}
+
+.nav .nav-link-active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.linklike {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.status-panel {
+  padding: 0.75rem 1.25rem;
+}
+
+.content {
+  flex: 1;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.status-loading,
+.status-neutral,
+.status-error,
+.status-success {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.status-loading {
+  border: 1px dashed var(--outline);
+}
+
+.status-loading .spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--outline);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: hs-spin 0.8s linear infinite;
+}
+
+.status-error {
+  border: 1px solid rgb(219 109 117 / 0.7);
+  background: rgb(253 239 239);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.status-success {
+  border: 1px solid rgb(109 219 173 / 0.85);
+  background: rgb(238 251 238);
+}
+
+.status-neutral {
+  color: var(--muted);
+}
+
+@keyframes hs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

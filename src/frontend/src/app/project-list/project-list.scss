@@ -1,0 +1,83 @@
+.surface {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 1.25rem;
+}
+
+.heading {
+  margin: 0 0 0.35rem;
+}
+
+.subhead {
+  margin: 0;
+  color: var(--muted);
+}
+
+.state-block {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--outline-soft);
+  background: var(--surface);
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chip-list {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.chip-list li {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  border: 1px solid var(--outline-soft);
+  font-size: 0.9rem;
+}
+
+.state-banner {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.55rem;
+  font-size: 0.95rem;
+}
+
+.state-banner.loading {
+  border: 1px dashed var(--outline);
+}
+
+.state-banner.error {
+  border: 1px solid rgb(219 109 117 / 0.7);
+  background: rgb(253 239 239);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.empty-card {
+  border: 1px dashed var(--outline);
+  border-radius: 0.85rem;
+  padding: 1.75rem;
+  background: var(--surface);
+}
+
+.empty-card h2 {
+  margin-top: 0;
+}
+
+.empty-card .ghost-link {
+  color: var(--primary);
+}

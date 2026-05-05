@@ -1,0 +1,44 @@
+<div class="shell">
+  <header class="toolbar">
+    <a class="brand" routerLink="/app/projects">{{ bootstrapApi.appName() }}</a>
+    <nav class="nav">
+      <a routerLink="/app/projects" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: false }">
+        Projects
+      </a>
+      <a routerLink="/app/account" routerLinkActive="nav-link-active">Account</a>
+      <a class="linklike" routerLink="/login">Session (placeholder)</a>
+    </nav>
+  </header>
+
+  <section class="status-panel" aria-live="polite">
+    @switch (bootstrapApi.loadState()) {
+      @case ('loading') {
+        <p class="status status-loading">
+          Loading application configuration<span class="spinner"></span>
+        </p>
+      }
+      @case ('error') {
+        <div class="status status-error">
+          <strong>Unable to load configuration.</strong>
+          <span>{{ bootstrapApi.lastError() }}</span>
+        </div>
+      }
+      @case ('success') {
+        <div class="status status-success">
+          <strong>Bootstrap succeeded.</strong>
+          <span>Phase 0 status labels synced from API.</span>
+        </div>
+      }
+      @case ('idle') {
+        <div class="status status-neutral">Initializing…</div>
+      }
+      @default {
+        <div class="status status-neutral">&nbsp;</div>
+      }
+    }
+  </section>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>

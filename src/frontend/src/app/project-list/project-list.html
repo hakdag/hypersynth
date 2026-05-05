@@ -1,0 +1,34 @@
+<section class="surface">
+  <header class="header">
+    <h1 class="heading">Projects</h1>
+    <p class="subhead">No projects exist yet — this placeholder keeps navigation stable.</p>
+  </header>
+
+  <div class="state-block">
+    <p class="eyebrow">Phase 0 status labels</p>
+    <ul class="chip-list">
+      @for (label of bootstrapApi.statusLabels(); track label) {
+        <li>{{ label }}</li>
+      }
+    </ul>
+  </div>
+
+  @if (bootstrapApi.loadState() === 'loading') {
+    <div class="state-banner loading">Refreshing labels from the server.</div>
+  }
+
+  @if (bootstrapApi.loadState() === 'error') {
+    <div class="state-banner error">
+      Falling back to static labels until the bootstrap API succeeds.
+      <span>{{ bootstrapApi.lastError() }}</span>
+    </div>
+  }
+
+  <div class="empty-card">
+    <h2>No projects yet</h2>
+    <p>Projects will appear here after future features land.</p>
+    <a routerLink="/app/projects/sample-project-id" class="ghost-link">
+      Preview project placeholder route →
+    </a>
+  </div>
+</section>
