@@ -14,7 +14,7 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
-use project_route::{create_project, list_projects};
+use project_route::{create_project, get_project, list_projects};
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -93,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
         .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/projects/{project_id}", get(get_project))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);

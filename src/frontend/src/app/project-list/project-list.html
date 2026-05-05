@@ -1,62 +1,109 @@
-<section class="surface">
-  <header class="header">
-    <h1 class="heading">Projects</h1>
-    <p class="subhead">Create a project to start organizing work in your private workspace.</p>
-    <a routerLink="/app/projects/new" class="primary-cta">New project</a>
+<div class="pl-page">
+  <header class="pl-header">
+    <div class="pl-header__text">
+      <h1 class="pl-title">Active Projects</h1>
+      <p class="pl-subtitle">Manage and monitor initiatives in your private workspace.</p>
+    </div>
+    <a routerLink="/app/projects/new" class="pl-create">
+      <span class="material-symbols-outlined pl-create__icon" aria-hidden="true">add</span>
+      Create New Project
+    </a>
   </header>
 
-  <div class="state-block">
-    <p class="eyebrow">Phase 0 status labels</p>
-    <ul class="chip-list">
-      @for (label of bootstrapApi.statusLabels(); track label) {
-        <li>{{ label }}</li>
-      }
-    </ul>
-  </div>
-
-  @if (bootstrapApi.loadState() === 'loading') {
-    <div class="state-banner loading">Refreshing labels from the server.</div>
-  }
-
-  @if (bootstrapApi.loadState() === 'error') {
-    <div class="state-banner error">
-      Falling back to static labels until the bootstrap API succeeds.
-      <span>{{ bootstrapApi.lastError() }}</span>
-    </div>
-  }
-
   @if (listError(); as le) {
-    <div class="state-banner error" role="alert">
+    <div class="pl-banner pl-banner--error" role="alert">
       {{ le }}
-      <button type="button" class="retry-btn" (click)="loadProjects()">Retry</button>
+      <button type="button" class="pl-retry" (click)="loadProjects()">Retry</button>
     </div>
   }
 
   @if (loadState() === 'loading') {
-    <div class="state-banner loading">Loading your projects…</div>
-  }
-
-  @if (loadState() === 'ok' && projects().length > 0) {
-    <ul class="project-list">
-      @for (p of projects(); track p.id) {
-        <li class="project-row">
-          <a [routerLink]="['/app/projects', p.id]" class="project-link">
-            <span class="project-name">{{ p.name }}</span>
-            <span class="project-meta">{{ p.status }}</span>
-          </a>
-        </li>
-      }
-    </ul>
+    <div class="pl-banner pl-banner--loading">Loading your projects…</div>
   }
 
   @if (loadState() === 'ok' && projects().length === 0) {
-    <div class="empty-card">
-      <h2>No projects yet</h2>
-      <p>
-        You only see projects for the account signed in now (check the name in the header; hover for email). Create one
-        below, or sign in with the account that created your existing projects.
+    <div class="pl-empty">
+      <span class="material-symbols-outlined pl-empty__icon" aria-hidden="true">inbox</span>
+      <h2 class="pl-empty__title">No projects yet</h2>
+      <p class="pl-empty__body">
+        Your workspace is empty. Create a project to capture requirements and track status. Only projects you own appear
+        here.
       </p>
-      <a routerLink="/app/projects/new" class="ghost-link">Create a project →</a>
+      <a routerLink="/app/projects/new" class="pl-empty__cta">Create your first project</a>
     </div>
   }
-</section>
+
+  @if (loadState() === 'ok' && projects().length > 0) {
+    <div class="pl-grid">
+      <div class="pl-main">
+        @for (p of projects(); track p.id) {
+          <a [routerLink]="['/app/projects', p.id]" class="pl-card">
+            <div class="pl-card__head">
+              <div class="pl-card__title-row">
+                <div [class]="iconWrapClass(p.status)">
+                  <span class="material-symbols-outlined pl-card__glyph" aria-hidden="true">{{ statusIcon(p.status) }}</span>
+                </div>
+                <div class="pl-card__titles">
+                  <h2 class="pl-card__name">{{ p.name }}</h2>
+                  <p class="pl-card__meta">{{ formatCreatedLabel(p.createdAt) }}</p>
+                </div>
+              </div>
+              <span [class]="statusBadgeClass(p.status)">{{ p.status }}</span>
+            </div>
+            <p class="pl-card__req">{{ requirementsPreview(p.requirements) }}</p>
+            <div class="pl-card__foot">
+              <span class="pl-card__hint">
+                <span class="material-symbols-outlined pl-card__hint-icon" aria-hidden="true">arrow_forward</span>
+                Open details
+              </span>
+            </div>
+          </a>
+        }
+      </div>
+
+      <aside class="pl-aside" aria-label="Workspace summary">
+        <div class="pl-spotlight">
+          <p class="pl-spotlight__eyebrow">Portfolio</p>
+          <h3 class="pl-spotlight__title">Project mix</h3>
+          <div class="pl-spotlight__metric">
+            <span class="pl-spotlight__value">{{ portfolioPercent() }}%</span>
+            <span class="pl-spotlight__suffix">in progress or done</span>
+          </div>
+          <div class="pl-spotlight__bar-track">
+            <div class="pl-spotlight__bar-fill" [style.width.%]="portfolioPercent()"></div>
+          </div>
+          <p class="pl-spotlight__caption">
+            {{ statusCounts().total }}
+            {{ statusCounts().total === 1 ? 'project' : 'projects' }} total
+          </p>
+        </div>
+
+        <div class="pl-panel">
+          <h3 class="pl-panel__title">Status overview</h3>
+          <ul class="pl-breakdown">
+            <li class="pl-breakdown__row pl-breakdown__row--pending">
+              <span class="pl-breakdown__label">Pending</span>
+              <span class="pl-breakdown__count">{{ statusCounts().pending }}</span>
+            </li>
+            <li class="pl-breakdown__row pl-breakdown__row--progress">
+              <span class="pl-breakdown__label">In progress</span>
+              <span class="pl-breakdown__count">{{ statusCounts().inProgress }}</span>
+            </li>
+            <li class="pl-breakdown__row pl-breakdown__row--done">
+              <span class="pl-breakdown__label">Done</span>
+              <span class="pl-breakdown__count">{{ statusCounts().done }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="pl-hint-card">
+          <span class="material-symbols-outlined pl-hint-card__icon" aria-hidden="true">tips_and_updates</span>
+          <p class="pl-hint-card__text">
+            Task lists, timelines, and AI workflows arrive in later phases. For now, use project detail to review
+            requirements and configuration.
+          </p>
+        </div>
+      </aside>
+    </div>
+  }
+</div>

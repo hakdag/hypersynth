@@ -1,33 +1,106 @@
-<section class="surface">
-  <a routerLink="/app/projects" class="back">← Back to projects list</a>
-
-  <header class="header">
-    <h1 class="heading">Project workspace</h1>
-    <p class="subhead">{{ subtitle() }}</p>
-  </header>
-
-  @if (bootstrapApi.loadState() === 'loading') {
-    <div class="state-banner loading">Fetching shared configuration<span class="spinner"></span></div>
+<div class="pd-page">
+  @if (loadState() === 'loading') {
+    <div class="pd-banner pd-banner--loading">Loading project…</div>
   }
 
-  @if (bootstrapApi.loadState() === 'error') {
-    <div class="state-banner error">
-      Configuration degraded — features will still show fallback labels locally.
-      <span>{{ bootstrapApi.lastError() }}</span>
+  @if (loadState() === 'error' && detailError(); as msg) {
+    <div class="pd-banner pd-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="pd-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && project(); as p) {
+    <div class="pd-hero-grid">
+      <div class="pd-hero-main">
+        <nav class="pd-crumb" aria-label="Breadcrumb">
+          <a routerLink="/app/projects" class="pd-crumb__link">Projects</a>
+          <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+          <span class="pd-crumb__current">{{ p.name }}</span>
+        </nav>
+
+        <div class="pd-hero-row">
+          <div class="pd-hero-copy">
+            <h1 class="pd-title">{{ p.name }}</h1>
+            <p class="pd-tagline">{{ tagline(p.requirements) }}</p>
+          </div>
+          <div class="pd-hero-aside">
+            <span [class]="statusBadgeClass(p.status)">{{ statusForDisplay(p.status) }}</span>
+            <span class="pd-updated">{{ relativeCreatedLabel(p.createdAt) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pd-bento" aria-label="Project summary">
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">completion</span>
+          <div class="pd-bento__metric">
+            <span class="pd-bento__value">{{ completionPercent(p.status) }}%</span>
+            <div class="pd-bento__bar" role="presentation">
+              <div class="pd-bento__fill" [style.width.%]="completionPercent(p.status)"></div>
+            </div>
+          </div>
+        </div>
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">priority</span>
+          <div class="pd-priority">
+            <span [class]="priorityIconClass(p.status)" aria-hidden="true">{{ priorityIcon(p.status) }}</span>
+            <span class="pd-priority__text">{{ priorityLabel(p.status) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pd-split">
+      <div class="pd-split__main">
+        <section class="pd-req" aria-labelledby="pd-req-heading">
+          <div class="pd-req__toolbar">
+            <h2 id="pd-req-heading" class="pd-req__title">
+              <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
+              Project Requirements
+            </h2>
+            <span class="pd-req__ro">Read only</span>
+          </div>
+          <div class="pd-req__body">
+            @if (p.requirements && p.requirements.trim().length > 0) {
+              <p class="pd-req__text">{{ p.requirements }}</p>
+            } @else {
+              <p class="pd-req__empty">No requirements were provided for this project.</p>
+            }
+          </div>
+        </section>
+      </div>
+
+      <aside class="pd-split__aside" aria-label="AI configuration">
+        <div class="pd-ai">
+          <div class="pd-ai__content">
+            <h3 class="pd-ai__title">
+              <span class="material-symbols-outlined pd-ai__title-icon" aria-hidden="true">bolt</span>
+              AI API Configuration
+            </h3>
+            <p class="pd-ai__lede">Primary endpoint for this project’s intelligence layer. Values are never shown in full.</p>
+
+            <div class="pd-ai__fields">
+              <div class="pd-ai__field">
+                <span class="pd-ai__label">API key</span>
+                <div class="pd-ai__value" [class.pd-ai__value--off]="!p.hasAiApiKey">
+                  @if (p.hasAiApiKey) {
+                    <span class="pd-ai__mask" aria-hidden="true">••••••••••••••</span>
+                    <span class="pd-ai__hint">Stored securely; plaintext not shown.</span>
+                  } @else {
+                    <span>Not configured</span>
+                  }
+                </div>
+              </div>
+              <div class="pd-ai__field">
+                <span class="pd-ai__label">Model variant</span>
+                <div class="pd-ai__value">Workspace default (Phase 0)</div>
+              </div>
+            </div>
+
+            <p class="pd-ai__foot">Rotate or update keys when secure project editing is available.</p>
+          </div>
+          <span class="material-symbols-outlined pd-ai__watermark" aria-hidden="true">api</span>
+        </div>
+      </aside>
     </div>
   }
-
-  @if (bootstrapApi.loadState() === 'success') {
-    <div class="state-banner ok">Synced with bootstrap API successfully.</div>
-  }
-
-  <div class="empty-card">
-    <h2>No feature or task records</h2>
-    <p>Future modules will populate this workspace with hierarchies of features and tasks.</p>
-    <ul class="label-preview">
-      @for (label of bootstrapApi.statusLabels(); track label) {
-        <li>{{ label }}</li>
-      }
-    </ul>
-  </div>
-</section>
+</div>

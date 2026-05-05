@@ -21,6 +21,17 @@ export class Shell implements OnInit {
     this.bootstrapApi.loadBootstrap();
   }
 
+  /** Dashboard entry is reserved for a future home route; project list lives under `/app/projects`. */
+  protected dashboardNavActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return path === '/app' || path === '/app/';
+  }
+
+  protected projectsNavActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return path === '/app/projects' || path.startsWith('/app/projects/');
+  }
+
   protected logout(): void {
     this.auth.logout().subscribe({
       next: () => void this.router.navigate(['/login']),

@@ -19,6 +19,10 @@ export interface CreatedProject {
   createdAt: string;
 }
 
+export interface ProjectDetail extends CreatedProject {
+  hasAiApiKey: boolean;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -28,6 +32,11 @@ export class ProjectApiService {
   listProjects(): Observable<CreatedProject[]> {
     const url = `${environment.apiBaseUrl}/api/v1/projects`;
     return this.http.get<CreatedProject[]>(url);
+  }
+
+  getProject(id: string): Observable<ProjectDetail> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(id)}`;
+    return this.http.get<ProjectDetail>(url);
   }
 
   createProject(payload: CreateProjectPayload): Observable<CreatedProject> {
@@ -49,6 +58,20 @@ export class ProjectApiService {
         return body.message;
       }
       return `Could not load projects (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static detailErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not load project (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

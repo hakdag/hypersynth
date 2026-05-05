@@ -158,35 +158,8 @@
 <!-- Main Content Shell -->
 <div class="ml-64 min-h-screen flex flex-col">
 <!-- TopAppBar -->
-<header class="fixed top-0 right-0 left-64 flex items-center justify-between px-6 z-40 bg-white/80 backdrop-blur-md h-16 border-b border-slate-200 dark:border-slate-800">
-<div class="flex items-center gap-4 flex-1">
-<div class="relative w-full max-w-md">
-<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-<input class="w-full bg-slate-50 border-none rounded-lg py-1.5 pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary/20" placeholder="Search projects..." type="text"/>
-</div>
-</div>
-<div class="flex items-center gap-2">
-<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
-<span class="material-symbols-outlined">notifications</span>
-</button>
-<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
-<span class="material-symbols-outlined">settings</span>
-</button>
-<button class="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:opacity-80">
-<span class="material-symbols-outlined">help</span>
-</button>
-<div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
-<div class="flex items-center gap-3 pl-2">
-<div class="text-right hidden sm:block">
-<p class="text-xs font-bold text-blue-900 leading-none">Alex Rivera</p>
-<p class="text-[10px] text-slate-500 uppercase tracking-tighter">Admin</p>
-</div>
-<img alt="User avatar" class="w-8 h-8 rounded-full border border-slate-200 object-cover" data-alt="Professional portrait of a middle-aged man with short dark hair and a confident smile, wearing a modern blue suit jacket" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTEpitD0BMHJVGi25CI37Zef0NgTw6luf684D0TCC1NFhoZifkFVtVc-nColNmE3l83GLPfoQsPmTqMV3iDA9_6NsNDLGXSMk4yoPF0qyiaXMRmILw6v_j8EEL4l3zS5GSnHLtsuNyc5daacsSHbhnVKeTZPSgWnO6kM69cJoCuu9fgo-xA-P0YjFWt-P-H2_p9gYS8oFHxNCK5xNMxBrj3kU88viGi02miXXzCfod6j4Mo8lw1SXZnw9ZYwGpuIvNzb5CllMVHq4"/>
-</div>
-</div>
-</header>
 <!-- Canvas -->
-<main class="mt-16 p-lg flex-1">
+<main class="p-lg flex-1">
 <div class="max-w-container-max mx-auto space-y-lg">
 <!-- Page Header & Bento Hero -->
 <div class="grid grid-cols-12 gap-lg">
@@ -250,6 +223,45 @@
 </ul>
 <h4 class="font-h3 text-body-lg mb-2 text-on-background">Phase 2: Human-in-the-loop (HITL) Validation</h4>
 <p class="text-body-md text-slate-600">Establish a baseline accuracy of 96.4% across the core legal and compliance dataset before promoting to production environment.</p>
+</div>
+</div><div class="bg-white border border-outline-variant rounded-xl overflow-hidden">
+<div class="px-lg py-md border-b border-outline-variant">
+<h3 class="font-h3 text-h3 text-blue-900 flex items-center gap-2">
+<span class="material-symbols-outlined">extension</span>
+            Project Features
+        </h3>
+</div>
+<div class="p-lg">
+<ul class="space-y-4">
+<li class="flex items-center justify-between p-3 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400">check_circle</span>
+<span class="text-body-md font-medium text-on-surface">Real-time Document Parsing</span>
+</div>
+<span class="px-3 py-1 bg-green-100 text-green-700 text-label-md rounded-full font-bold">DONE</span>
+</li>
+<li class="flex items-center justify-between p-3 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">sync</span>
+<span class="text-body-md font-medium text-on-surface">Vector Database Indexing</span>
+</div>
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container text-label-md rounded-full font-bold">IN PROGRESS</span>
+</li>
+<li class="flex items-center justify-between p-3 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400">pending</span>
+<span class="text-body-md font-medium text-on-surface">Predictive Risk Scoring</span>
+</div>
+<span class="px-3 py-1 bg-slate-100 text-slate-600 text-label-md rounded-full font-bold">PENDING</span>
+</li>
+<li class="flex items-center justify-between p-3 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400">pending</span>
+<span class="text-body-md font-medium text-on-surface">Multi-modal Data Extraction</span>
+</div>
+<span class="px-3 py-1 bg-slate-100 text-slate-600 text-label-md rounded-full font-bold">PENDING</span>
+</li>
+</ul>
 </div>
 </div>
 <!-- Documents List Table -->
