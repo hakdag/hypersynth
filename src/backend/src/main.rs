@@ -1,4 +1,5 @@
 mod app_state;
+mod auth_route;
 mod configs;
 mod register_route;
 mod types;
@@ -8,6 +9,7 @@ use std::path::Path;
 use app_state::AppState;
 use axum::extract::State;
 use axum::http::HeaderValue;
+use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
@@ -60,14 +62,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             axum::http::Method::DELETE,
             axum::http::Method::OPTIONS,
         ])
-        .allow_headers(tower_http::cors::Any);
+        .allow_headers([CONTENT_TYPE, ACCEPT])
+        .allow_credentials(true);
 
-    let state = AppState { pool };
+    let state = AppState {
+        pool,
+        session_max_age_secs: config.session_max_age_secs,
+    };
 
     let app = Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/bootstrap", get(bootstrap))
         .route("/api/v1/register", post(register_user))
+        .route("/api/v1/login", post(auth_route::login))
+        .route("/api/v1/logout", post(auth_route::logout))
+        .route("/api/v1/me", get(auth_route::current_user))
         .with_state(state)
         .layer(cors);
 

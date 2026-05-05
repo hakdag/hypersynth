@@ -51,6 +51,20 @@
   font-family: inherit;
 }
 
+.session-user {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  color: var(--foreground-soft);
+}
+
+.logout-btn:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
 .status-panel {
   padding: 0.75rem 1.25rem;
 }

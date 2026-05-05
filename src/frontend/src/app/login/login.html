@@ -1,0 +1,74 @@
+<main class="login-main">
+  <div class="login-column">
+    <div class="brand-block">
+      <div class="brand-icon-wrap" aria-hidden="true">
+        <span class="material-symbols-outlined brand-icon">hub</span>
+      </div>
+      <h1 class="brand-title">{{ bootstrapApi.appName() }}</h1>
+      <p class="brand-tagline">Enterprise-grade intelligence orchestration</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          @if (serverError(); as err) {
+            <div class="alert alert-error" role="alert">{{ err }}</div>
+          }
+
+          <div class="field">
+            <label class="label" for="login-email">Email Address</label>
+            <div class="input-wrap">
+              <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
+              <input
+                class="input"
+                id="login-email"
+                type="email"
+                formControlName="email"
+                placeholder="name@company.com"
+                autocomplete="email"
+              />
+            </div>
+            @if (fieldError('email')) {
+              <p class="field-error">{{ fieldError('email') }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <div class="label-row">
+              <label class="label label-inline" for="login-password">Password</label>
+              <a class="forgot-link" href="#" (click)="$event.preventDefault()">Forgot Password?</a>
+            </div>
+            <div class="input-wrap">
+              <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
+              <input
+                class="input"
+                id="login-password"
+                type="password"
+                formControlName="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+            </div>
+            @if (fieldError('password')) {
+              <p class="field-error">{{ fieldError('password') }}</p>
+            }
+          </div>
+
+          <button class="submit" type="submit" [disabled]="submitting() || form.invalid">
+            <span>{{ submitting() ? 'Signing in…' : 'Sign In' }}</span>
+            @if (!submitting()) {
+              <span class="material-symbols-outlined submit-icon" aria-hidden="true">arrow_forward</span>
+            }
+          </button>
+        </form>
+      </div>
+
+      <div class="card-footer">
+        <p class="footer-text">
+          Don't have an account?
+          <a class="footer-link" routerLink="/register">Create Account</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</main>

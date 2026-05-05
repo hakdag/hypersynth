@@ -5,6 +5,7 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub cors_origin: String,
+    pub session_max_age_secs: i64,
 }
 
 impl AppConfig {
@@ -19,10 +20,20 @@ impl AppConfig {
 
         let cors_origin = env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:4200".into());
 
+        let session_max_age_secs: i64 = env::var("SESSION_MAX_AGE_SECS")
+            .unwrap_or_else(|_| "604800".into())
+            .parse()
+            .map_err(|_| "SESSION_MAX_AGE_SECS must be a valid i64 (seconds)")?;
+
+        if session_max_age_secs < 60 {
+            return Err("SESSION_MAX_AGE_SECS must be at least 60".into());
+        }
+
         Ok(Self {
             port,
             database_url,
             cors_origin,
+            session_max_age_secs,
         })
     }
 }
