@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .soft-depth {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.03);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#86f2e4",
+                        "error": "#ba1a1a",
+                        "primary": "#00236f",
+                        "on-primary-container": "#90a8ff",
+                        "inverse-primary": "#b6c4ff",
+                        "tertiary-container": "#2724b8",
+                        "outline": "#757682",
+                        "on-surface": "#191c1e",
+                        "on-secondary-container": "#006f66",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#eff1f3",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "outline-variant": "#c5c5d3",
+                        "on-primary-fixed": "#00164e",
+                        "on-secondary-fixed": "#00201d",
+                        "inverse-surface": "#2d3133",
+                        "secondary": "#006a61",
+                        "tertiary": "#0d0097",
+                        "on-error": "#ffffff",
+                        "secondary-fixed": "#89f5e7",
+                        "primary-fixed": "#dce1ff",
+                        "surface-dim": "#d8dadc",
+                        "surface-variant": "#e0e3e5",
+                        "surface-tint": "#4059aa",
+                        "surface-container-low": "#f2f4f6",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "surface-container-high": "#e6e8ea",
+                        "on-secondary-fixed-variant": "#005049",
+                        "on-primary-fixed-variant": "#264191",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "primary-container": "#1e3a8a",
+                        "on-tertiary-container": "#a1a4ff",
+                        "on-surface-variant": "#444651",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#6bd8cb",
+                        "surface-container": "#eceef0",
+                        "background": "#f7f9fb",
+                        "surface-bright": "#f7f9fb",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f7f9fb",
+                        "on-background": "#191c1e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "container-max": "1440px",
+                        "base": "4px",
+                        "gutter": "20px",
+                        "xl": "48px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "code": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "h2": ["Manrope"],
+                        "h1": ["Manrope"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "h3": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "code": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "h1": ["36px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h3": ["20px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background font-body-md text-on-surface">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col py-6 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-lg">grid_view</span>
+</div>
+<div>
+<h1 class="text-lg font-extrabold text-blue-900 dark:text-white">ProjectIntel</h1>
+<p class="text-xs text-slate-500 font-medium tracking-wider">ENTERPRISE</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-slate-100 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300 border-r-2 border-blue-900 dark:border-blue-400 font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+<span>Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">task_alt</span>
+<span>Tasks</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Timeline</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Reports</span>
+</a>
+</nav>
+<div class="px-3 pt-6 border-t border-slate-100 dark:border-slate-800 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out font-manrope text-sm font-medium" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="flex items-center justify-between px-6 sticky top-0 z-40 w-full ml-64 h-16 border-b border-slate-200 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md font-manrope text-sm antialiased">
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="absolute inset-y-0 left-3 flex items-center text-slate-400">
+<span class="material-symbols-outlined text-sm">search</span>
+</span>
+<input class="pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:ring-1 focus:ring-primary rounded-lg w-64 text-xs transition-all" placeholder="Search resources..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-slate-200 overflow-hidden ml-2 border border-slate-200">
+<img class="w-full h-full object-cover" data-alt="A professional business portrait of a modern project manager in a bright, clean office environment. The subject is wearing a sharp, minimalist navy blue blazer against a soft, out-of-focus background of high-tech workstations. The lighting is natural and high-key, reflecting a corporate professional aesthetic that is calm, intelligent, and focused." src="https://lh3.googleusercontent.com/aida/ADBb0ui4ie0cn3VPI_Xsb2DHuVCuv4bzWBMw14QZTJomDN0qoHHd45q39iC1trMzpUFSjjbS6bQkRpd91v1e95MDe8ztHXnyjLuBDE-ONqFA8pwZtydoqfTuWvzdLpr8zxkaeSI6Lot7zJDnfnw-Sxn9JmBYPakkd9YT8KssfuSpKjj8D5KVfsw397IzUp6VvjOOQpaZBnyY2mJTh6j4vf8Qi91bkZtYMn6RlDrsbu1vzwd68GV2yWTCJh_bAKRyLzFru0uYZ8XmWad1Wg"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 p-lg">
+<div class="max-w-[800px] mx-auto mt-lg">
+<!-- Breadcrumbs -->
+<nav class="flex mb-md text-xs font-label-md text-slate-500 items-center gap-2">
+<span>Projects</span>
+<span class="material-symbols-outlined text-[10px]">chevron_right</span>
+<span class="text-primary font-bold">New Project</span>
+</nav>
+<header class="mb-lg">
+<h2 class="font-h1 text-h1 text-primary">Initiate New Project</h2>
+<p class="text-body-md text-slate-500 mt-2">Define your project parameters and technical requirements to begin tracking.</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+<!-- Left: Form Card -->
+<section class="lg:col-span-2 space-y-lg">
+<div class="bg-white border border-slate-200 rounded-xl p-lg soft-depth">
+<form class="space-y-md">
+<!-- Project Name -->
+<div>
+<label class="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Project Name <span class="text-error">*</span></label>
+<input class="w-full border border-slate-200 rounded-lg p-md focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all text-body-md outline-none" placeholder="Enter a unique name for your project" required="" type="text"/>
+<p class="text-[11px] text-slate-400 mt-1">This will be the primary identifier across all system reports.</p>
+</div>
+<!-- Project Requirements -->
+<div>
+<label class="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Project Requirements</label>
+<div class="border border-slate-200 rounded-lg overflow-hidden">
+<div class="bg-slate-50 px-3 py-2 border-b border-slate-200 flex gap-4">
+<button class="material-symbols-outlined text-slate-500 hover:text-primary transition-colors text-lg" type="button">format_bold</button>
+<button class="material-symbols-outlined text-slate-500 hover:text-primary transition-colors text-lg" type="button">format_italic</button>
+<button class="material-symbols-outlined text-slate-500 hover:text-primary transition-colors text-lg" type="button">format_list_bulleted</button>
+<button class="material-symbols-outlined text-slate-500 hover:text-primary transition-colors text-lg" type="button">link</button>
+</div>
+<textarea class="w-full border-none focus:ring-0 p-md text-body-md resize-none" placeholder="Document the context, scope, and technical prerequisites here..." rows="6"></textarea>
+</div>
+</div>
+<!-- AI API Key -->
+<div>
+<label class="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">AI API Key <span class="text-slate-400 font-normal">(Optional)</span></label>
+<div class="relative">
+<input class="w-full border border-slate-200 rounded-lg p-md focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all text-body-md outline-none pr-10" placeholder="sk-••••••••••••••••••••••••" type="password"/>
+<span class="absolute inset-y-0 right-3 flex items-center text-slate-400 cursor-pointer hover:text-primary">
+<span class="material-symbols-outlined">visibility_off</span>
+</span>
+</div>
+<p class="text-[11px] text-slate-400 mt-1">Provide your own key for enhanced project analysis and automation features.</p>
+</div>
+<!-- Status Badge (Read Only) -->
+<div class="pt-sm">
+<label class="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Initial Status</label>
+<div class="inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+<span class="w-2 h-2 rounded-full bg-slate-400"></span>
+<span class="text-xs font-bold text-slate-600">Pending Activation</span>
+</div>
+</div>
+</form>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-md">
+<button class="px-lg py-md border border-slate-200 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                            Cancel
+                        </button>
+<button class="px-xl py-md bg-primary-container text-white rounded-lg font-bold text-sm hover:opacity-90 transition-all soft-depth">
+                            Create Project
+                        </button>
+</div>
+</section>
+<!-- Right: Information Guide -->
+<aside class="space-y-lg">
+<div class="bg-secondary-container/10 border border-secondary-container/30 rounded-xl p-md">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-on-secondary-container">info</span>
+<div>
+<h4 class="font-h3 text-sm text-on-secondary-container font-bold mb-1">Quick Setup Guide</h4>
+<p class="text-xs text-on-secondary-container/80 leading-relaxed">Ensure your project name is unique within your organization to avoid data overlap in reporting.</p>
+</div>
+</div>
+</div>
+<div class="bg-white border border-slate-200 rounded-xl p-md overflow-hidden soft-depth">
+<img class="w-full h-32 object-cover rounded-lg mb-4" data-alt="A futuristic, high-tech conceptual visualization of project management data as a series of glowing blue interconnected nodes and pathways. The image is rendered in a sleek, minimalist digital style with shallow depth of field. The lighting is cinematic with subtle lens flares, dominated by deep blues and crisp whites to match a sophisticated corporate SaaS brand." src="https://lh3.googleusercontent.com/aida/ADBb0uiwU6vCar9-tUxC9t8r8ZDOigpuKsGTa8eIB4VsSmy4usN3HVXXV5ZibWy9-LEGsR6uWz-8H3AUYuS1gFcrbvO7wZJpJ9jgY8U8KedWlhVETORHKi375iGQWRMNrfsKPBnLmuVmBukeyPS2yzqxRCU4bsuWgxbY153iC1o9lhsb8GBa5wIxBsoJob1iS5kRy67a-kR5f-QSv0Hr8q1hS1-hBa6rhAj9bi7gLE2hVfAoQtNh5cd95SclY96nURWlkqjFx12d9FeNCw"/>
+<h4 class="font-bold text-sm text-primary mb-2">Automated Insights</h4>
+<p class="text-xs text-slate-500 leading-relaxed">Once created, ProjectIntel will automatically scan your requirements and suggest milestones based on historical project patterns.</p>
+<div class="mt-4 pt-4 border-t border-slate-100">
+<div class="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+<span>SYSTEM UPTIME</span>
+<span class="text-secondary font-bold">99.9%</span>
+</div>
+</div>
+</div>
+<div class="bg-white border border-slate-200 rounded-xl p-md soft-depth">
+<h4 class="font-bold text-sm text-primary mb-4">Related Templates</h4>
+<div class="space-y-3">
+<div class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+<div class="w-8 h-8 rounded bg-blue-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-blue-900 text-lg">code</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-xs font-bold text-slate-700 truncate">Software Dev Sprint</p>
+<p class="text-[10px] text-slate-400">12 default tasks</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-100">
+<div class="w-8 h-8 rounded bg-teal-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-lg">campaign</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-xs font-bold text-slate-700 truncate">Marketing Campaign</p>
+<p class="text-[10px] text-slate-400">8 default tasks</p>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</main>
+<!-- Success Feedback Overlay (Hidden by default) -->
+<div class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center">
+<div class="bg-white rounded-2xl p-xl max-w-sm w-full text-center soft-depth">
+<div class="w-16 h-16 bg-secondary-container/20 text-secondary rounded-full flex items-center justify-center mx-auto mb-lg">
+<span class="material-symbols-outlined text-4xl" data-weight="fill">check_circle</span>
+</div>
+<h3 class="font-h2 text-h2 text-primary mb-2">Project Created</h3>
+<p class="text-body-md text-slate-500 mb-lg">Your new project has been successfully initialized and is now ready for tasking.</p>
+<button class="w-full py-md bg-primary-container text-white rounded-lg font-bold">Go to Dashboard</button>
+</div>
+</div>
+</body></html>

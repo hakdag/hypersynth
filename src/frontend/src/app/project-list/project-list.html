@@ -1,7 +1,8 @@
 <section class="surface">
   <header class="header">
     <h1 class="heading">Projects</h1>
-    <p class="subhead">No projects exist yet — this placeholder keeps navigation stable.</p>
+    <p class="subhead">Create a project to start organizing work in your private workspace.</p>
+    <a routerLink="/app/projects/new" class="primary-cta">New project</a>
   </header>
 
   <div class="state-block">
@@ -24,11 +25,38 @@
     </div>
   }
 
-  <div class="empty-card">
-    <h2>No projects yet</h2>
-    <p>Projects will appear here after future features land.</p>
-    <a routerLink="/app/projects/sample-project-id" class="ghost-link">
-      Preview project placeholder route →
-    </a>
-  </div>
+  @if (listError(); as le) {
+    <div class="state-banner error" role="alert">
+      {{ le }}
+      <button type="button" class="retry-btn" (click)="loadProjects()">Retry</button>
+    </div>
+  }
+
+  @if (loadState() === 'loading') {
+    <div class="state-banner loading">Loading your projects…</div>
+  }
+
+  @if (loadState() === 'ok' && projects().length > 0) {
+    <ul class="project-list">
+      @for (p of projects(); track p.id) {
+        <li class="project-row">
+          <a [routerLink]="['/app/projects', p.id]" class="project-link">
+            <span class="project-name">{{ p.name }}</span>
+            <span class="project-meta">{{ p.status }}</span>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (loadState() === 'ok' && projects().length === 0) {
+    <div class="empty-card">
+      <h2>No projects yet</h2>
+      <p>
+        You only see projects for the account signed in now (check the name in the header; hover for email). Create one
+        below, or sign in with the account that created your existing projects.
+      </p>
+      <a routerLink="/app/projects/new" class="ghost-link">Create a project →</a>
+    </div>
+  }
 </section>
