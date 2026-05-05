@@ -39,3 +39,20 @@
 .cta:hover {
   opacity: 0.92;
 }
+
+.secondary {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.inline {
+  margin-left: 0.35rem;
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

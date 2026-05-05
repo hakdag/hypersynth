@@ -1,22 +1,20 @@
+mod app_state;
 mod configs;
+mod register_route;
 mod types;
 
 use std::path::Path;
 
+use app_state::AppState;
 use axum::extract::State;
 use axum::http::HeaderValue;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
+use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
 use types::{BootstrapResponse, HealthResponse};
-
-#[derive(Clone)]
-struct AppState {
-    pool: PgPool,
-}
 
 /// Loads `src/.env` relative to this crate (`src/backend` → parent `src` + `.env`).
 fn load_src_env() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,6 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&config.database_url)
         .await?;
 
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await?;
+
     sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(&pool)
         .await?;
@@ -65,6 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/bootstrap", get(bootstrap))
+        .route("/api/v1/register", post(register_user))
         .with_state(state)
         .layer(cors);
 
