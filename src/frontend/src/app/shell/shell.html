@@ -1,47 +1,95 @@
 <div class="shell">
-  <header class="toolbar">
-    <a class="brand" routerLink="/app/projects">{{ bootstrapApi.appName() }}</a>
-    <nav class="nav">
-      <a routerLink="/app/projects" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: false }">
-        Projects
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">
+        <span class="material-symbols-outlined sidebar-logo-icon" aria-hidden="true">grid_view</span>
+      </div>
+      <div class="sidebar-brand-text">
+        <a routerLink="/app/projects" class="sidebar-title">{{ bootstrapApi.appName() }}</a>
+        <p class="sidebar-tagline">Enterprise</p>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Primary">
+      <a
+        routerLink="/app/projects"
+        class="sidebar-link"
+        [class.sidebar-link-active]="dashboardNavActive()"
+      >
+        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">grid_view</span>
+        <span>Dashboard</span>
       </a>
-      <a routerLink="/app/account" routerLinkActive="nav-link-active">Account</a>
-      @if (currentUser(); as u) {
-        <span class="session-user" title="{{ u.email }}">{{ u.fullname }}</span>
-      }
-      <button type="button" class="linklike logout-btn" (click)="logout()">Sign out</button>
+      <a
+        routerLink="/app/projects"
+        class="sidebar-link"
+        [class.sidebar-link-active]="projectsNavActive()"
+      >
+        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">folder_open</span>
+        <span>Projects</span>
+      </a>
+      <span class="sidebar-link sidebar-link-disabled">
+        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">task_alt</span>
+        <span>Tasks</span>
+      </span>
+      <span class="sidebar-link sidebar-link-disabled">
+        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">calendar_today</span>
+        <span>Timeline</span>
+      </span>
+      <span class="sidebar-link sidebar-link-disabled">
+        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">analytics</span>
+        <span>Reports</span>
+      </span>
     </nav>
-  </header>
 
-  <section class="status-panel" aria-live="polite">
-    @switch (bootstrapApi.loadState()) {
-      @case ('loading') {
-        <p class="status status-loading">
-          Loading application configuration<span class="spinner"></span>
-        </p>
-      }
-      @case ('error') {
-        <div class="status status-error">
-          <strong>Unable to load configuration.</strong>
-          <span>{{ bootstrapApi.lastError() }}</span>
-        </div>
-      }
-      @case ('success') {
-        <div class="status status-success">
-          <strong>Bootstrap succeeded.</strong>
-          <span>Phase 0 status labels synced from API.</span>
-        </div>
-      }
-      @case ('idle') {
-        <div class="status status-neutral">Initializing…</div>
-      }
-      @default {
-        <div class="status status-neutral">&nbsp;</div>
-      }
+    <div class="sidebar-dock">
+      <div class="sidebar-foot">
+        <span class="sidebar-link sidebar-link-disabled">
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">contact_support</span>
+          <span>Support</span>
+        </span>
+        <a routerLink="/app/account" class="sidebar-link" routerLinkActive="sidebar-link-active">
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">settings</span>
+          <span>Settings</span>
+        </a>
+      </div>
+
+      <div class="sidebar-session">
+        @if (currentUser(); as u) {
+          <p class="sidebar-user" title="{{ u.email }}">{{ u.fullname }}</p>
+        }
+        <button type="button" class="sidebar-signout" (click)="logout()">Sign out</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="shell-main">
+    @if (
+      bootstrapApi.loadState() === 'loading' ||
+      bootstrapApi.loadState() === 'error' ||
+      bootstrapApi.loadState() === 'idle'
+    ) {
+      <section class="status-panel" aria-live="polite">
+        @switch (bootstrapApi.loadState()) {
+          @case ('loading') {
+            <p class="status status-loading">
+              Loading application configuration<span class="spinner"></span>
+            </p>
+          }
+          @case ('error') {
+            <div class="status status-error">
+              <strong>Unable to load configuration.</strong>
+              <span>{{ bootstrapApi.lastError() }}</span>
+            </div>
+          }
+          @case ('idle') {
+            <div class="status status-neutral">Initializing…</div>
+          }
+        }
+      </section>
     }
-  </section>
 
-  <main class="content">
-    <router-outlet />
-  </main>
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
 </div>

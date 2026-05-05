@@ -1,4 +1,4 @@
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
@@ -6,7 +6,8 @@ use tracing::{info, warn};
 
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::types::{ApiErrorBody, CreateProjectRequest, ProjectResponse};
+use crate::types::{ApiErrorBody, CreateProjectRequest, ProjectDetailResponse, ProjectResponse};
+use uuid::Uuid;
 
 pub async fn list_projects(
     State(state): State<AppState>,
@@ -50,6 +51,67 @@ pub async fn list_projects(
     );
 
     Ok(Json(rows))
+}
+
+pub async fn get_project(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<ProjectDetailResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, ProjectDetailResponse>(
+        r#"
+        SELECT
+            id,
+            user_id,
+            name,
+            requirements,
+            status,
+            created_at,
+            (ai_api_key IS NOT NULL AND btrim(ai_api_key) <> '') AS has_ai_api_key
+        FROM projects
+        WHERE id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, "get_project: query failed");
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            project_id = %project_id,
+            "api: GET /api/v1/projects/:id -> 404"
+        );
+        return Err(not_found("Project not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        project_id = %row.id,
+        "api: GET /api/v1/projects/:id -> 200 OK"
+    );
+
+    Ok(Json(row))
 }
 
 pub async fn create_project(
@@ -133,6 +195,15 @@ pub async fn create_project(
     );
 
     Ok((StatusCode::CREATED, Json(row)))
+}
+
+fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ApiErrorBody {
+            message: message.into(),
+        }),
+    )
 }
 
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
