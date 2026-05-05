@@ -4,10 +4,12 @@ import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { LoginPlaceholder } from './login-placeholder/login-placeholder';
 import { ProjectDetail } from './project-detail/project-detail';
 import { ProjectList } from './project-list/project-list';
+import { Register } from './register/register';
 import { Shell } from './shell/shell';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'login' },
+  { path: '', pathMatch: 'full', redirectTo: 'register' },
+  { path: 'register', component: Register },
   { path: 'login', component: LoginPlaceholder },
   {
     path: 'app',
@@ -19,5 +21,5 @@ export const routes: Routes = [
       { path: 'account', component: AccountPlaceholder },
     ],
   },
-  { path: '**', redirectTo: 'login' },
+  { path: '**', redirectTo: 'register' },
 ];

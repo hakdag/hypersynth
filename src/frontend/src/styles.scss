@@ -1,4 +1,8 @@
+@use 'styles/elevation' as elevation;
+
 :root {
+  --shadow-card: #{elevation.$shadow-card};
+
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;

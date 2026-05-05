@@ -1,0 +1,111 @@
+<main class="register-main">
+  <div class="register-column">
+    <div class="brand-block">
+      <div class="brand-icon-wrap" aria-hidden="true">
+        <span class="material-symbols-outlined brand-icon">hub</span>
+      </div>
+      <h1 class="brand-title">{{ bootstrapApi.appName() }}</h1>
+      <p class="brand-tagline">Enterprise-grade intelligence orchestration</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <div class="card-intro">
+          <h2 class="card-heading">Create Account</h2>
+          <p class="card-sub">Get started with your collaborative workspace</p>
+        </div>
+
+        @if (serverSuccess(); as ok) {
+          <div class="alert alert-success" role="status">{{ ok }}</div>
+        }
+
+        @if (serverError(); as err) {
+          <div class="alert alert-error" role="alert">{{ err }}</div>
+        }
+
+        <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <div class="field">
+            <label class="label" for="reg-name">Full Name</label>
+            <div class="input-wrap">
+              <span class="input-icon material-symbols-outlined" aria-hidden="true">person</span>
+              <input
+                class="input"
+                id="reg-name"
+                type="text"
+                formControlName="fullname"
+                placeholder="John Doe"
+                autocomplete="name"
+              />
+            </div>
+            @if (fieldError('fullname')) {
+              <p class="field-error">{{ fieldError('fullname') }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <label class="label" for="reg-email">Email Address</label>
+            <div class="input-wrap">
+              <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
+              <input
+                class="input"
+                id="reg-email"
+                type="email"
+                formControlName="email"
+                placeholder="name@company.com"
+                autocomplete="email"
+              />
+            </div>
+            @if (fieldError('email')) {
+              <p class="field-error">{{ fieldError('email') }}</p>
+            }
+          </div>
+
+          <div class="field">
+            <label class="label" for="reg-password">Password</label>
+            <div class="input-wrap">
+              <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
+              <input
+                class="input"
+                id="reg-password"
+                type="password"
+                formControlName="password"
+                placeholder="Min. 8 characters, letter & number"
+                autocomplete="new-password"
+              />
+            </div>
+            @if (fieldError('password')) {
+              <p class="field-error">{{ fieldError('password') }}</p>
+            }
+          </div>
+
+          <div class="terms-row">
+            <input class="checkbox" id="reg-terms" type="checkbox" formControlName="terms" />
+            <label class="terms-label" for="reg-terms">
+              I agree to the <a class="inline-link" href="#" (click)="$event.preventDefault()">Terms of Service</a>
+              and
+              <a class="inline-link" href="#" (click)="$event.preventDefault()">Privacy Policy</a>.
+            </label>
+          </div>
+          @if (fieldError('terms')) {
+            <p class="field-error terms-error">{{ fieldError('terms') }}</p>
+          }
+
+          <button class="submit" type="submit" [disabled]="submitting() || form.invalid">
+            <span>{{ submitting() ? 'Creating…' : 'Create Account' }}</span>
+            @if (!submitting()) {
+              <span class="material-symbols-outlined submit-icon" aria-hidden="true">arrow_forward</span>
+            }
+          </button>
+        </form>
+      </div>
+
+      <div class="card-footer">
+        <p class="footer-text">
+          Already have an account?
+          <a class="footer-link" routerLink="/login">Sign In</a>
+        </p>
+      </div>
+    </div>
+
+  </div>
+</main>
