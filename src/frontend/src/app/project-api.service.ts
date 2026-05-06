@@ -10,6 +10,14 @@ export interface CreateProjectPayload {
   aiApiKey?: string;
 }
 
+export interface UpdateProjectPayload {
+  name: string;
+  requirements: string;
+  status: string;
+  clearAiApiKey: boolean;
+  aiApiKey: string;
+}
+
 export interface CreatedProject {
   id: string;
   userId: string;
@@ -51,6 +59,18 @@ export class ProjectApiService {
     return this.http.post<CreatedProject>(url, body);
   }
 
+  updateProject(id: string, payload: UpdateProjectPayload): Observable<CreatedProject> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(id)}`;
+    const body = {
+      name: payload.name.trim(),
+      requirements: payload.requirements,
+      status: payload.status,
+      clearAiApiKey: payload.clearAiApiKey,
+      aiApiKey: payload.aiApiKey.trim().length > 0 ? payload.aiApiKey.trim() : null,
+    };
+    return this.http.patch<CreatedProject>(url, body);
+  }
+
   static listErrorMessage(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
       const body = err.error as { message?: string } | null;
@@ -83,6 +103,20 @@ export class ProjectApiService {
         return body.message;
       }
       return `Could not create project (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static updateErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not save project (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

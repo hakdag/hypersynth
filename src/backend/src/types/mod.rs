@@ -8,6 +8,7 @@ mod project_detail_response;
 mod project_response;
 mod register_request;
 mod register_success_response;
+mod update_project_request;
 
 pub use api_error_body::ApiErrorBody;
 pub use bootstrap_response::BootstrapResponse;
@@ -19,3 +20,4 @@ pub use project_detail_response::ProjectDetailResponse;
 pub use project_response::ProjectResponse;
 pub use register_request::RegisterRequest;
 pub use register_success_response::RegisterSuccessResponse;
+pub use update_project_request::UpdateProjectRequest;

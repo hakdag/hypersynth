@@ -1,0 +1,207 @@
+<div class="pc-page">
+  @if (loadState() === 'loading') {
+    <div class="pc-banner pc-banner-load">Loading project…</div>
+  }
+
+  @if (loadState() === 'error' && loadError(); as msg) {
+    <div class="pc-banner pc-banner-error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="pc-crumb-link pc-crumb-link-block">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok') {
+    <nav class="pc-breadcrumbs" aria-label="Breadcrumb">
+      <a routerLink="/app/projects" class="pc-crumb-link">Projects</a>
+      <span class="material-symbols-outlined pc-crumb-sep" aria-hidden="true">chevron_right</span>
+      <a [routerLink]="['/app/projects', projectId()]" class="pc-crumb-link">{{ headerName() }}</a>
+      <span class="material-symbols-outlined pc-crumb-sep" aria-hidden="true">chevron_right</span>
+      <span class="pc-crumb-current">Edit</span>
+    </nav>
+
+    <header class="pc-header">
+      <h1 class="pc-title">Edit Project</h1>
+      <p class="pc-subtitle">
+        Update name, requirements, status, and AI API key. Keys are never shown after they are stored—provide a new value
+        only to replace the existing one.
+      </p>
+    </header>
+
+    @if (serverError(); as err) {
+      <div class="pc-banner pc-banner-error" role="alert">{{ err }}</div>
+    }
+
+    <div class="pc-grid">
+      <section class="pc-main">
+        <div class="pc-card pc-card-form">
+          <form class="pc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+            <div class="pc-field">
+              <label class="pc-label" for="edit-project-name">
+                Project Name <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="edit-project-name"
+                class="pc-input"
+                type="text"
+                autocomplete="off"
+                placeholder="Enter a unique name for your project"
+                formControlName="name"
+                [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched"
+                [attr.aria-describedby]="nameError() ? 'edit-project-name-hint' : null"
+              />
+              @if (nameError(); as ne) {
+                <p id="edit-project-name-hint" class="pc-hint pc-hint-error">{{ ne }}</p>
+              } @else {
+                <p class="pc-hint">This will be the primary identifier across all system reports.</p>
+              }
+            </div>
+
+            <div class="pc-field">
+              <span class="pc-label">Project Requirements</span>
+              <div class="pc-rich-shell">
+                <div class="pc-rich-toolbar" aria-hidden="true">
+                  <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">format_bold</button>
+                  <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">format_italic</button>
+                  <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                    format_list_bulleted
+                  </button>
+                  <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">link</button>
+                </div>
+                <textarea
+                  class="pc-textarea"
+                  formControlName="requirements"
+                  rows="6"
+                  placeholder="Document the context, scope, and technical prerequisites here..."
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="edit-project-status">
+                Project Status <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <select id="edit-project-status" class="pc-input pc-select" formControlName="status">
+                @for (st of statuses; track st) {
+                  <option [value]="st">{{ st }}</option>
+                }
+              </select>
+              <p class="pc-hint">Phase 0 statuses: Pending, In Progress, or Done.</p>
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="edit-project-api-key">
+                AI API Key <span class="pc-opt">(Optional)</span>
+              </label>
+              @if (hadAiApiKey()) {
+                <p class="pc-hint pc-hint-tight">
+                  A key is already stored. Leave the field empty to keep it, enter a new key to replace it, or check
+                  "Remove stored key" below to clear it.
+                </p>
+              }
+              <div
+                class="pc-input-wrap"
+                [class.pc-key-field-muted]="form.controls.clearAiApiKey.value"
+              >
+                <input
+                  id="edit-project-api-key"
+                  class="pc-input pc-input-key"
+                  [type]="apiKeyVisible() ? 'text' : 'password'"
+                  autocomplete="off"
+                  placeholder="sk-••••••••••••••••••••••••"
+                  formControlName="aiApiKey"
+                />
+                <button
+                  type="button"
+                  class="pc-key-toggle material-symbols-outlined"
+                  (click)="toggleApiKeyVisible()"
+                  [attr.aria-pressed]="apiKeyVisible()"
+                  [attr.aria-label]="apiKeyVisible() ? 'Hide API key' : 'Show API key'"
+                  [disabled]="form.controls.clearAiApiKey.value"
+                >
+                  {{ apiKeyVisible() ? 'visibility' : 'visibility_off' }}
+                </button>
+              </div>
+              @if (hadAiApiKey()) {
+                <div class="pc-checkbox-row">
+                  <input
+                    id="edit-clear-ai-key"
+                    type="checkbox"
+                    class="pc-checkbox"
+                    formControlName="clearAiApiKey"
+                    (change)="onClearKeyChecked($any($event.target).checked)"
+                  />
+                  <label class="pc-checkbox-label" for="edit-clear-ai-key">Remove stored API key from this project</label>
+                </div>
+              }
+              <p class="pc-hint">Provide your own key for enhanced project analysis and automation features.</p>
+            </div>
+
+            <div class="pc-actions">
+              <button type="button" class="pc-btn pc-btn-ghost" (click)="cancel()">Cancel</button>
+              <button type="submit" class="pc-btn pc-btn-primary" [disabled]="submitting()">
+                <span class="pc-btn-text">{{ submitting() ? 'Saving…' : 'Save changes' }}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <aside class="pc-aside" aria-label="Guidance">
+        <div class="pc-callout">
+          <span class="material-symbols-outlined pc-callout-icon">info</span>
+          <div>
+            <h2 class="pc-aside-heading">Editing tips</h2>
+            <p class="pc-aside-text">
+              Keep the project name unique within your workspace. Status drives high-level progress on dashboards and the
+              project list.
+            </p>
+          </div>
+        </div>
+
+        <div class="pc-card pc-card-aside">
+          <div class="pc-aside-visual" aria-hidden="true"></div>
+          <h2 class="pc-aside-title">Privacy</h2>
+          <p class="pc-aside-muted">
+            The server never returns your API key after save. Replacing or clearing a key applies only to projects you
+            own.
+          </p>
+          <div class="pc-aside-foot">
+            <span class="pc-aside-foot-label">Phase 0</span>
+            <span class="pc-aside-foot-value">Owner-only updates</span>
+          </div>
+        </div>
+
+        <div class="pc-card pc-card-templates">
+          <h2 class="pc-aside-title">Quick reference</h2>
+          <ul class="pc-template-list">
+            <li class="pc-template-row">
+              <span class="pc-template-icon material-symbols-outlined">edit_note</span>
+              <div>
+                <p class="pc-template-name">Requirements</p>
+                <p class="pc-template-meta">Plain text area; same layout as project creation</p>
+              </div>
+            </li>
+            <li class="pc-template-row">
+              <span class="pc-template-icon material-symbols-outlined">toggle_on</span>
+              <div>
+                <p class="pc-template-name">Status</p>
+                <p class="pc-template-meta">Pending → In Progress → Done</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  }
+</div>
+
+@if (showSuccess()) {
+  <div class="pc-overlay" role="dialog" aria-modal="true" aria-labelledby="pe-success-title">
+    <div class="pc-dialog">
+      <div class="pc-success-icon material-symbols-outlined" aria-hidden="true">check_circle</div>
+      <h2 id="pe-success-title" class="pc-dialog-title">Project updated</h2>
+      <p class="pc-dialog-body">Your changes have been saved.</p>
+      <button type="button" class="pc-btn pc-btn-primary pc-btn-block" (click)="dismissSuccessToDetail()">
+        <span class="pc-btn-text">View project</span>
+      </button>
+    </div>
+  </div>
+}
