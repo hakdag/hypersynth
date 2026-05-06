@@ -7,8 +7,8 @@ use tracing::{info, warn};
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::types::{
-    ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, FeatureResponse, ProjectDetailResponse,
-    ProjectResponse, UpdateProjectRequest,
+    ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
+    ProjectDetailResponse, ProjectResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
 };
 use uuid::Uuid;
 
@@ -497,6 +497,215 @@ pub async fn get_project_feature(
         %project_id,
         feature_id = %row.id,
         "api: GET /api/v1/projects/:id/features/:feature_id -> 200 OK"
+    );
+
+    Ok(Json(row))
+}
+
+pub async fn create_task(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<CreateTaskRequest>,
+) -> Result<(StatusCode, Json<TaskResponse>), (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    let title_len = payload.title.len();
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        title_len,
+        "api: POST /api/v1/projects/:id/features/:feature_id/tasks (body summarized)"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let title = payload.title.trim();
+    if title.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 400 empty title"
+        );
+        return Err(bad_request("Task title is required."));
+    }
+
+    let description = payload
+        .description
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let row = sqlx::query_as::<_, TaskResponse>(
+        r#"
+        INSERT INTO tasks (feature_id, title, description, status, created_by)
+        SELECT f.id, $4, $5, 'Pending', 'User'
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        RETURNING id, feature_id, title, description, status, created_by, created_at
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .bind(title)
+    .bind(description.as_ref())
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "create_task: insert failed"
+        );
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    info!(
+        task_id = %row.id,
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        task_status = %row.status,
+        task_created_by = %row.created_by,
+        "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 201 CREATED"
+    );
+
+    Ok((StatusCode::CREATED, Json(row)))
+}
+
+pub async fn update_project_feature(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<UpdateFeatureRequest>,
+) -> Result<Json<FeatureResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        "api: PATCH /api/v1/projects/:id/features/:feature_id"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: PATCH /api/v1/projects/:id/features/:feature_id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let title = payload.title.trim();
+    if title.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: PATCH /api/v1/projects/:id/features/:feature_id -> 400 empty title"
+        );
+        return Err(bad_request("Feature title is required."));
+    }
+
+    let requirements = payload
+        .requirements
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let status_trimmed = payload.status.trim();
+    if !matches!(
+        status_trimmed,
+        "Pending" | "In Progress" | "Done"
+    ) {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: PATCH /api/v1/projects/:id/features/:feature_id -> 400 bad status"
+        );
+        return Err(bad_request("Status must be Pending, In Progress, or Done."));
+    }
+
+    let row = sqlx::query_as::<_, FeatureResponse>(
+        r#"
+        UPDATE features f
+        SET title = $4,
+            requirements = $5,
+            status = $6
+        FROM projects p
+        WHERE f.id = $1
+          AND f.project_id = $2
+          AND p.id = f.project_id
+          AND p.user_id = $3
+        RETURNING f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .bind(title)
+    .bind(requirements.as_ref())
+    .bind(status_trimmed)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "update_project_feature: update failed"
+        );
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: PATCH /api/v1/projects/:id/features/:feature_id -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        feature_id = %row.id,
+        feature_status = %row.status,
+        "api: PATCH /api/v1/projects/:id/features/:feature_id -> 200 OK"
     );
 
     Ok(Json(row))

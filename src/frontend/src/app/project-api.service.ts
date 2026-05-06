@@ -40,6 +40,22 @@ export interface CreatedFeature {
   createdAt: string;
 }
 
+export interface UpdateFeaturePayload {
+  title: string;
+  requirements: string;
+  status: string;
+}
+
+export interface CreatedTask {
+  id: string;
+  featureId: string;
+  title: string;
+  description: string | null;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -101,6 +117,36 @@ export class ProjectApiService {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}`;
     return this.http.get<CreatedFeature>(url);
+  }
+
+  updateFeature(
+    projectId: string,
+    featureId: string,
+    payload: UpdateFeaturePayload,
+  ): Observable<CreatedFeature> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}`;
+    const body: Record<string, unknown> = {
+      title: payload.title.trim(),
+      status: payload.status,
+    };
+    body['requirements'] =
+      payload.requirements.trim().length > 0 ? payload.requirements.trim() : null;
+    return this.http.patch<CreatedFeature>(url, body);
+  }
+
+  createTask(
+    projectId: string,
+    featureId: string,
+    payload: { title: string; description?: string },
+  ): Observable<CreatedTask> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/tasks`;
+    const body: Record<string, unknown> = { title: payload.title.trim() };
+    if (payload.description !== undefined && payload.description.trim().length > 0) {
+      body['description'] = payload.description.trim();
+    }
+    return this.http.post<CreatedTask>(url, body);
   }
 
   static listErrorMessage(err: unknown): string {
@@ -177,6 +223,34 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not create feature (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static updateFeatureErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not save feature (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static createTaskErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not create task (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

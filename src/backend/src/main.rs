@@ -15,8 +15,8 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use project_route::{
-    create_feature, create_project, get_project, get_project_feature, list_project_features,
-    list_projects, update_project,
+    create_feature, create_project, create_task, get_project, get_project_feature,
+    list_project_features, list_projects, update_project, update_project_feature,
 };
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
@@ -107,7 +107,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}",
-            get(get_project_feature),
+            get(get_project_feature).patch(update_project_feature),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/tasks",
+            post(create_task),
         )
         .with_state(state)
         .layer(TraceLayer::new_for_http())

@@ -1,6 +1,6 @@
 <div class="fc-page">
   @if (loadState() === 'loading') {
-    <div class="fc-banner fc-banner--loading">Loading feature…</div>
+    <div class="fc-banner fc-banner--loading">Loading…</div>
   }
 
   @if (loadState() === 'error' && pageError(); as msg) {
@@ -8,99 +8,66 @@
     <a routerLink="/app/projects" class="fc-crumb-link-fallback">← Back to projects</a>
   }
 
-  @if (loadState() === 'ok' && project(); as proj) {
-    @if (featureMeta(); as meta) {
+  @if (loadState() === 'ok' && project(); as p) {
+    @if (feature(); as feat) {
       <nav class="fc-breadcrumbs" aria-label="Breadcrumb">
         <a routerLink="/app/projects" class="fc-crumb-link">
           <span class="material-symbols-outlined fc-crumb-icon" aria-hidden="true">folder</span>
           Projects
         </a>
         <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
-        <a [routerLink]="['/app/projects', proj.id]" class="fc-crumb-link">{{ proj.name }}</a>
+        <a [routerLink]="['/app/projects', p.id]" class="fc-crumb-link">{{ p.name }}</a>
         <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
-        <a [routerLink]="['/app/projects', proj.id, 'features', meta.id]" class="fc-crumb-link">{{
-          meta.title
+        <a [routerLink]="['/app/projects', p.id, 'features', feat.id]" class="fc-crumb-link">{{
+          feat.title
         }}</a>
         <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
-        <span class="fc-crumb-current">Edit</span>
+        <span class="fc-crumb-current">New Task</span>
       </nav>
 
       <header class="fc-header">
-        <h1 class="fc-title">Edit Feature</h1>
+        <h1 class="fc-title">Create Task</h1>
         <p class="fc-subtitle">
-          Update this feature for <span class="fc-subtitle-strong">{{ proj.name }}</span>. Feature ID:
-          {{ shortFeatureId(meta.id) }}.
+          Add a task under <span class="fc-subtitle-strong">{{ feat.title }}</span> in
+          <span class="fc-subtitle-strong">{{ p.name }}</span>. New tasks start as Pending.
         </p>
       </header>
-
-      <div class="fd-feature-toolbar">
-        <a
-          [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
-          class="fc-btn fc-btn-primary fd-create-task-btn"
-        >
-          <span class="material-symbols-outlined fd-create-task-btn__icon" aria-hidden="true">add_task</span>
-          Create task
-        </a>
-      </div>
 
       @if (serverError(); as err) {
         <div class="fc-banner fc-banner--error" role="alert">{{ err }}</div>
       }
 
-      @if (saveNotice()) {
-        <div class="fd-save-notice" role="status">Changes saved.</div>
-      }
-
-      <div class="fc-card">
+      <div class="fc-card tc-card">
         <form class="fc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-          <div class="fc-card-head">
-            <div class="fc-status-row fc-status-row--with-action">
-              <span class="fc-status-label">Status:</span>
-              <span
-                class="fc-status-badge"
-                [class.fd-status-badge--progress]="effectiveStatus() === 'In Progress'"
-              >
-                <span
-                  class="fc-status-dot"
-                  aria-hidden="true"
-                  [class.fd-status-dot--progress]="effectiveStatus() === 'In Progress'"
-                ></span>
-                {{ effectiveStatus() }}
-              </span>
-            </div>
-            <button
-              type="button"
-              class="fc-btn fc-btn-start-progress"
-              [disabled]="effectiveStatus() !== 'Pending'"
-              (click)="startProgress()"
-            >
-              Start Progress
-            </button>
+          <div class="fc-status-row tc-status-row">
+            <span class="fc-status-label">Status:</span>
+            <span class="fc-status-badge">
+              <span class="fc-status-dot" aria-hidden="true"></span>
+              Pending
+            </span>
           </div>
 
           <div class="fc-field">
-            <label class="fc-label" for="feat-title">
-              Feature Title <span class="fc-req" aria-hidden="true">*</span>
+            <label class="fc-label" for="task-title">
+              Task Title <span class="fc-req" aria-hidden="true">*</span>
             </label>
             <input
-              id="feat-title"
+              id="task-title"
               class="fc-input"
               type="text"
               autocomplete="off"
-              placeholder="Feature title"
+              placeholder="e.g., Wire up API client for search"
               formControlName="title"
               [attr.aria-invalid]="form.controls.title.invalid && form.controls.title.touched"
-              [attr.aria-describedby]="titleError() ? 'feat-title-hint' : null"
+              [attr.aria-describedby]="titleError() ? 'task-title-hint' : null"
             />
             @if (titleError(); as te) {
-              <p id="feat-title-hint" class="fc-hint fc-hint-error">{{ te }}</p>
+              <p id="task-title-hint" class="fc-hint fc-hint-error">{{ te }}</p>
             }
           </div>
 
           <div class="fc-field">
-            <label class="fc-label" for="feat-reqs">
-              Feature Requirements <span class="fc-opt">(Optional)</span>
-            </label>
+            <label class="fc-label" for="task-desc">Description <span class="fc-opt">(Optional)</span></label>
             <div class="fc-rich-shell">
               <div class="fc-rich-toolbar" aria-hidden="true">
                 <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
@@ -117,22 +84,24 @@
                   format_list_numbered
                 </button>
                 <span class="fc-toolbar-divider" aria-hidden="true"></span>
-                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">link</button>
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  link
+                </button>
               </div>
               <textarea
-                id="feat-reqs"
+                id="task-desc"
                 class="fc-textarea"
-                formControlName="requirements"
+                formControlName="description"
                 rows="8"
-                placeholder="Describe the technical requirements, user stories, and acceptance criteria..."
+                placeholder="Steps, acceptance notes, or links…"
               ></textarea>
             </div>
           </div>
 
-          <div class="fc-actions">
+          <div class="fc-actions tc-actions">
             <button type="button" class="fc-btn fc-btn-secondary" (click)="cancel()">Cancel</button>
             <button type="submit" class="fc-btn fc-btn-primary" [disabled]="submitting()">
-              {{ submitting() ? 'Saving…' : 'Save Feature' }}
+              {{ submitting() ? 'Creating…' : 'Create Task' }}
             </button>
           </div>
         </form>
@@ -140,3 +109,16 @@
     }
   }
 </div>
+
+@if (showSuccess()) {
+  <div class="fc-overlay" role="dialog" aria-modal="true" aria-labelledby="tc-success-title">
+    <div class="fc-dialog">
+      <div class="fc-success-icon material-symbols-outlined" aria-hidden="true">check_circle</div>
+      <h2 id="tc-success-title" class="fc-dialog-title">Task Created</h2>
+      <p class="fc-dialog-body">Your task was added with Pending status.</p>
+      <button type="button" class="fc-btn fc-btn-primary fc-btn-block" (click)="dismissSuccess()">
+        Back to feature
+      </button>
+    </div>
+  </div>
+}

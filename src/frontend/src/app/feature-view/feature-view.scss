@@ -1,0 +1,11 @@
+/**
+ * Structural layout matches project-detail via shared `pd-*` styles.
+ */
+
+:host {
+  display: block;
+}
+
+.pd-hero-aside .pd-features__new-feature {
+  gap: 0.375rem;
+}

@@ -1,0 +1,145 @@
+<div class="pd-page">
+  @if (loadState() === 'loading') {
+    <div class="pd-banner pd-banner--loading">Loading feature…</div>
+  }
+
+  @if (loadState() === 'error' && pageError(); as msg) {
+    <div class="pd-banner pd-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="pd-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && project(); as proj) {
+    @if (featureMeta(); as meta) {
+      <div class="pd-hero-grid">
+        <div class="pd-hero-main">
+          <nav class="pd-crumb" aria-label="Breadcrumb">
+            <a routerLink="/app/projects" class="pd-crumb__link">Projects</a>
+            <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+            <a [routerLink]="['/app/projects', proj.id]" class="pd-crumb__link">{{ proj.name }}</a>
+            <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+            <span class="pd-crumb__current">{{ meta.title }}</span>
+          </nav>
+
+          <div class="pd-hero-row">
+            <div class="pd-hero-copy">
+              <h1 class="pd-title">{{ meta.title }}</h1>
+              <p class="pd-tagline">Feature for {{ proj.name }} · Short ID {{ shortFeatureId(meta.id) }}</p>
+            </div>
+            <div class="pd-hero-aside">
+              <div class="pd-hero-aside__row">
+                <a
+                  [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
+                  class="pd-features__new-feature"
+                >
+                  <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
+                    >add_task</span
+                  >
+                  Create task
+                </a>
+                <a
+                  [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'edit']"
+                  class="pd-edit-link"
+                >
+                  <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
+                  Edit
+                </a>
+                <span [class]="statusBadgeClass(meta.status)">{{ statusForDisplay(meta.status) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pd-bento" aria-label="Feature summary">
+          <div class="pd-bento__card">
+            <span class="pd-bento__label">completion</span>
+            <div class="pd-bento__metric">
+              <span class="pd-bento__value">{{ completionPercent(meta.status) }}%</span>
+              <div class="pd-bento__bar" role="presentation">
+                <div class="pd-bento__fill" [style.width.%]="completionPercent(meta.status)"></div>
+              </div>
+            </div>
+          </div>
+          <div class="pd-bento__card">
+            <span class="pd-bento__label">priority</span>
+            <div class="pd-priority">
+              <span [class]="priorityIconClass(meta.status)" aria-hidden="true">{{
+                priorityIcon(meta.status)
+              }}</span>
+              <span class="pd-priority__text">{{ priorityLabel(meta.status) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pd-split">
+        <div class="pd-split__main">
+          <section class="pd-req" aria-labelledby="fv-req-heading">
+            <div class="pd-req__toolbar">
+              <h2 id="fv-req-heading" class="pd-req__title">
+                <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
+                Feature Requirements
+              </h2>
+            </div>
+            <div class="pd-req__body">
+              @if (hasExpandableFeatureRequirements(meta.requirements)) {
+                <div
+                  class="pd-req-expand"
+                  [class.pd-req-expand--collapsed]="!requirementsExpanded()"
+                  [class.pd-req-expand--expanded]="requirementsExpanded()"
+                >
+                  <p class="pd-req__text">{{ featureRequirementsText(meta.requirements) }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="pd-view-more"
+                  (click)="toggleRequirementsExpanded()"
+                  [attr.aria-expanded]="requirementsExpanded()"
+                >
+                  @if (requirementsExpanded()) {
+                    View less
+                    <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_less</span>
+                  } @else {
+                    View more
+                    <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_more</span>
+                  }
+                </button>
+              } @else {
+                <p class="pd-req__empty">No requirements were provided for this feature.</p>
+              }
+            </div>
+          </section>
+        </div>
+
+        <aside class="pd-split__aside" aria-label="Feature context">
+          <div class="pd-ai">
+            <div class="pd-ai__content">
+              <h3 class="pd-ai__title">
+                <span class="material-symbols-outlined pd-ai__title-icon" aria-hidden="true">layers</span>
+                Parent project
+              </h3>
+              <p class="pd-ai__lede">
+                This feature is scoped to one project. Open the project for other features, tasks, and settings.
+              </p>
+
+              <div class="pd-ai__fields">
+                <div class="pd-ai__field">
+                  <span class="pd-ai__label">Project name</span>
+                  <div class="pd-ai__value">{{ proj.name }}</div>
+                </div>
+                <div class="pd-ai__field">
+                  <span class="pd-ai__label">Feature ID</span>
+                  <div class="pd-ai__value">{{ meta.id }}</div>
+                </div>
+              </div>
+
+              <p class="pd-ai__foot">
+                <a [routerLink]="['/app/projects', proj.id]" class="pd-ai__foot-link">View project details</a>.
+              </p>
+            </div>
+            <span class="material-symbols-outlined pd-ai__watermark" aria-hidden="true">folder_special</span>
+          </div>
+        </aside>
+      </div>
+    }
+  }
+</div>
