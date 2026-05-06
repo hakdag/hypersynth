@@ -46,6 +46,9 @@ export interface UpdateFeaturePayload {
   status: string;
 }
 
+export const TASK_PRIORITY_OPTIONS = ['Standard', 'Elevated', 'Critical'] as const;
+export type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
+
 export interface CreatedTask {
   id: string;
   featureId: string;
@@ -54,6 +57,18 @@ export interface CreatedTask {
   status: string;
   createdBy: string;
   createdAt: string;
+  priority: string;
+  assigneeUserId: string | null;
+  assigneeFullname: string | null;
+  assigneeAvatarUrl: string | null;
+  creatorFullname: string | null;
+  creatorAvatarUrl: string | null;
+}
+
+export interface TaskDetail extends CreatedTask {
+  featureTitle: string;
+  projectId: string;
+  projectName: string;
 }
 
 @Injectable({
@@ -138,15 +153,40 @@ export class ProjectApiService {
   createTask(
     projectId: string,
     featureId: string,
-    payload: { title: string; description?: string },
+    payload: {
+      title: string;
+      description?: string;
+      priority: string;
+      unassigned: boolean;
+      assigneeUserId?: string;
+    },
   ): Observable<CreatedTask> {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/tasks`;
-    const body: Record<string, unknown> = { title: payload.title.trim() };
+    const body: Record<string, unknown> = {
+      title: payload.title.trim(),
+      priority: payload.priority,
+      unassigned: payload.unassigned,
+    };
     if (payload.description !== undefined && payload.description.trim().length > 0) {
       body['description'] = payload.description.trim();
     }
+    if (!payload.unassigned && payload.assigneeUserId !== undefined) {
+      body['assigneeUserId'] = payload.assigneeUserId;
+    }
     return this.http.post<CreatedTask>(url, body);
+  }
+
+  listTasks(projectId: string, featureId: string): Observable<CreatedTask[]> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/tasks`;
+    return this.http.get<CreatedTask[]>(url);
+  }
+
+  getTask(projectId: string, featureId: string, taskId: string): Observable<TaskDetail> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/tasks/${b(taskId)}`;
+    return this.http.get<TaskDetail>(url);
   }
 
   static listErrorMessage(err: unknown): string {
@@ -251,6 +291,34 @@ export class ProjectApiService {
         return 'Feature not found or you do not have access.';
       }
       return `Could not create task (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static listTasksErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not load tasks (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static taskDetailErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Task not found or you do not have access.';
+      }
+      return `Could not load task (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

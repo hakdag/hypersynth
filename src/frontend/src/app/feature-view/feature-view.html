@@ -28,15 +28,6 @@
             <div class="pd-hero-aside">
               <div class="pd-hero-aside__row">
                 <a
-                  [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
-                  class="pd-features__new-feature"
-                >
-                  <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
-                    >add_task</span
-                  >
-                  Create task
-                </a>
-                <a
                   [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'edit']"
                   class="pd-edit-link"
                 >
@@ -105,6 +96,86 @@
                 </button>
               } @else {
                 <p class="pd-req__empty">No requirements were provided for this feature.</p>
+              }
+            </div>
+          </section>
+
+          <section class="fv-tasks" aria-labelledby="fv-tasks-heading">
+            <div class="fv-tasks__card">
+              <div class="fv-tasks__toolbar">
+                <h2 id="fv-tasks-heading" class="fv-tasks__title">
+                  <span class="material-symbols-outlined fv-tasks__title-icon" aria-hidden="true">checklist</span>
+                  Tasks
+                </h2>
+                <a
+                  [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
+                  class="pd-features__new-feature fv-tasks__create"
+                >
+                  <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
+                    >add_task</span
+                  >
+                  Create task
+                </a>
+              </div>
+
+              @if (taskList().length === 0) {
+                <p class="fv-tasks__empty">No tasks yet for this feature. Create one to get started.</p>
+              } @else {
+                <div class="fv-tasks__table-wrap">
+                  <table class="fv-tasks__table">
+                    <thead>
+                      <tr>
+                        <th scope="col" class="fv-tasks__th fv-tasks__th--task">Task</th>
+                        <th scope="col" class="fv-tasks__th">Status</th>
+                        <th scope="col" class="fv-tasks__th">Origin</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (task of taskList(); track task.id) {
+                        <tr class="fv-tasks__row">
+                          <td class="fv-tasks__td">
+                            <a
+                              [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', task.id]"
+                              class="fv-tasks__link"
+                            >
+                              <span class="material-symbols-outlined fv-tasks__row-icon" aria-hidden="true"
+                                >arrow_forward</span
+                              >
+                              <span class="fv-tasks__link-text">
+                                <span [class]="taskTitleRowClass(task.status)">{{ task.title }}</span>
+                              </span>
+                            </a>
+                          </td>
+                          <td class="fv-tasks__td">
+                            <span [class]="taskStatusBadgeClass(task.status)">{{
+                              taskStatusLabel(task.status)
+                            }}</span>
+                          </td>
+                          <td class="fv-tasks__td">
+                            @switch (taskCreatedByPresentation(task.createdBy)) {
+                              @case ('ai') {
+                                <span class="fv-task-origin fv-task-origin--ai">
+                                  <span class="material-symbols-outlined fv-task-origin__icon" aria-hidden="true"
+                                    >smart_toy</span
+                                  >
+                                  AI generated
+                                </span>
+                              }
+                              @case ('manual') {
+                                <span class="fv-task-origin fv-task-origin--manual">Manual</span>
+                              }
+                              @default {
+                                <span class="fv-task-origin fv-task-origin--manual">{{
+                                  taskCreatedByLabel(task.createdBy)
+                                }}</span>
+                              }
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               }
             </div>
           </section>

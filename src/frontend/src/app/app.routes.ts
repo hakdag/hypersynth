@@ -13,6 +13,7 @@ import { ProjectList } from './project-list/project-list';
 import { Register } from './register/register';
 import { Shell } from './shell/shell';
 import { TaskCreate } from './task-create/task-create';
+import { TaskView } from './task-view/task-view';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'register' },
@@ -28,6 +29,7 @@ export const routes: Routes = [
       { path: 'projects/new', component: ProjectCreate },
       { path: 'projects/:projectId/features/new', component: FeatureCreate },
       { path: 'projects/:projectId/features/:featureId/tasks/new', component: TaskCreate },
+      { path: 'projects/:projectId/features/:featureId/tasks/:taskId', component: TaskView },
       { path: 'projects/:projectId/features/:featureId/edit', component: FeatureDetail },
       { path: 'projects/:projectId/features/:featureId', component: FeatureView },
       { path: 'projects/:projectId/edit', component: ProjectEdit },

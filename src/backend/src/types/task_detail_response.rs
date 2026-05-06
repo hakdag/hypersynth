@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
-pub struct TaskResponse {
+pub struct TaskDetailResponse {
     pub id: Uuid,
     pub feature_id: Uuid,
     pub title: String,
@@ -19,4 +19,7 @@ pub struct TaskResponse {
     pub assignee_avatar_url: Option<String>,
     pub creator_fullname: Option<String>,
     pub creator_avatar_url: Option<String>,
+    pub feature_title: String,
+    pub project_id: Uuid,
+    pub project_name: String,
 }

@@ -11,6 +11,7 @@ import {
 
 import {
   CreatedFeature,
+  CreatedTask,
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
 } from '../project-api.service';
@@ -22,9 +23,16 @@ function normalizeStatus(raw: string): string {
   return VALID_FEATURE_STATUSES.includes(raw as ValidFeatureStatus) ? raw : 'Pending';
 }
 
+const VALID_TASK_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
+type ValidTaskStatus = (typeof VALID_TASK_STATUSES)[number];
+
+function normalizeTaskStatus(raw: string): string {
+  return VALID_TASK_STATUSES.includes(raw as ValidTaskStatus) ? raw : 'Pending';
+}
+
 type PageResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; project: ProjectDetailModel; feature: CreatedFeature }
+  | { kind: 'ok'; project: ProjectDetailModel; feature: CreatedFeature; tasks: CreatedTask[] }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -41,6 +49,7 @@ export class FeatureView implements OnInit, OnDestroy {
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly project = signal<ProjectDetailModel | null>(null);
   protected readonly featureMeta = signal<CreatedFeature | null>(null);
+  protected readonly taskList = signal<CreatedTask[]>([]);
   protected readonly pageError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
 
@@ -59,12 +68,14 @@ export class FeatureView implements OnInit, OnDestroy {
           return forkJoin({
             project: this.projectApi.getProject(projectId),
             feature: this.projectApi.getFeature(projectId, featureId),
+            tasks: this.projectApi.listTasks(projectId, featureId),
           }).pipe(
             map(
               (data): PageResult => ({
                 kind: 'ok',
                 project: data.project,
                 feature: data.feature,
+                tasks: data.tasks,
               }),
             ),
             catchError((err: unknown) =>
@@ -81,6 +92,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.pageError.set('Missing project or feature identifier.');
           this.project.set(null);
           this.featureMeta.set(null);
+          this.taskList.set([]);
           this.requirementsExpanded.set(false);
           this.loadState.set('error');
           return;
@@ -89,12 +101,14 @@ export class FeatureView implements OnInit, OnDestroy {
           this.pageError.set(res.message);
           this.project.set(null);
           this.featureMeta.set(null);
+          this.taskList.set([]);
           this.requirementsExpanded.set(false);
           this.loadState.set('error');
           return;
         }
         this.project.set(res.project);
         this.featureMeta.set(res.feature);
+        this.taskList.set(res.tasks);
         this.pageError.set(null);
         this.requirementsExpanded.set(false);
         this.loadState.set('ok');
@@ -180,5 +194,44 @@ export class FeatureView implements OnInit, OnDestroy {
 
   protected hasExpandableFeatureRequirements(requirements: string | null | undefined): boolean {
     return this.featureRequirementsText(requirements).length > 0;
+  }
+
+  protected taskStatusBadgeClass(status: string): string {
+    switch (normalizeTaskStatus(status)) {
+      case 'In Progress':
+        return 'fv-task-badge fv-task-badge--progress';
+      case 'Done':
+        return 'fv-task-badge fv-task-badge--done';
+      default:
+        return 'fv-task-badge fv-task-badge--pending';
+    }
+  }
+
+  protected taskStatusLabel(status: string): string {
+    return normalizeTaskStatus(status);
+  }
+
+  protected taskCreatedByLabel(createdBy: string): string {
+    if (createdBy === 'User') {
+      return 'Manual';
+    }
+    if (createdBy === 'AI') {
+      return 'AI generated';
+    }
+    return createdBy;
+  }
+
+  protected taskCreatedByPresentation(createdBy: string): 'manual' | 'ai' | 'other' {
+    if (createdBy === 'User') {
+      return 'manual';
+    }
+    if (createdBy === 'AI') {
+      return 'ai';
+    }
+    return 'other';
+  }
+
+  protected taskTitleRowClass(status: string): string {
+    return normalizeTaskStatus(status) === 'Done' ? 'fv-task-title fv-task-title--done' : 'fv-task-title';
   }
 }

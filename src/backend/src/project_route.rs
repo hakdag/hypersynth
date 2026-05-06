@@ -8,7 +8,8 @@ use crate::app_state::AppState;
 use crate::auth_route;
 use crate::types::{
     ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
-    ProjectDetailResponse, ProjectResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
+    ProjectDetailResponse, ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest,
+    UpdateProjectRequest,
 };
 use uuid::Uuid;
 
@@ -502,6 +503,176 @@ pub async fn get_project_feature(
     Ok(Json(row))
 }
 
+pub async fn list_feature_tasks(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<TaskResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        "api: GET /api/v1/projects/:id/features/:feature_id/tasks"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/features/:feature_id/tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let rows = sqlx::query_as::<_, TaskResponse>(
+        r#"
+        SELECT
+            t.id,
+            t.feature_id,
+            t.title,
+            t.description,
+            t.status,
+            t.created_by,
+            t.created_at,
+            t.priority,
+            t.assignee_user_id,
+            au.fullname AS assignee_fullname,
+            au.avatar_url AS assignee_avatar_url,
+            cu.fullname AS creator_fullname,
+            cu.avatar_url AS creator_avatar_url
+        FROM tasks t
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        LEFT JOIN users au ON au.id = t.assignee_user_id
+        LEFT JOIN users cu ON cu.id = t.creator_user_id
+        WHERE t.feature_id = $1 AND f.project_id = $2 AND p.user_id = $3
+        ORDER BY t.created_at DESC
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "list_feature_tasks: query failed"
+        );
+        internal_error()
+    })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        row_count = rows.len(),
+        "api: GET /api/v1/projects/:id/features/:feature_id/tasks -> 200 OK"
+    );
+
+    Ok(Json(rows))
+}
+
+pub async fn get_project_task(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id, task_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<TaskDetailResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        %task_id,
+        "api: GET /api/v1/projects/:id/features/:feature_id/tasks/:task_id"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/features/:feature_id/tasks/:task_id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, TaskDetailResponse>(
+        r#"
+        SELECT
+            t.id,
+            t.feature_id,
+            t.title,
+            t.description,
+            t.status,
+            t.created_by,
+            t.created_at,
+            t.priority,
+            t.assignee_user_id,
+            au.fullname AS assignee_fullname,
+            au.avatar_url AS assignee_avatar_url,
+            cu.fullname AS creator_fullname,
+            cu.avatar_url AS creator_avatar_url,
+            f.title AS feature_title,
+            p.id AS project_id,
+            p.name AS project_name
+        FROM tasks t
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        LEFT JOIN users au ON au.id = t.assignee_user_id
+        LEFT JOIN users cu ON cu.id = t.creator_user_id
+        WHERE t.id = $1 AND t.feature_id = $2 AND f.project_id = $3 AND p.user_id = $4
+        "#,
+    )
+    .bind(task_id)
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "get_project_task: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "api: GET /api/v1/projects/:id/features/:feature_id/tasks/:task_id -> 404"
+        );
+        return Err(not_found("Task not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        task_id = %row.id,
+        "api: GET /api/v1/projects/:id/features/:feature_id/tasks/:task_id -> 200 OK"
+    );
+
+    Ok(Json(row))
+}
+
 pub async fn create_task(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -548,14 +719,92 @@ pub async fn create_task(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
+    let priority_raw = payload
+        .priority
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Standard");
+    let priority_val = match priority_raw {
+        "Standard" | "Elevated" | "Critical" => priority_raw,
+        _ => {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 400 invalid priority"
+            );
+            return Err(bad_request(
+                "Priority must be Standard, Elevated, or Critical.",
+            ));
+        }
+    };
+
+    let assignee_bind: Option<Uuid> = if payload.unassigned {
+        None
+    } else if let Some(id) = payload.assignee_user_id {
+        if id != user.id {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 400 foreign assignee"
+            );
+            return Err(bad_request(
+                "You can only assign tasks to yourself in this workspace.",
+            ));
+        }
+        Some(id)
+    } else {
+        Some(user.id)
+    };
+
     let row = sqlx::query_as::<_, TaskResponse>(
         r#"
-        INSERT INTO tasks (feature_id, title, description, status, created_by)
-        SELECT f.id, $4, $5, 'Pending', 'User'
-        FROM features f
-        INNER JOIN projects p ON p.id = f.project_id
-        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
-        RETURNING id, feature_id, title, description, status, created_by, created_at
+        WITH ins AS (
+            INSERT INTO tasks (
+                feature_id,
+                title,
+                description,
+                status,
+                created_by,
+                priority,
+                assignee_user_id,
+                creator_user_id
+            )
+            SELECT f.id, $4, $5, 'Pending', 'User', $6, $7, $8
+            FROM features f
+            INNER JOIN projects p ON p.id = f.project_id
+            WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+            RETURNING
+                id,
+                feature_id,
+                title,
+                description,
+                status,
+                created_by,
+                created_at,
+                priority,
+                assignee_user_id,
+                creator_user_id
+        )
+        SELECT
+            ins.id,
+            ins.feature_id,
+            ins.title,
+            ins.description,
+            ins.status,
+            ins.created_by,
+            ins.created_at,
+            ins.priority,
+            ins.assignee_user_id,
+            au.fullname AS assignee_fullname,
+            au.avatar_url AS assignee_avatar_url,
+            cu.fullname AS creator_fullname,
+            cu.avatar_url AS creator_avatar_url
+        FROM ins
+        LEFT JOIN users au ON au.id = ins.assignee_user_id
+        LEFT JOIN users cu ON cu.id = ins.creator_user_id
         "#,
     )
     .bind(feature_id)
@@ -563,6 +812,9 @@ pub async fn create_task(
     .bind(user.id)
     .bind(title)
     .bind(description.as_ref())
+    .bind(priority_val)
+    .bind(assignee_bind)
+    .bind(user.id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {

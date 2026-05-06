@@ -28,6 +28,7 @@ struct UserAuthRow {
     fullname: String,
     email: String,
     password_hash: String,
+    avatar_url: Option<String>,
 }
 
 pub async fn login(
@@ -49,7 +50,7 @@ pub async fn login(
     }
 
     let row = sqlx::query_as::<_, UserAuthRow>(
-        r#"SELECT id, fullname, email, password_hash FROM users WHERE email = lower(trim($1))"#,
+        r#"SELECT id, fullname, email, password_hash, avatar_url FROM users WHERE email = lower(trim($1))"#,
     )
     .bind(email)
     .fetch_optional(&state.pool)
@@ -93,6 +94,7 @@ pub async fn login(
         id: user.id,
         fullname: user.fullname,
         email: user.email,
+        avatar_url: user.avatar_url,
     };
     Ok((jar, Json(body)))
 }
@@ -154,7 +156,7 @@ async fn resolve_current_user(pool: &PgPool, jar: &CookieJar) -> Option<CurrentU
     let raw = <[u8; 32]>::try_from(bytes.as_slice()).ok()?;
     let token_hash = hash_session_token(&raw);
     sqlx::query_as::<_, CurrentUserBody>(
-        r#"SELECT u.id, u.fullname, u.email FROM sessions s
+        r#"SELECT u.id, u.fullname, u.email, u.avatar_url FROM sessions s
            INNER JOIN users u ON u.id = s.user_id
            WHERE s.token_hash = $1 AND s.expires_at > now()"#,
     )

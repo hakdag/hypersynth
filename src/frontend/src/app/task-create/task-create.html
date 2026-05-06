@@ -67,6 +67,24 @@
           </div>
 
           <div class="fc-field">
+            <label class="fc-label" for="task-priority">Priority</label>
+            <select id="task-priority" class="fc-input" formControlName="priority">
+              @for (opt of priorityOptions; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="fc-field">
+            <label class="fc-label" for="task-assignee">Assignee</label>
+            <select id="task-assignee" class="fc-input" formControlName="assigneeMode">
+              <option value="self">{{ assigneeMeLabel() }}</option>
+              <option value="none">Unassigned</option>
+            </select>
+            <p class="fc-hint">Only your account can be assigned in this workspace.</p>
+          </div>
+
+          <div class="fc-field">
             <label class="fc-label" for="task-desc">Description <span class="fc-opt">(Optional)</span></label>
             <div class="fc-rich-shell">
               <div class="fc-rich-toolbar" aria-hidden="true">

@@ -8,6 +8,7 @@ export interface CurrentUser {
   id: string;
   fullname: string;
   email: string;
+  avatarUrl: string | null;
 }
 
 @Injectable({
