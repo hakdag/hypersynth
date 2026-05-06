@@ -6,7 +6,7 @@ use tracing::{info, warn};
 
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::types::{ApiErrorBody, CreateProjectRequest, ProjectDetailResponse, ProjectResponse};
+use crate::types::{ApiErrorBody, CreateProjectRequest, ProjectDetailResponse, ProjectResponse, UpdateProjectRequest};
 use uuid::Uuid;
 
 pub async fn list_projects(
@@ -195,6 +195,105 @@ pub async fn create_project(
     );
 
     Ok((StatusCode::CREATED, Json(row)))
+}
+
+pub async fn update_project(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+    Json(payload): Json<UpdateProjectRequest>,
+) -> Result<Json<ProjectResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    let name_len = payload.name.len();
+    info!(
+        has_cookie,
+        %project_id,
+        name_len,
+        clear_ai_api_key = payload.clear_ai_api_key,
+        has_new_ai_key = payload.ai_api_key.as_ref().is_some_and(|s| !s.trim().is_empty()),
+        "api: PATCH /api/v1/projects/:id (body summarized; API key not logged)"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: PATCH /api/v1/projects/:id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let name = payload.name.trim();
+    if name.is_empty() {
+        warn!(user_id = %user.id, %project_id, "api: PATCH /api/v1/projects/:id -> 400 empty name");
+        return Err(bad_request("Project name is required."));
+    }
+
+    let status = payload.status.trim();
+    if status != "Pending" && status != "In Progress" && status != "Done" {
+        warn!(user_id = %user.id, %project_id, "api: PATCH /api/v1/projects/:id -> 400 invalid status");
+        return Err(bad_request(
+            "Status must be one of: Pending, In Progress, Done.",
+        ));
+    }
+
+    let requirements_trimmed = payload.requirements.trim();
+    let requirements_for_db = if requirements_trimmed.is_empty() {
+        None
+    } else {
+        Some(requirements_trimmed.to_string())
+    };
+
+    let row = sqlx::query_as::<_, ProjectResponse>(
+        r#"
+        UPDATE projects
+        SET
+            name = $1,
+            requirements = $2,
+            status = $3,
+            ai_api_key = CASE
+                WHEN $4::boolean THEN NULL
+                WHEN $5 IS NOT NULL AND btrim($5) <> '' THEN btrim($5)
+                ELSE ai_api_key
+            END
+        WHERE id = $6 AND user_id = $7
+        RETURNING id, user_id, name, requirements, status, created_at
+        "#,
+    )
+    .bind(name)
+    .bind(requirements_for_db.as_ref())
+    .bind(status)
+    .bind(payload.clear_ai_api_key)
+    .bind(payload.ai_api_key.as_ref())
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "update_project: update failed");
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: PATCH /api/v1/projects/:id -> 404 not owner or missing"
+        );
+        return Err(not_found("Project not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        project_id = %row.id,
+        project_status = %row.status,
+        "api: PATCH /api/v1/projects/:id -> 200 OK"
+    );
+
+    Ok(Json(row))
 }
 
 fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {

@@ -121,7 +121,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
       if (t.length <= 200) return t;
       return `${t.slice(0, 197)}…`;
     }
-    return 'Add requirements when creating a project, or extend this view once editing is available.';
+    return 'Add requirements when creating or editing the project.';
   }
 
   protected relativeCreatedLabel(iso: string): string {

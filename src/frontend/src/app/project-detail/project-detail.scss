@@ -137,6 +137,43 @@
   gap: 0.5rem;
 }
 
+.pd-hero-aside__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.pd-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: Manrope, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  color: #1e3a8a;
+  text-decoration: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.pd-edit-link:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.pd-edit-link__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .pd-updated {
   font-size: 0.8125rem;
   color: #64748b;
@@ -321,6 +358,15 @@
   color: #64748b;
 }
 
+.pd-req__edit {
+  color: #1e3a8a;
+  text-decoration: none;
+}
+
+.pd-req__edit:hover {
+  text-decoration: underline;
+}
+
 .pd-req__body {
   padding: 1.25rem 1.25rem 1.5rem;
 }
@@ -441,6 +487,16 @@
   font-size: 0.75rem;
   line-height: 1.45;
   color: rgb(255 255 255 / 0.55);
+}
+
+.pd-ai__foot-link {
+  color: #86f2e4;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pd-ai__foot-link:hover {
+  text-decoration: underline;
 }
 
 .pd-ai__watermark {

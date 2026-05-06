@@ -22,10 +22,16 @@
             <h1 class="pd-title">{{ p.name }}</h1>
             <p class="pd-tagline">{{ tagline(p.requirements) }}</p>
           </div>
-          <div class="pd-hero-aside">
+        <div class="pd-hero-aside">
+          <div class="pd-hero-aside__row">
+            <a [routerLink]="['/app/projects', p.id, 'edit']" class="pd-edit-link">
+              <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
+              Edit
+            </a>
             <span [class]="statusBadgeClass(p.status)">{{ statusForDisplay(p.status) }}</span>
-            <span class="pd-updated">{{ relativeCreatedLabel(p.createdAt) }}</span>
           </div>
+          <span class="pd-updated">{{ relativeCreatedLabel(p.createdAt) }}</span>
+        </div>
         </div>
       </div>
 
@@ -57,7 +63,7 @@
               <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
               Project Requirements
             </h2>
-            <span class="pd-req__ro">Read only</span>
+            <span class="pd-req__ro"><a [routerLink]="['/app/projects', p.id, 'edit']" class="pd-req__edit">Edit</a></span>
           </div>
           <div class="pd-req__body">
             @if (p.requirements && p.requirements.trim().length > 0) {
@@ -96,7 +102,9 @@
               </div>
             </div>
 
-            <p class="pd-ai__foot">Rotate or update keys when secure project editing is available.</p>
+            <p class="pd-ai__foot">
+              <a [routerLink]="['/app/projects', p.id, 'edit']" class="pd-ai__foot-link">Manage API key in project settings</a>.
+            </p>
           </div>
           <span class="material-symbols-outlined pd-ai__watermark" aria-hidden="true">api</span>
         </div>

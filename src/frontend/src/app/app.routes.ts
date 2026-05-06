@@ -5,6 +5,7 @@ import { authGuard } from './auth.guard';
 import { Login } from './login/login';
 import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
+import { ProjectEdit } from './project-edit/project-edit';
 import { ProjectList } from './project-list/project-list';
 import { Register } from './register/register';
 import { Shell } from './shell/shell';
@@ -21,6 +22,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'projects' },
       { path: 'projects', component: ProjectList },
       { path: 'projects/new', component: ProjectCreate },
+      { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'account', component: AccountPlaceholder },
     ],
