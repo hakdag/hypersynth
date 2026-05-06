@@ -1,5 +1,4 @@
 /// Elevation tokens — reuse globally as `var(--shadow-card)` (set in `styles.scss`)
 /// or from a component: `@use '../../styles/elevation' as elev` then `elev.$shadow-card`.
 $shadow-card:
-  5px 5px 5px rgb(25 33 61 / 0.2),
-  5px 5px 5px rgb(25 33 61 / 0.2);
+  8px 8px 8px rgba(25, 33, 61, 0.2);

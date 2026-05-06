@@ -2,6 +2,8 @@ import { Routes } from '@angular/router';
 
 import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
+import { FeatureCreate } from './feature-create/feature-create';
+import { FeatureDetail } from './feature-detail/feature-detail';
 import { Login } from './login/login';
 import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
@@ -22,6 +24,8 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'projects' },
       { path: 'projects', component: ProjectList },
       { path: 'projects/new', component: ProjectCreate },
+      { path: 'projects/:projectId/features/new', component: FeatureCreate },
+      { path: 'projects/:projectId/features/:featureId', component: FeatureDetail },
       { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'account', component: AccountPlaceholder },

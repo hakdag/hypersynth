@@ -1,0 +1,76 @@
+<div class="fd-page">
+  @if (loadState() === 'loading') {
+    <div class="fd-banner fd-banner--loading">Loading feature…</div>
+  }
+
+  @if (loadState() === 'error' && pageError(); as msg) {
+    <div class="fd-banner fd-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="fd-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && project(); as proj) {
+    @if (feature(); as feat) {
+      <nav class="fd-crumb" aria-label="Breadcrumb">
+        <a routerLink="/app/projects" class="fd-crumb__link">Projects</a>
+        <span class="material-symbols-outlined fd-crumb__chev" aria-hidden="true">chevron_right</span>
+        <a [routerLink]="['/app/projects', proj.id]" class="fd-crumb__link">{{ proj.name }}</a>
+        <span class="material-symbols-outlined fd-crumb__chev" aria-hidden="true">chevron_right</span>
+        <span class="fd-crumb__current">{{ feat.title }}</span>
+      </nav>
+
+      <div class="fd-card">
+        <div class="fd-card__top">
+          <div class="fd-card__header">
+            <div class="fd-card__icon-wrap" aria-hidden="true">
+              <span class="material-symbols-outlined fd-card__icon">data_object</span>
+            </div>
+            <div class="fd-card__heading">
+              <h1 class="fd-card__title">{{ feat.title }}</h1>
+              <p class="fd-card__meta">
+                Feature ID: {{ shortFeatureId(feat.id) }} · Project:
+                <a [routerLink]="['/app/projects', proj.id]" class="fd-card__project-link">{{
+                  proj.name
+                }}</a>
+              </p>
+            </div>
+          </div>
+          <div class="fd-card__status" aria-label="Status">
+            <span class="fd-status-dot" [class.fd-status-dot--progress]="feat.status === 'In Progress'" [class.fd-status-dot--done]="feat.status === 'Done'"></span>
+            <span [class]="statusBadgeClass(feat.status)">{{ statusForDisplay(feat.status) }}</span>
+          </div>
+        </div>
+
+        <div class="fd-req-section">
+          <h2 class="fd-req-heading">Requirements</h2>
+          @if (hasExpandableRequirements()) {
+            <div
+              class="fd-req-body"
+              [class.fd-req-body--collapsed]="!requirementsExpanded()"
+              [class.fd-req-body--expanded]="requirementsExpanded()"
+            >
+              <p class="fd-req-text">{{ requirementsText() }}</p>
+            </div>
+            <button
+              type="button"
+              class="fd-view-more"
+              (click)="toggleRequirementsExpanded()"
+              [attr.aria-expanded]="requirementsExpanded()"
+            >
+              @if (requirementsExpanded()) {
+                View less
+                <span class="material-symbols-outlined fd-view-more__icon" aria-hidden="true">expand_less</span>
+              } @else {
+                View more
+                <span class="material-symbols-outlined fd-view-more__icon" aria-hidden="true">expand_more</span>
+              }
+            </button>
+          } @else {
+            <div class="fd-req-body fd-req-body--empty">
+              <p class="fd-req-empty">No requirements were recorded for this feature.</p>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>

@@ -2,11 +2,12 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, map, of, Subscription, switchMap } from 'rxjs';
 
-import { ProjectApiService, ProjectDetail as ProjectDetailModel } from '../project-api.service';
+import { ProjectApiService, ProjectDetail as ProjectDetailModel, CreatedFeature } from '../project-api.service';
 
 type DetailResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; row: ProjectDetailModel }
+  | { kind: 'ok'; row: ProjectDetailModel; features: CreatedFeature[] }
+  | { kind: 'features_error'; row: ProjectDetailModel; featuresMessage: string }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -23,6 +24,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly project = signal<ProjectDetailModel | null>(null);
   protected readonly detailError = signal<string | null>(null);
+  protected readonly features = signal<CreatedFeature[]>([]);
+  protected readonly featuresLoadError = signal<string | null>(null);
+  protected readonly requirementsExpanded = signal(false);
 
   private readonly rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
@@ -36,8 +40,20 @@ export class ProjectDetail implements OnInit, OnDestroy {
           }
           this.loadState.set('loading');
           this.detailError.set(null);
+          this.featuresLoadError.set(null);
           return this.projectApi.getProject(id).pipe(
-            map((row): DetailResult => ({ kind: 'ok', row })),
+            switchMap((row) =>
+              this.projectApi.listFeatures(row.id).pipe(
+                map((features): DetailResult => ({ kind: 'ok', row, features })),
+                catchError((err: unknown) =>
+                  of<DetailResult>({
+                    kind: 'features_error',
+                    row,
+                    featuresMessage: ProjectApiService.listFeaturesErrorMessage(err),
+                  }),
+                ),
+              ),
+            ),
             catchError((err: unknown) =>
               of<DetailResult>({
                 kind: 'error',
@@ -51,17 +67,35 @@ export class ProjectDetail implements OnInit, OnDestroy {
         if (res.kind === 'invalid') {
           this.detailError.set('No project identifier provided.');
           this.project.set(null);
+          this.features.set([]);
+          this.featuresLoadError.set(null);
+          this.requirementsExpanded.set(false);
           this.loadState.set('error');
           return;
         }
         if (res.kind === 'error') {
           this.detailError.set(res.message);
           this.project.set(null);
+          this.features.set([]);
+          this.featuresLoadError.set(null);
+          this.requirementsExpanded.set(false);
           this.loadState.set('error');
           return;
         }
+        if (res.kind === 'features_error') {
+          this.project.set(res.row);
+          this.features.set([]);
+          this.featuresLoadError.set(res.featuresMessage);
+          this.detailError.set(null);
+          this.requirementsExpanded.set(false);
+          this.loadState.set('ok');
+          return;
+        }
         this.project.set(res.row);
+        this.features.set(res.features);
+        this.featuresLoadError.set(null);
         this.detailError.set(null);
+        this.requirementsExpanded.set(false);
         this.loadState.set('ok');
       });
   }
@@ -113,6 +147,19 @@ export class ProjectDetail implements OnInit, OnDestroy {
       default:
         return `${base} pd-priority__icon--std`;
     }
+  }
+
+  protected toggleRequirementsExpanded(): void {
+    this.requirementsExpanded.update((v) => !v);
+  }
+
+  protected projectRequirementsText(requirements: string | null): string {
+    const t = requirements?.trim();
+    return t && t.length > 0 ? t : '';
+  }
+
+  protected hasExpandableProjectRequirements(requirements: string | null): boolean {
+    return this.projectRequirementsText(requirements).length > 0;
   }
 
   protected tagline(requirements: string | null): string {

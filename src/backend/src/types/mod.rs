@@ -1,7 +1,9 @@
 mod api_error_body;
 mod bootstrap_response;
+mod create_feature_request;
 mod create_project_request;
 mod current_user_body;
+mod feature_response;
 mod health_response;
 mod login_request;
 mod project_detail_response;
@@ -12,8 +14,10 @@ mod update_project_request;
 
 pub use api_error_body::ApiErrorBody;
 pub use bootstrap_response::BootstrapResponse;
+pub use create_feature_request::CreateFeatureRequest;
 pub use create_project_request::CreateProjectRequest;
 pub use current_user_body::CurrentUserBody;
+pub use feature_response::FeatureResponse;
 pub use health_response::HealthResponse;
 pub use login_request::LoginRequest;
 pub use project_detail_response::ProjectDetailResponse;

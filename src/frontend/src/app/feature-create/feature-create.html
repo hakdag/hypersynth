@@ -1,0 +1,112 @@
+<div class="fc-page">
+  @if (loadState() === 'loading') {
+    <div class="fc-banner fc-banner--loading">Loading project…</div>
+  }
+
+  @if (loadState() === 'error' && pageError(); as msg) {
+    <div class="fc-banner fc-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="fc-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && project(); as p) {
+    <nav class="fc-breadcrumbs" aria-label="Breadcrumb">
+      <a routerLink="/app/projects" class="fc-crumb-link">
+        <span class="material-symbols-outlined fc-crumb-icon" aria-hidden="true">folder</span>
+        Projects
+      </a>
+      <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
+      <a [routerLink]="['/app/projects', p.id]" class="fc-crumb-link">{{ p.name }}</a>
+      <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
+      <span class="fc-crumb-current">New Feature</span>
+    </nav>
+
+    <header class="fc-header">
+      <h1 class="fc-title">Create New Feature</h1>
+      <p class="fc-subtitle">
+        Define a new feature for the <span class="fc-subtitle-strong">{{ p.name }}</span> project. Provide clear
+        requirements to help the team understand the scope.
+      </p>
+    </header>
+
+    @if (serverError(); as err) {
+      <div class="fc-banner fc-banner--error" role="alert">{{ err }}</div>
+    }
+
+    <div class="fc-card">
+      <form class="fc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <div class="fc-status-row">
+          <span class="fc-status-label">Status:</span>
+          <span class="fc-status-badge">
+            <span class="fc-status-dot" aria-hidden="true"></span>
+            Pending
+          </span>
+        </div>
+
+        <div class="fc-field">
+          <label class="fc-label" for="feature-title">
+            Feature Title <span class="fc-req" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="feature-title"
+            class="fc-input"
+            type="text"
+            autocomplete="off"
+            placeholder="e.g., Natural Language Query Parser"
+            formControlName="title"
+            [attr.aria-invalid]="form.controls.title.invalid && form.controls.title.touched"
+            [attr.aria-describedby]="titleError() ? 'feature-title-hint' : null"
+          />
+          @if (titleError(); as te) {
+            <p id="feature-title-hint" class="fc-hint fc-hint-error">{{ te }}</p>
+          }
+        </div>
+
+        <div class="fc-field">
+          <label class="fc-label" for="feature-reqs">Feature Requirements <span class="fc-opt">(Optional)</span></label>
+          <div class="fc-rich-shell">
+            <div class="fc-rich-toolbar" aria-hidden="true">
+              <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">format_bold</button>
+              <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                format_italic
+              </button>
+              <span class="fc-toolbar-divider" aria-hidden="true"></span>
+              <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                format_list_bulleted
+              </button>
+              <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                format_list_numbered
+              </button>
+              <span class="fc-toolbar-divider" aria-hidden="true"></span>
+              <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">link</button>
+            </div>
+            <textarea
+              id="feature-reqs"
+              class="fc-textarea"
+              formControlName="requirements"
+              rows="8"
+              placeholder="Describe the technical requirements, user stories, and acceptance criteria..."
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="fc-actions">
+          <button type="button" class="fc-btn fc-btn-secondary" (click)="cancel()">Cancel</button>
+          <button type="submit" class="fc-btn fc-btn-primary" [disabled]="submitting()">
+            {{ submitting() ? 'Creating…' : 'Create Feature' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  }
+</div>
+
+@if (showSuccess()) {
+  <div class="fc-overlay" role="dialog" aria-modal="true" aria-labelledby="fc-success-title">
+    <div class="fc-dialog">
+      <div class="fc-success-icon material-symbols-outlined" aria-hidden="true">check_circle</div>
+      <h2 id="fc-success-title" class="fc-dialog-title">Feature Created</h2>
+      <p class="fc-dialog-body">Your feature has been added to the project with Pending status.</p>
+      <button type="button" class="fc-btn fc-btn-primary fc-btn-block" (click)="dismissSuccess()">View project</button>
+    </div>
+  </div>
+}

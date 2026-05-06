@@ -63,15 +63,70 @@
               <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
               Project Requirements
             </h2>
-            <span class="pd-req__ro"><a [routerLink]="['/app/projects', p.id, 'edit']" class="pd-req__edit">Edit</a></span>
           </div>
           <div class="pd-req__body">
-            @if (p.requirements && p.requirements.trim().length > 0) {
-              <p class="pd-req__text">{{ p.requirements }}</p>
+            @if (hasExpandableProjectRequirements(p.requirements)) {
+              <div
+                class="pd-req-expand"
+                [class.pd-req-expand--collapsed]="!requirementsExpanded()"
+                [class.pd-req-expand--expanded]="requirementsExpanded()"
+              >
+                <p class="pd-req__text">{{ projectRequirementsText(p.requirements) }}</p>
+              </div>
+              <button
+                type="button"
+                class="pd-view-more"
+                (click)="toggleRequirementsExpanded()"
+                [attr.aria-expanded]="requirementsExpanded()"
+              >
+                @if (requirementsExpanded()) {
+                  View less
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_less</span>
+                } @else {
+                  View more
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_more</span>
+                }
+              </button>
             } @else {
               <p class="pd-req__empty">No requirements were provided for this project.</p>
             }
           </div>
+        </section>
+
+        <section class="pd-features" aria-labelledby="pd-features-heading">
+          @if (featuresLoadError(); as feMsg) {
+            <div class="pd-features__banner" role="alert">{{ feMsg }}</div>
+          }
+          <div class="pd-features__toolbar">
+            <h2 id="pd-features-heading" class="pd-features__title">
+              <span class="material-symbols-outlined pd-features__title-icon" aria-hidden="true">rule</span>
+              Features
+            </h2>
+            <a [routerLink]="['/app/projects', p.id, 'features', 'new']" class="pd-features__new-feature">
+              <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true">add</span>
+              New Feature
+            </a>
+          </div>
+          @if (!featuresLoadError() && features().length === 0) {
+            <p class="pd-features__empty">
+              No features yet. Add a feature to capture requirements for part of this project.
+            </p>
+          }
+          @if (features().length > 0) {
+            <ul class="pd-features__list">
+              @for (f of features(); track f.id) {
+                <li class="pd-features__item">
+                  <a [routerLink]="['/app/projects', p.id, 'features', f.id]" class="pd-features__link">
+                    <span class="pd-features__name">{{ f.title }}</span>
+                    <span [class]="statusBadgeClass(f.status)">{{ statusForDisplay(f.status) }}</span>
+                    <span class="material-symbols-outlined pd-features__chev" aria-hidden="true"
+                      >chevron_right</span
+                    >
+                  </a>
+                </li>
+              }
+            </ul>
+          }
         </section>
       </div>
 

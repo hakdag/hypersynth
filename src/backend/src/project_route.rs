@@ -6,7 +6,10 @@ use tracing::{info, warn};
 
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::types::{ApiErrorBody, CreateProjectRequest, ProjectDetailResponse, ProjectResponse, UpdateProjectRequest};
+use crate::types::{
+    ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, FeatureResponse, ProjectDetailResponse,
+    ProjectResponse, UpdateProjectRequest,
+};
 use uuid::Uuid;
 
 pub async fn list_projects(
@@ -291,6 +294,209 @@ pub async fn update_project(
         project_id = %row.id,
         project_status = %row.status,
         "api: PATCH /api/v1/projects/:id -> 200 OK"
+    );
+
+    Ok(Json(row))
+}
+
+pub async fn create_feature(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+    Json(payload): Json<CreateFeatureRequest>,
+) -> Result<(StatusCode, Json<FeatureResponse>), (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    let title_len = payload.title.len();
+    info!(
+        has_cookie,
+        %project_id,
+        title_len,
+        "api: POST /api/v1/projects/:id/features (body summarized)"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let title = payload.title.trim();
+    if title.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/features -> 400 empty title"
+        );
+        return Err(bad_request("Feature title is required."));
+    }
+
+    let requirements = payload
+        .requirements
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let ok: Option<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT id
+        FROM projects
+        WHERE id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, "create_feature: project lookup failed");
+        internal_error()
+    })?;
+
+    if ok.is_none() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/features -> 404 project"
+        );
+        return Err(not_found("Project not found."));
+    }
+
+    let row = sqlx::query_as::<_, FeatureResponse>(
+        r#"
+        INSERT INTO features (project_id, title, requirements, status)
+        VALUES ($1, $2, $3, 'Pending')
+        RETURNING id, project_id, title, requirements, status, created_at
+        "#,
+    )
+    .bind(project_id)
+    .bind(title)
+    .bind(requirements.as_ref())
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "create_feature: insert failed");
+        internal_error()
+    })?;
+
+    info!(
+        feature_id = %row.id,
+        user_id = %user.id,
+        project_id = %project_id,
+        feature_status = %row.status,
+        "api: POST /api/v1/projects/:id/features -> 201 CREATED"
+    );
+
+    Ok((StatusCode::CREATED, Json(row)))
+}
+
+pub async fn list_project_features(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<Vec<FeatureResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id/features");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/features -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let rows = sqlx::query_as::<_, FeatureResponse>(
+        r#"
+        SELECT f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.project_id = $1 AND p.user_id = $2
+        ORDER BY f.created_at DESC
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "list_project_features: query failed");
+        internal_error()
+    })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        row_count = rows.len(),
+        "api: GET /api/v1/projects/:id/features -> 200 OK"
+    );
+
+    Ok(Json(rows))
+}
+
+pub async fn get_project_feature(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<FeatureResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, %feature_id, "api: GET /api/v1/projects/:id/features/:feature_id");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/features/:feature_id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, FeatureResponse>(
+        r#"
+        SELECT f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, %feature_id, "get_project_feature: query failed");
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: GET /api/v1/projects/:id/features/:feature_id -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        feature_id = %row.id,
+        "api: GET /api/v1/projects/:id/features/:feature_id -> 200 OK"
     );
 
     Ok(Json(row))

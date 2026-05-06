@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Create New Feature - ProjectIntel</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#757682",
+                        "inverse-primary": "#b6c4ff",
+                        "error": "#ba1a1a",
+                        "outline-variant": "#c5c5d3",
+                        "surface-variant": "#e0e3e5",
+                        "surface-container-high": "#e6e8ea",
+                        "primary-fixed": "#dce1ff",
+                        "secondary-fixed": "#89f5e7",
+                        "surface-container": "#eceef0",
+                        "error-container": "#ffdad6",
+                        "on-primary-container": "#90a8ff",
+                        "on-error": "#ffffff",
+                        "tertiary": "#0d0097",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-container": "#006f66",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "on-background": "#191c1e",
+                        "on-surface": "#191c1e",
+                        "inverse-surface": "#2d3133",
+                        "primary": "#00236f",
+                        "on-surface-variant": "#444651",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eff1f3",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#006a61",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-container": "#2724b8",
+                        "surface-tint": "#4059aa",
+                        "primary-container": "#1e3a8a",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-primary": "#ffffff",
+                        "background": "#f7f9fb",
+                        "secondary-container": "#86f2e4",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-secondary-fixed": "#00201d",
+                        "on-secondary-fixed-variant": "#005049",
+                        "surface-bright": "#f7f9fb",
+                        "on-tertiary-container": "#a1a4ff",
+                        "secondary-fixed-dim": "#6bd8cb",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-primary-fixed": "#00164e",
+                        "surface-container-low": "#f2f4f6",
+                        "surface": "#f7f9fb",
+                        "on-primary-fixed-variant": "#264191"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "lg": "24px",
+                        "container-max": "1440px",
+                        "xl": "48px",
+                        "md": "16px",
+                        "base": "4px",
+                        "xs": "4px",
+                        "gutter": "20px"
+                    },
+                    "fontFamily": {
+                        "h3": ["Manrope"],
+                        "body-sm": ["Inter"],
+                        "h1": ["Manrope"],
+                        "body-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "h2": ["Manrope"],
+                        "code": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h3": ["20px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "h1": ["36px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-lg": ["16px", { "lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400" }],
+                        "label-md": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "h2": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "code": ["13px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased min-h-screen flex">
+<!-- SideNavBar Component -->
+<nav class="fixed left-0 top-0 h-screen w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col py-6 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">dataset</span>
+</div>
+<div>
+<h1 class="text-lg font-extrabold text-blue-900 dark:text-white leading-tight">ProjectIntel</h1>
+<p class="font-body-sm text-sm text-outline">Enterprise</p>
+</div>
+</div>
+<div class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">grid_view</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium bg-slate-100 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300 border-r-2 border-blue-900 dark:border-blue-400 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+                Projects
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">task_alt</span>
+                Tasks
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">calendar_today</span>
+                Timeline
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">analytics</span>
+                Reports
+            </a>
+</div>
+<div class="px-4 mt-auto space-y-1 pt-6 border-t border-slate-200 dark:border-slate-800">
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">contact_support</span>
+                Support
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg font-manrope text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 hover:bg-slate-50 dark:hover:bg-slate-900/50 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined text-lg">settings</span>
+                Settings
+            </a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="ml-64 flex-1 p-lg max-w-container-max">
+<!-- Breadcrumbs & Header -->
+<div class="mb-xl">
+<nav class="flex items-center gap-2 text-on-surface-variant font-body-sm mb-4">
+<a class="hover:text-primary transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-sm">folder</span>
+                    Projects
+                </a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">System-9 AI Integration</a>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="font-medium text-on-surface">New Feature</span>
+</nav>
+<h1 class="font-h1 text-h1 text-on-surface">Create New Feature</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-2 max-w-2xl">Define a new feature for the System-9 AI Integration project. Provide clear requirements to help the development team understand the scope.</p>
+</div>
+<!-- Form Canvas -->
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-lg max-w-4xl">
+<form class="space-y-lg">
+<!-- Status Badge (Default) -->
+<div class="flex items-center gap-3 pb-6 border-surface-variant">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Status:</span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+                        Pending
+                    </span>
+</div>
+<!-- Feature Title -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="feature-title">Feature Title <span class="text-error">*</span></label>
+<input class="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow placeholder-outline" id="feature-title" name="feature-title" placeholder="e.g., Natural Language Query Parser" required="" type="text"/>
+</div>
+<!-- Feature Requirements (Rich Text Area Simulation) -->
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2" for="feature-reqs">Feature Requirements (Optional)</label>
+<div class="border border-outline-variant rounded-lg overflow-hidden bg-surface-container-lowest focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-shadow">
+<!-- Toolbar -->
+<div class="bg-surface-container flex items-center gap-1 p-2 border-b border-outline-variant">
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant transition-colors" title="Bold" type="button"><span class="material-symbols-outlined text-sm">format_bold</span></button>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant transition-colors" title="Italic" type="button"><span class="material-symbols-outlined text-sm">format_italic</span></button>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant transition-colors" title="Bulleted List" type="button"><span class="material-symbols-outlined text-sm">format_list_bulleted</span></button>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant transition-colors" title="Numbered List" type="button"><span class="material-symbols-outlined text-sm">format_list_numbered</span></button>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<button class="p-1.5 rounded hover:bg-surface-variant text-on-surface-variant transition-colors" title="Link" type="button"><span class="material-symbols-outlined text-sm">link</span></button>
+</div>
+<!-- Textarea -->
+<textarea class="w-full p-4 border-0 bg-transparent text-on-surface font-body-md outline-none resize-y placeholder-outline" id="feature-reqs" name="feature-reqs" placeholder="Describe the technical requirements, user stories, and acceptance criteria..." rows="8"></textarea>
+</div>
+</div>
+<!-- Metadata / Attachments Grid (Decorative depth for the form) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-lg pt-6 border-surface-variant">
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2">Assignee</label>
+<div class="relative">
+<select class="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer">
+<option disabled="" selected="" value="">Unassigned</option>
+<option value="1">Sarah Jenkins (Lead Dev)</option>
+<option value="2">Marcus Chen (Backend)</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block font-label-md text-label-md text-on-surface mb-2">Priority</label>
+<div class="relative">
+<select class="w-full px-4 py-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer">
+<option value="low">Low</option>
+<option selected="" value="medium">Medium</option>
+<option value="high">High</option>
+<option value="critical">Critical</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-4 pt-xl mt-xl border-surface-variant justify-end">
+<button class="px-6 py-3 bg-transparent text-primary rounded-lg font-body-md font-semibold hover:bg-surface-variant transition-colors border border-outline-variant" type="button">
+                        Cancel
+                    </button>
+<button class="px-6 py-3 bg-primary text-on-primary rounded-lg font-body-md font-semibold hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm" type="submit">
+                        Create Feature
+                    </button>
+</div>
+</form>
+</div>
+</main>
+</body></html>
