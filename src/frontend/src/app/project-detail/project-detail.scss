@@ -459,6 +459,7 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  font-size: 0.875rem;
 }
 
 .pd-documents__table thead {
@@ -467,8 +468,8 @@
 }
 
 .pd-documents__table th {
-  padding: 0.75rem 1.25rem;
-  font-size: 0.75rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -476,13 +477,49 @@
 }
 
 .pd-documents__table td {
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1rem;
   border-top: 1px solid #f1f5f9;
+  line-height: 1.35;
+  vertical-align: middle;
 }
 
 .pd-documents__name {
   font-weight: 600;
   color: #334155;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+
+.pd-documents__type,
+.pd-documents__size,
+.pd-documents__date {
+  color: #334155;
+  white-space: nowrap;
+}
+
+.pd-documents__type {
+  font-weight: 600;
+}
+
+.pd-documents__action-cell {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pd-documents__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pd-document-action {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.pd-document-action .material-symbols-outlined {
+  font-size: 1.125rem;
 }
 
 .pd-documents__empty {

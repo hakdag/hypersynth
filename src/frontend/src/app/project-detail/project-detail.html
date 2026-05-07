@@ -157,7 +157,7 @@
                   <th scope="col">Type</th>
                   <th scope="col">Size</th>
                   <th scope="col">Added</th>
-                  <th scope="col">Download</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,20 +171,32 @@
                 @for (document of documents(); track document.id) {
                   <tr>
                     <td class="pd-documents__name">{{ documentName(document) }}</td>
-                    <td>{{ documentType(document) }}</td>
-                    <td>{{ documentSize(document) }}</td>
-                    <td>{{ documentAddedLabel(document.createdAt) }}</td>
-                    <td>
-                      <button
-                        type="button"
-                        class="pd-upload-modal__close"
-                        (click)="downloadProjectDocument(document)"
-                        [disabled]="downloadingDocumentId() === document.id"
-                        [attr.aria-label]="'Download ' + documentName(document)"
-                        title="Download document"
-                      >
-                        <span class="material-symbols-outlined" aria-hidden="true">download</span>
-                      </button>
+                    <td class="pd-documents__type">{{ documentType(document) }}</td>
+                    <td class="pd-documents__size">{{ documentSize(document) }}</td>
+                    <td class="pd-documents__date">{{ documentAddedLabel(document.createdAt) }}</td>
+                    <td class="pd-documents__action-cell">
+                      <div class="pd-documents__actions">
+                        <button
+                          type="button"
+                          class="pd-upload-modal__close pd-document-action"
+                          (click)="openDocumentViewModal(document)"
+                          [disabled]="!canViewProjectDocument(document) || isViewingDocument(document)"
+                          [attr.aria-label]="documentViewLabel(document)"
+                          [attr.title]="documentViewTitle(document)"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">visibility</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="pd-upload-modal__close pd-document-action"
+                          (click)="downloadProjectDocument(document)"
+                          [disabled]="downloadingDocumentId() === document.id"
+                          [attr.aria-label]="'Download ' + documentName(document)"
+                          title="Download document"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 }
@@ -305,6 +317,59 @@
           </div>
         </section>
       </div>
+    }
+
+    @if (documentPreviewModalOpen()) {
+      @if (documentPreview(); as preview) {
+        <div class="pd-modal-backdrop" role="presentation" (click)="closeDocumentViewModal()">
+          <section
+            class="pd-upload-modal pd-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pd-preview-modal-heading"
+            (click)="$event.stopPropagation()"
+          >
+            <div class="pd-upload-modal__header">
+              <div>
+                <h2 id="pd-preview-modal-heading" class="pd-upload-modal__title">
+                  {{ documentName(preview.document) }}
+                </h2>
+                <p class="pd-preview-modal__meta">{{ documentType(preview.document) }}</p>
+              </div>
+              <button
+                type="button"
+                class="pd-upload-modal__close"
+                (click)="closeDocumentViewModal()"
+                aria-label="Close document preview"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
+
+            <div class="pd-upload-modal__body" style="max-height: 32rem; overflow: auto">
+              @if (preview.status === 'loading') {
+                <div class="pd-preview-modal__state" role="status">Loading preview…</div>
+              }
+              @if (preview.status === 'error') {
+                <div class="pd-upload-modal__error" role="alert">
+                  {{ preview.error || 'Could not load document preview.' }}
+                </div>
+              }
+              @if (preview.status === 'ready' && preview.kind === 'image' && preview.objectUrl) {
+                <img
+                  class="pd-preview-modal__image"
+                  style="display: block; max-width: 100%; margin: 0 auto"
+                  [src]="preview.objectUrl"
+                  [alt]="'Preview of ' + documentName(preview.document)"
+                />
+              }
+              @if (preview.status === 'ready' && preview.kind === 'text') {
+                <pre style="margin: 0; white-space: pre-wrap">{{ preview.text }}</pre>
+              }
+            </div>
+          </section>
+        </div>
+      }
     }
   }
 </div>
