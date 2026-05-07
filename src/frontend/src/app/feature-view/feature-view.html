@@ -128,6 +128,9 @@
                         <th scope="col" class="fv-tasks__th fv-tasks__th--task">Task</th>
                         <th scope="col" class="fv-tasks__th">Status</th>
                         <th scope="col" class="fv-tasks__th">Origin</th>
+                        <th scope="col" class="fv-tasks__th fv-tasks__th--actions">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -170,6 +173,26 @@
                                 }}</span>
                               }
                             }
+                          </td>
+                          <td class="fv-tasks__td fv-tasks__td--actions">
+                            <a
+                              [routerLink]="[
+                                '/app/projects',
+                                proj.id,
+                                'features',
+                                meta.id,
+                                'tasks',
+                                task.id,
+                                'edit',
+                              ]"
+                              class="fv-tasks__edit"
+                              [attr.aria-label]="'Edit task: ' + task.title"
+                              [attr.title]="'Edit ' + task.title"
+                            >
+                              <span class="material-symbols-outlined fv-tasks__edit-symbol" aria-hidden="true"
+                                >edit</span
+                              >
+                            </a>
                           </td>
                         </tr>
                       }

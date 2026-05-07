@@ -17,7 +17,7 @@
   border: 1px solid #c5c5d3;
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-card);
 }
 
 .fv-tasks__toolbar {
@@ -84,6 +84,13 @@
   min-width: 14rem;
 }
 
+.fv-tasks__th--actions {
+  width: 1%;
+  white-space: nowrap;
+  padding-left: 0.65rem;
+  text-align: right;
+}
+
 .fv-tasks__row:hover {
   background: #f8fafc;
 }
@@ -117,6 +124,42 @@
 
 .fv-tasks__link-text {
   min-width: 0;
+}
+
+.fv-tasks__td--actions {
+  text-align: right;
+  vertical-align: middle;
+}
+
+.fv-tasks__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  margin: -0.35rem -0.15rem -0.35rem 0;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #1e3a8a;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.fv-tasks__edit:hover {
+  background: rgb(248 250 252);
+  color: #00236f;
+}
+
+.fv-tasks__edit:focus-visible {
+  outline: 2px solid #00236f;
+  outline-offset: 2px;
+}
+
+.fv-tasks__edit-symbol {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .fv-task-title {

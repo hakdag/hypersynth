@@ -37,6 +37,21 @@
           </div>
           <div class="pd-hero-aside">
             <div class="pd-hero-aside__row">
+              <a
+                [routerLink]="[
+                  '/app/projects',
+                  task.projectId,
+                  'features',
+                  task.featureId,
+                  'tasks',
+                  task.id,
+                  'edit',
+                ]"
+                class="pd-edit-link"
+              >
+                <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
+                Edit
+              </a>
               <span [class]="statusBadgeClass(task.status)">{{ statusForDisplay(task.status) }}</span>
             </div>
           </div>

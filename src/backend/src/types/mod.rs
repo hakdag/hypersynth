@@ -15,6 +15,7 @@ mod task_detail_response;
 mod task_response;
 mod update_feature_request;
 mod update_project_request;
+mod update_task_request;
 
 pub use api_error_body::ApiErrorBody;
 pub use bootstrap_response::BootstrapResponse;
@@ -33,3 +34,4 @@ pub use task_detail_response::TaskDetailResponse;
 pub use task_response::TaskResponse;
 pub use update_feature_request::UpdateFeatureRequest;
 pub use update_project_request::UpdateProjectRequest;
+pub use update_task_request::UpdateTaskRequest;

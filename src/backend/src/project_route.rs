@@ -9,7 +9,7 @@ use crate::auth_route;
 use crate::types::{
     ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
     ProjectDetailResponse, ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest,
-    UpdateProjectRequest,
+    UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -958,6 +958,201 @@ pub async fn update_project_feature(
         feature_id = %row.id,
         feature_status = %row.status,
         "api: PATCH /api/v1/projects/:id/features/:feature_id -> 200 OK"
+    );
+
+    Ok(Json(row))
+}
+
+pub async fn update_project_task(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id, task_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(payload): Json<UpdateTaskRequest>,
+) -> Result<Json<TaskDetailResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        %task_id,
+        "api: PATCH /api/v1/projects/:id/features/:feature_id/tasks/:task_id"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: PATCH /api/v1/projects/:id/features/:feature_id/tasks/:task_id -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let title = payload.title.trim();
+    if title.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "api: PATCH task -> 400 empty title"
+        );
+        return Err(bad_request("Task title is required."));
+    }
+
+    let description = payload
+        .description
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let status_trimmed = payload.status.trim();
+    if !matches!(
+        status_trimmed,
+        "Pending" | "In Progress" | "Done"
+    ) {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "api: PATCH task -> 400 bad status"
+        );
+        return Err(bad_request("Status must be Pending, In Progress, or Done."));
+    }
+
+    let priority_raw = payload
+        .priority
+        .trim();
+    let priority_trimmed = if priority_raw.is_empty() {
+        "Standard"
+    } else {
+        priority_raw
+    };
+    let priority_val = match priority_trimmed {
+        "Standard" | "Elevated" | "Critical" => priority_trimmed,
+        _ => {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                %task_id,
+                "api: PATCH task -> 400 invalid priority"
+            );
+            return Err(bad_request(
+                "Priority must be Standard, Elevated, or Critical.",
+            ));
+        }
+    };
+
+    let assignee_bind: Option<Uuid> = if payload.unassigned {
+        None
+    } else if let Some(id) = payload.assignee_user_id {
+        if id != user.id {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                %task_id,
+                "api: PATCH task -> 400 foreign assignee"
+            );
+            return Err(bad_request(
+                "You can only assign tasks to yourself in this workspace.",
+            ));
+        }
+        Some(id)
+    } else {
+        Some(user.id)
+    };
+
+    let row = sqlx::query_as::<_, TaskDetailResponse>(
+        r#"
+        WITH updated AS (
+            UPDATE tasks t
+            SET title = $5,
+                description = $6,
+                status = $7,
+                priority = $8,
+                assignee_user_id = $9
+            FROM features f
+            INNER JOIN projects p ON p.id = f.project_id
+            WHERE t.id = $1
+              AND t.feature_id = $2
+              AND f.id = $2
+              AND f.project_id = $3
+              AND p.user_id = $4
+            RETURNING t.id
+        )
+        SELECT
+            t.id,
+            t.feature_id,
+            t.title,
+            t.description,
+            t.status,
+            t.created_by,
+            t.created_at,
+            t.priority,
+            t.assignee_user_id,
+            au.fullname AS assignee_fullname,
+            au.avatar_url AS assignee_avatar_url,
+            cu.fullname AS creator_fullname,
+            cu.avatar_url AS creator_avatar_url,
+            f.title AS feature_title,
+            p.id AS project_id,
+            p.name AS project_name
+        FROM tasks t
+        INNER JOIN updated u ON u.id = t.id
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        LEFT JOIN users au ON au.id = t.assignee_user_id
+        LEFT JOIN users cu ON cu.id = t.creator_user_id
+        "#,
+    )
+    .bind(task_id)
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .bind(title)
+    .bind(description.as_ref())
+    .bind(status_trimmed)
+    .bind(priority_val)
+    .bind(assignee_bind)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "update_project_task: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "api: PATCH task -> 404"
+        );
+        return Err(not_found("Task not found."));
+    };
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        task_id = %row.id,
+        task_status = %row.status,
+        task_created_by = %row.created_by,
+        "api: PATCH /api/v1/projects/:id/features/:feature_id/tasks/:task_id -> 200 OK"
     );
 
     Ok(Json(row))

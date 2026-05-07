@@ -46,6 +46,15 @@ export interface UpdateFeaturePayload {
   status: string;
 }
 
+export interface UpdateTaskPayload {
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  unassigned: boolean;
+  assigneeUserId?: string;
+}
+
 export const TASK_PRIORITY_OPTIONS = ['Standard', 'Elevated', 'Critical'] as const;
 export type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
 
@@ -189,6 +198,28 @@ export class ProjectApiService {
     return this.http.get<TaskDetail>(url);
   }
 
+  updateTask(
+    projectId: string,
+    featureId: string,
+    taskId: string,
+    payload: UpdateTaskPayload,
+  ): Observable<TaskDetail> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/tasks/${b(taskId)}`;
+    const body: Record<string, unknown> = {
+      title: payload.title.trim(),
+      status: payload.status,
+      priority: payload.priority,
+      unassigned: payload.unassigned,
+    };
+    body['description'] =
+      payload.description.trim().length > 0 ? payload.description.trim() : null;
+    if (!payload.unassigned && payload.assigneeUserId !== undefined) {
+      body['assigneeUserId'] = payload.assigneeUserId;
+    }
+    return this.http.patch<TaskDetail>(url, body);
+  }
+
   static listErrorMessage(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
       const body = err.error as { message?: string } | null;
@@ -319,6 +350,20 @@ export class ProjectApiService {
         return 'Task not found or you do not have access.';
       }
       return `Could not load task (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static updateTaskErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Task not found or you do not have access.';
+      }
+      return `Could not save task (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

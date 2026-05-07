@@ -17,7 +17,7 @@ use configs::AppConfig;
 use project_route::{
     create_feature, create_project, create_task, get_project, get_project_feature, get_project_task,
     list_feature_tasks, list_project_features, list_projects, update_project,
-    update_project_feature,
+    update_project_feature, update_project_task,
 };
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}/tasks/{task_id}",
-            get(get_project_task),
+            get(get_project_task).patch(update_project_task),
         )
         .with_state(state)
         .layer(TraceLayer::new_for_http())
