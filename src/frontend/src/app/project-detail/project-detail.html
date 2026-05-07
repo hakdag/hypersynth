@@ -143,6 +143,9 @@
           @if (documentUploadSuccess(); as uploadMsg) {
             <div class="pd-documents__banner pd-documents__banner--success" role="status">{{ uploadMsg }}</div>
           }
+          @if (documentsLoadError(); as documentsMsg) {
+            <div class="pd-documents__banner pd-documents__banner--error" role="alert">{{ documentsMsg }}</div>
+          }
           <div class="pd-documents__table-wrap">
             <table class="pd-documents__table">
               <thead>
@@ -151,15 +154,24 @@
                   <th scope="col">Type</th>
                   <th scope="col">Size</th>
                   <th scope="col">Added</th>
-                  <th scope="col" class="pd-documents__actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colspan="5" class="pd-documents__empty">
-                    No associated documents are loaded yet. Upload support is available; document fetching comes later.
-                  </td>
-                </tr>
+                @if (!documentsLoadError() && documents().length === 0) {
+                  <tr>
+                    <td colspan="4" class="pd-documents__empty">
+                      No associated documents yet. Upload project documents to make them visible here.
+                    </td>
+                  </tr>
+                }
+                @for (document of documents(); track document.id) {
+                  <tr>
+                    <td class="pd-documents__name">{{ documentName(document) }}</td>
+                    <td>{{ documentType(document) }}</td>
+                    <td>{{ documentSize(document) }}</td>
+                    <td>{{ documentAddedLabel(document.createdAt) }}</td>
+                  </tr>
+                }
               </tbody>
             </table>
           </div>

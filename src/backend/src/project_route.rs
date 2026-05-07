@@ -448,6 +448,54 @@ pub async fn list_project_features(
     Ok(Json(rows))
 }
 
+pub async fn list_project_documents(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<Vec<ProjectDocumentResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id/documents");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/documents -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let rows = sqlx::query_as::<_, ProjectDocumentResponse>(
+        r#"
+        SELECT d.id, d.project_id, d.file_path, d.metadata, d.created_at
+        FROM project_documents d
+        INNER JOIN projects p ON p.id = d.project_id
+        WHERE d.project_id = $1 AND p.user_id = $2
+        ORDER BY d.created_at DESC
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "list_project_documents: query failed");
+        internal_error()
+    })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        row_count = rows.len(),
+        "api: GET /api/v1/projects/:id/documents -> 200 OK"
+    );
+
+    Ok(Json(rows))
+}
+
 pub async fn upload_project_documents(
     State(state): State<AppState>,
     jar: CookieJar,

@@ -145,6 +145,11 @@ export class ProjectApiService {
     return this.http.get<CreatedFeature[]>(url);
   }
 
+  listProjectDocuments(projectId: string): Observable<ProjectDocument[]> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/documents`;
+    return this.http.get<ProjectDocument[]>(url);
+  }
+
   uploadProjectDocuments(projectId: string, files: File[]): Observable<ProjectDocument[]> {
     const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/documents`;
     const body = new FormData();
@@ -283,6 +288,20 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not load features (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static listDocumentsErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not load documents (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }
