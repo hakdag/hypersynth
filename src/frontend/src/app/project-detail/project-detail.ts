@@ -41,6 +41,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
   private sub: Subscription | null = null;
   private uploadSub: Subscription | null = null;
   private documentsSub: Subscription | null = null;
+  private downloadSub: Subscription | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly project = signal<ProjectDetailModel | null>(null);
@@ -55,6 +56,8 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected readonly documentUploadState = signal<'idle' | 'uploading'>('idle');
   protected readonly documentUploadError = signal<string | null>(null);
   protected readonly documentUploadSuccess = signal<string | null>(null);
+  protected readonly documentDownloadError = signal<string | null>(null);
+  protected readonly downloadingDocumentId = signal<string | null>(null);
 
   private readonly rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
   protected readonly acceptedDocumentTypes =
@@ -72,6 +75,8 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.detailError.set(null);
           this.featuresLoadError.set(null);
           this.documentsLoadError.set(null);
+          this.documentDownloadError.set(null);
+          this.downloadingDocumentId.set(null);
           return this.projectApi.getProject(id).pipe(
             switchMap((row) =>
               forkJoin({
@@ -121,6 +126,8 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.featuresLoadError.set(null);
           this.documents.set([]);
           this.documentsLoadError.set(null);
+          this.documentDownloadError.set(null);
+          this.downloadingDocumentId.set(null);
           this.requirementsExpanded.set(false);
           this.closeDocumentUploadModal();
           this.loadState.set('error');
@@ -133,6 +140,8 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.featuresLoadError.set(null);
           this.documents.set([]);
           this.documentsLoadError.set(null);
+          this.documentDownloadError.set(null);
+          this.downloadingDocumentId.set(null);
           this.requirementsExpanded.set(false);
           this.closeDocumentUploadModal();
           this.loadState.set('error');
@@ -153,6 +162,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
     this.sub?.unsubscribe();
     this.uploadSub?.unsubscribe();
     this.documentsSub?.unsubscribe();
+    this.downloadSub?.unsubscribe();
   }
 
   protected completionPercent(status: string): number {
@@ -259,6 +269,25 @@ export class ProjectDetail implements OnInit, OnDestroy {
       error: (err: unknown) => {
         this.documentUploadError.set(ProjectApiService.uploadDocumentsErrorMessage(err));
         this.documentUploadState.set('idle');
+      },
+    });
+  }
+
+  protected downloadProjectDocument(document: ProjectDocument): void {
+    const p = this.project();
+    if (!p) return;
+
+    this.downloadSub?.unsubscribe();
+    this.downloadingDocumentId.set(document.id);
+    this.documentDownloadError.set(null);
+    this.downloadSub = this.projectApi.downloadProjectDocument(p.id, document.id).subscribe({
+      next: (blob) => {
+        this.saveDownloadedDocument(blob, this.documentName(document));
+        this.downloadingDocumentId.set(null);
+      },
+      error: (err: unknown) => {
+        this.documentDownloadError.set(ProjectApiService.downloadDocumentErrorMessage(err));
+        this.downloadingDocumentId.set(null);
       },
     });
   }
@@ -396,5 +425,16 @@ export class ProjectDetail implements OnInit, OnDestroy {
   private documentMetadataString(document: ProjectDocument, key: string): string {
     const value = document.metadata[key];
     return typeof value === 'string' ? value.trim() : '';
+  }
+
+  private saveDownloadedDocument(blob: Blob, fileName: string): void {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 }

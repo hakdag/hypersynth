@@ -1,7 +1,10 @@
 use std::path::Path as FsPath;
 
+use axum::body::Body;
 use axum::extract::{Multipart, Path, State};
-use axum::http::StatusCode;
+use axum::http::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
+use axum::http::{HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use serde_json::json;
@@ -494,6 +497,113 @@ pub async fn list_project_documents(
     );
 
     Ok(Json(rows))
+}
+
+pub async fn download_project_document(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, document_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, %document_id, "api: GET /api/v1/projects/:id/documents/:document_id/download");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: GET /api/v1/projects/:id/documents/:document_id/download -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, ProjectDocumentResponse>(
+        r#"
+        SELECT d.id, d.project_id, d.file_path, d.metadata, d.created_at
+        FROM project_documents d
+        INNER JOIN projects p ON p.id = d.project_id
+        WHERE d.id = $1 AND d.project_id = $2 AND p.user_id = $3
+        "#,
+    )
+    .bind(document_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, %document_id, "download_project_document: query failed");
+        internal_error()
+    })?;
+
+    let Some(row) = row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %document_id,
+            "api: GET /api/v1/projects/:id/documents/:document_id/download -> 404"
+        );
+        return Err(not_found("Document not found."));
+    };
+
+    let download_name = row
+        .metadata
+        .get("originalFilename")
+        .and_then(|value| value.as_str())
+        .map(safe_document_file_name)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "project-document".to_string());
+    let content_type = row
+        .metadata
+        .get("contentType")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("application/octet-stream");
+
+    let bytes = tokio::fs::read(&row.file_path).await.map_err(|e| {
+        warn!(
+            error = %e,
+            path = %row.file_path,
+            user_id = %user.id,
+            %project_id,
+            %document_id,
+            "download_project_document: file read failed"
+        );
+        if e.kind() == std::io::ErrorKind::NotFound {
+            not_found("Document file is missing.")
+        } else {
+            internal_error()
+        }
+    })?;
+
+    let content_length = bytes.len().to_string();
+    let mut response = Body::from(bytes).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_str(content_type)
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+    );
+    let disposition = format!("attachment; filename=\"{}\"", download_name);
+    headers.insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&disposition)
+            .unwrap_or_else(|_| HeaderValue::from_static("attachment")),
+    );
+    if let Ok(value) = HeaderValue::from_str(&content_length) {
+        headers.insert(CONTENT_LENGTH, value);
+    }
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %document_id,
+        "api: GET /api/v1/projects/:id/documents/:document_id/download -> 200 OK"
+    );
+
+    Ok(response)
 }
 
 pub async fn upload_project_documents(

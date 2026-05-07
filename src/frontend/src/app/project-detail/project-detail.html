@@ -144,7 +144,10 @@
             <div class="pd-documents__banner pd-documents__banner--success" role="status">{{ uploadMsg }}</div>
           }
           @if (documentsLoadError(); as documentsMsg) {
-            <div class="pd-documents__banner pd-documents__banner--error" role="alert">{{ documentsMsg }}</div>
+            <div class="pd-features__banner" role="alert">{{ documentsMsg }}</div>
+          }
+          @if (documentDownloadError(); as downloadMsg) {
+            <div class="pd-features__banner" role="alert">{{ downloadMsg }}</div>
           }
           <div class="pd-documents__table-wrap">
             <table class="pd-documents__table">
@@ -154,12 +157,13 @@
                   <th scope="col">Type</th>
                   <th scope="col">Size</th>
                   <th scope="col">Added</th>
+                  <th scope="col">Download</th>
                 </tr>
               </thead>
               <tbody>
                 @if (!documentsLoadError() && documents().length === 0) {
                   <tr>
-                    <td colspan="4" class="pd-documents__empty">
+                    <td colspan="5" class="pd-documents__empty">
                       No associated documents yet. Upload project documents to make them visible here.
                     </td>
                   </tr>
@@ -170,6 +174,18 @@
                     <td>{{ documentType(document) }}</td>
                     <td>{{ documentSize(document) }}</td>
                     <td>{{ documentAddedLabel(document.createdAt) }}</td>
+                    <td>
+                      <button
+                        type="button"
+                        class="pd-upload-modal__close"
+                        (click)="downloadProjectDocument(document)"
+                        [disabled]="downloadingDocumentId() === document.id"
+                        [attr.aria-label]="'Download ' + documentName(document)"
+                        title="Download document"
+                      >
+                        <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                      </button>
+                    </td>
                   </tr>
                 }
               </tbody>

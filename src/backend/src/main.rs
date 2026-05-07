@@ -16,10 +16,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use project_route::{
-    create_feature, create_project, create_task, get_project, get_project_feature,
-    get_project_task, list_feature_tasks, list_project_documents, list_project_features,
-    list_projects, update_project, update_project_feature, update_project_task,
-    upload_project_documents,
+    create_feature, create_project, create_task, download_project_document, get_project,
+    get_project_feature, get_project_task, list_feature_tasks, list_project_documents,
+    list_project_features, list_projects, update_project, update_project_feature,
+    update_project_task, upload_project_documents,
 };
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
@@ -113,6 +113,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(list_project_documents)
                 .post(upload_project_documents)
                 .layer(DefaultBodyLimit::max(25 * 1024 * 1024)),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/documents/{document_id}/download",
+            get(download_project_document),
         )
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}",

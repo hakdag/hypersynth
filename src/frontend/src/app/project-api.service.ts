@@ -159,6 +159,12 @@ export class ProjectApiService {
     return this.http.post<ProjectDocument[]>(url, body);
   }
 
+  downloadProjectDocument(projectId: string, documentId: string): Observable<Blob> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/documents/${b(documentId)}/download`;
+    return this.http.get(url, { responseType: 'blob' });
+  }
+
   getFeature(projectId: string, featureId: string): Observable<CreatedFeature> {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}`;
@@ -316,6 +322,16 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not upload documents (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static downloadDocumentErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 404) {
+        return 'Document not found or you do not have access.';
+      }
+      return `Could not download document (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }
