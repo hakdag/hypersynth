@@ -20,6 +20,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly projectApi = inject(ProjectApiService);
   private sub: Subscription | null = null;
+  private uploadSub: Subscription | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly project = signal<ProjectDetailModel | null>(null);
@@ -27,8 +28,15 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected readonly features = signal<CreatedFeature[]>([]);
   protected readonly featuresLoadError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
+  protected readonly documentUploadModalOpen = signal(false);
+  protected readonly selectedDocumentFiles = signal<File[]>([]);
+  protected readonly documentUploadState = signal<'idle' | 'uploading'>('idle');
+  protected readonly documentUploadError = signal<string | null>(null);
+  protected readonly documentUploadSuccess = signal<string | null>(null);
 
   private readonly rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  protected readonly acceptedDocumentTypes =
+    '.md,.txt,.csv,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg';
 
   ngOnInit(): void {
     this.sub = this.route.paramMap
@@ -70,6 +78,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.features.set([]);
           this.featuresLoadError.set(null);
           this.requirementsExpanded.set(false);
+          this.closeDocumentUploadModal();
           this.loadState.set('error');
           return;
         }
@@ -79,6 +88,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.features.set([]);
           this.featuresLoadError.set(null);
           this.requirementsExpanded.set(false);
+          this.closeDocumentUploadModal();
           this.loadState.set('error');
           return;
         }
@@ -102,6 +112,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.uploadSub?.unsubscribe();
   }
 
   protected completionPercent(status: string): number {
@@ -151,6 +162,64 @@ export class ProjectDetail implements OnInit, OnDestroy {
 
   protected toggleRequirementsExpanded(): void {
     this.requirementsExpanded.update((v) => !v);
+  }
+
+  protected openDocumentUploadModal(): void {
+    this.documentUploadModalOpen.set(true);
+    this.documentUploadError.set(null);
+    this.documentUploadSuccess.set(null);
+  }
+
+  protected closeDocumentUploadModal(): void {
+    if (this.documentUploadState() === 'uploading') return;
+    this.documentUploadModalOpen.set(false);
+    this.selectedDocumentFiles.set([]);
+    this.documentUploadError.set(null);
+  }
+
+  protected onDocumentFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    this.selectedDocumentFiles.set(files);
+    this.documentUploadError.set(null);
+    this.documentUploadSuccess.set(null);
+  }
+
+  protected uploadSelectedDocuments(): void {
+    const p = this.project();
+    if (!p) return;
+
+    const files = this.selectedDocumentFiles();
+    if (files.length === 0) {
+      this.documentUploadError.set('Select at least one file to upload.');
+      return;
+    }
+    const unsupported = files.find((file) => !this.isAllowedDocumentFile(file.name));
+    if (unsupported) {
+      this.documentUploadError.set(
+        `${unsupported.name} is not supported. Upload Markdown, text, Excel, Word, or common image files.`,
+      );
+      return;
+    }
+
+    this.uploadSub?.unsubscribe();
+    this.documentUploadState.set('uploading');
+    this.documentUploadError.set(null);
+    this.documentUploadSuccess.set(null);
+    this.uploadSub = this.projectApi.uploadProjectDocuments(p.id, files).subscribe({
+      next: (rows) => {
+        this.documentUploadSuccess.set(
+          rows.length === 1 ? 'Document uploaded.' : `${rows.length} documents uploaded.`,
+        );
+        this.selectedDocumentFiles.set([]);
+        this.documentUploadModalOpen.set(false);
+        this.documentUploadState.set('idle');
+      },
+      error: (err: unknown) => {
+        this.documentUploadError.set(ProjectApiService.uploadDocumentsErrorMessage(err));
+        this.documentUploadState.set('idle');
+      },
+    });
   }
 
   protected projectRequirementsText(requirements: string | null): string {
@@ -208,5 +277,25 @@ export class ProjectDetail implements OnInit, OnDestroy {
 
   protected statusForDisplay(status: string): string {
     return status.toUpperCase();
+  }
+
+  private isAllowedDocumentFile(name: string): boolean {
+    const extension = name.split('.').pop()?.toLowerCase() ?? '';
+    return [
+      'md',
+      'txt',
+      'csv',
+      'xls',
+      'xlsx',
+      'doc',
+      'docx',
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'bmp',
+      'svg',
+    ].includes(extension);
   }
 }

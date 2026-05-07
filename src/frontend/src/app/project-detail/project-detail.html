@@ -128,6 +128,42 @@
             </ul>
           }
         </section>
+
+        <section class="pd-documents" aria-labelledby="pd-documents-heading">
+          <div class="pd-features__toolbar">
+            <h2 id="pd-documents-heading" class="pd-features__title">
+              <span class="material-symbols-outlined pd-features__title-icon" aria-hidden="true">folder</span>
+              Associated Documents
+            </h2>
+            <button type="button" class="pd-features__new-feature" (click)="openDocumentUploadModal()">
+              <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true">upload_file</span>
+              Upload New
+            </button>
+          </div>
+          @if (documentUploadSuccess(); as uploadMsg) {
+            <div class="pd-documents__banner pd-documents__banner--success" role="status">{{ uploadMsg }}</div>
+          }
+          <div class="pd-documents__table-wrap">
+            <table class="pd-documents__table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Added</th>
+                  <th scope="col" class="pd-documents__actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="5" class="pd-documents__empty">
+                    No associated documents are loaded yet. Upload support is available; document fetching comes later.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <aside class="pd-split__aside" aria-label="AI configuration">
@@ -165,5 +201,82 @@
         </div>
       </aside>
     </div>
+
+    @if (documentUploadModalOpen()) {
+      <div class="pd-modal-backdrop" role="presentation" (click)="closeDocumentUploadModal()">
+        <section
+          class="pd-upload-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pd-upload-modal-heading"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="pd-upload-modal__header">
+            <h2 id="pd-upload-modal-heading" class="pd-upload-modal__title">Upload Project Documents</h2>
+            <button
+              type="button"
+              class="pd-upload-modal__close"
+              (click)="closeDocumentUploadModal()"
+              [disabled]="documentUploadState() === 'uploading'"
+              aria-label="Close upload dialog"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+
+          <div class="pd-upload-modal__body">
+            <p class="pd-upload-modal__lede">
+              Add Markdown, text, Excel, Word, or common image files to this project.
+            </p>
+            <label class="pd-file-picker">
+              <span class="material-symbols-outlined pd-file-picker__icon" aria-hidden="true">upload_file</span>
+              <span class="pd-file-picker__copy">Choose files</span>
+              <input
+                type="file"
+                multiple
+                [attr.accept]="acceptedDocumentTypes"
+                (change)="onDocumentFilesSelected($event)"
+                [disabled]="documentUploadState() === 'uploading'"
+              />
+            </label>
+
+            @if (selectedDocumentFiles().length > 0) {
+              <ul class="pd-upload-modal__files">
+                @for (file of selectedDocumentFiles(); track file.name + file.size + file.lastModified) {
+                  <li>{{ file.name }}</li>
+                }
+              </ul>
+            }
+
+            @if (documentUploadError(); as uploadError) {
+              <div class="pd-upload-modal__error" role="alert">{{ uploadError }}</div>
+            }
+          </div>
+
+          <div class="pd-upload-modal__footer">
+            <button
+              type="button"
+              class="pd-upload-modal__secondary"
+              (click)="closeDocumentUploadModal()"
+              [disabled]="documentUploadState() === 'uploading'"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="pd-upload-modal__primary"
+              (click)="uploadSelectedDocuments()"
+              [disabled]="documentUploadState() === 'uploading'"
+            >
+              @if (documentUploadState() === 'uploading') {
+                Uploading…
+              } @else {
+                Upload
+              }
+            </button>
+          </div>
+        </section>
+      </div>
+    }
   }
 </div>

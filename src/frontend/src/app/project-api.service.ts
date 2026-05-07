@@ -40,6 +40,14 @@ export interface CreatedFeature {
   createdAt: string;
 }
 
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  filePath: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface UpdateFeaturePayload {
   title: string;
   requirements: string;
@@ -135,6 +143,15 @@ export class ProjectApiService {
   listFeatures(projectId: string): Observable<CreatedFeature[]> {
     const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/features`;
     return this.http.get<CreatedFeature[]>(url);
+  }
+
+  uploadProjectDocuments(projectId: string, files: File[]): Observable<ProjectDocument[]> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/documents`;
+    const body = new FormData();
+    for (const file of files) {
+      body.append('files', file);
+    }
+    return this.http.post<ProjectDocument[]>(url, body);
   }
 
   getFeature(projectId: string, featureId: string): Observable<CreatedFeature> {
@@ -266,6 +283,20 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not load features (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static uploadDocumentsErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not upload documents (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

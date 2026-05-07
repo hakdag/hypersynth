@@ -1,15 +1,18 @@
-use axum::extract::{Path, State};
+use std::path::Path as FsPath;
+
+use axum::extract::{Multipart, Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
+use serde_json::json;
 use tracing::{info, warn};
 
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::types::{
     ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
-    ProjectDetailResponse, ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest,
-    UpdateProjectRequest, UpdateTaskRequest,
+    ProjectDetailResponse, ProjectDocumentResponse, ProjectResponse, TaskDetailResponse,
+    TaskResponse, UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -443,6 +446,179 @@ pub async fn list_project_features(
     );
 
     Ok(Json(rows))
+}
+
+pub async fn upload_project_documents(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<Vec<ProjectDocumentResponse>>), (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(has_cookie, %project_id, "api: POST /api/v1/projects/:id/documents");
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/documents -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    // this part will be changed when we introduce company-scoped documents
+    let ok: Option<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT id
+        FROM projects
+        WHERE id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "upload_project_documents: project lookup failed");
+        internal_error()
+    })?;
+
+    if ok.is_none() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/documents -> 404 project"
+        );
+        return Err(not_found("Project not found."));
+    }
+
+    // this part will be changed when we introduce company-scoped documents
+    let upload_root = FsPath::new(&state.document_upload_dir);
+    let project_dir = upload_root
+        .join(user.id.to_string())
+        .join(project_id.to_string());
+
+    tokio::fs::create_dir_all(&project_dir).await.map_err(|e| {
+        warn!(
+            error = %e,
+            path = %project_dir.display(),
+            user_id = %user.id,
+            %project_id,
+            "upload_project_documents: create upload directory failed"
+        );
+        internal_error()
+    })?;
+
+    let mut rows = Vec::new();
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "upload_project_documents: multipart read failed");
+        bad_request("Could not read the uploaded file.")
+    })? {
+        let Some(original_name) = field.file_name().map(|name| name.to_string()) else {
+            continue;
+        };
+
+        let content_type = field.content_type().map(|value| value.to_string());
+        if !is_allowed_document_name(&original_name) {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                original_name = %original_name,
+                "api: POST /api/v1/projects/:id/documents -> 400 unsupported file type"
+            );
+            return Err(bad_request(
+                "Unsupported file type. Upload Markdown, text, Excel, Word, or common image files.",
+            ));
+        }
+
+        let safe_name = safe_document_file_name(&original_name);
+        let extension = file_extension(&safe_name);
+        let stored_name = if extension.is_empty() {
+            Uuid::new_v4().to_string()
+        } else {
+            format!("{}.{}", Uuid::new_v4(), extension)
+        };
+        let target_path = project_dir.join(stored_name);
+        let bytes = field.bytes().await.map_err(|e| {
+            warn!(error = %e, user_id = %user.id, %project_id, "upload_project_documents: file bytes read failed");
+            bad_request("Could not read the uploaded file.")
+        })?;
+
+        if bytes.is_empty() {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                original_name = %original_name,
+                "api: POST /api/v1/projects/:id/documents -> 400 empty file"
+            );
+            return Err(bad_request("Uploaded files must not be empty."));
+        }
+
+        tokio::fs::write(&target_path, &bytes).await.map_err(|e| {
+            warn!(
+                error = %e,
+                path = %target_path.display(),
+                user_id = %user.id,
+                %project_id,
+                "upload_project_documents: file write failed"
+            );
+            internal_error()
+        })?;
+
+        let file_path = target_path.to_string_lossy().into_owned();
+        let metadata = json!({
+            "originalFilename": original_name,
+            "storedFilename": safe_name,
+            "size": bytes.len(),
+            "contentType": content_type,
+        });
+
+        let row = sqlx::query_as::<_, ProjectDocumentResponse>(
+            r#"
+            INSERT INTO project_documents (project_id, file_path, metadata)
+            VALUES ($1, $2, $3)
+            RETURNING id, project_id, file_path, metadata, created_at
+            "#,
+        )
+        .bind(project_id)
+        .bind(&file_path)
+        .bind(metadata)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                path = %file_path,
+                user_id = %user.id,
+                %project_id,
+                "upload_project_documents: metadata insert failed"
+            );
+            internal_error()
+        })?;
+
+        rows.push(row);
+    }
+
+    if rows.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/documents -> 400 no files"
+        );
+        return Err(bad_request("Select at least one file to upload."));
+    }
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        document_count = rows.len(),
+        "api: POST /api/v1/projects/:id/documents -> 201 CREATED"
+    );
+
+    Ok((StatusCode::CREATED, Json(rows)))
 }
 
 pub async fn get_project_feature(
@@ -896,10 +1072,7 @@ pub async fn update_project_feature(
         .map(|s| s.to_string());
 
     let status_trimmed = payload.status.trim();
-    if !matches!(
-        status_trimmed,
-        "Pending" | "In Progress" | "Done"
-    ) {
+    if !matches!(status_trimmed, "Pending" | "In Progress" | "Done") {
         warn!(
             user_id = %user.id,
             %project_id,
@@ -1010,10 +1183,7 @@ pub async fn update_project_task(
         .map(|s| s.to_string());
 
     let status_trimmed = payload.status.trim();
-    if !matches!(
-        status_trimmed,
-        "Pending" | "In Progress" | "Done"
-    ) {
+    if !matches!(status_trimmed, "Pending" | "In Progress" | "Done") {
         warn!(
             user_id = %user.id,
             %project_id,
@@ -1024,9 +1194,7 @@ pub async fn update_project_task(
         return Err(bad_request("Status must be Pending, In Progress, or Done."));
     }
 
-    let priority_raw = payload
-        .priority
-        .trim();
+    let priority_raw = payload.priority.trim();
     let priority_trimmed = if priority_raw.is_empty() {
         "Standard"
     } else {
@@ -1156,6 +1324,59 @@ pub async fn update_project_task(
     );
 
     Ok(Json(row))
+}
+
+fn is_allowed_document_name(file_name: &str) -> bool {
+    matches!(
+        file_extension(file_name).as_str(),
+        "md" | "txt"
+            | "csv"
+            | "xls"
+            | "xlsx"
+            | "doc"
+            | "docx"
+            | "jpg"
+            | "jpeg"
+            | "png"
+            | "gif"
+            | "webp"
+            | "bmp"
+            | "svg"
+    )
+}
+
+fn file_extension(file_name: &str) -> String {
+    FsPath::new(file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+fn safe_document_file_name(original_name: &str) -> String {
+    let base = original_name
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("document")
+        .trim();
+
+    let sanitized: String = base
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    let trimmed = sanitized.trim_matches('.');
+    if trimmed.is_empty() {
+        "document".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {

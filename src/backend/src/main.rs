@@ -8,16 +8,17 @@ mod types;
 use std::path::Path;
 
 use app_state::AppState;
+use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
-use axum::http::HeaderValue;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
+use axum::http::HeaderValue;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use project_route::{
-    create_feature, create_project, create_task, get_project, get_project_feature, get_project_task,
-    list_feature_tasks, list_project_features, list_projects, update_project,
-    update_project_feature, update_project_task,
+    create_feature, create_project, create_task, get_project, get_project_feature,
+    get_project_task, list_feature_tasks, list_project_features, list_projects, update_project,
+    update_project_feature, update_project_task, upload_project_documents,
 };
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
@@ -41,7 +42,8 @@ fn load_src_env() -> Result<(), Box<dyn std::error::Error>> {
         .join("..")
         .join(".env");
     if path.exists() {
-        dotenvy::from_path(&path).map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
+        dotenvy::from_path(&path)
+            .map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
         eprintln!("loaded environment from {}", path.display());
     } else {
         eprintln!(
@@ -64,9 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&config.database_url)
         .await?;
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     sqlx::query_scalar::<_, i32>("SELECT 1")
         .fetch_one(&pool)
@@ -88,6 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         pool,
         session_max_age_secs: config.session_max_age_secs,
+        document_upload_dir: config.document_upload_dir,
     };
 
     let app = Router::new()
@@ -105,6 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}/features",
             get(list_project_features).post(create_feature),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/documents",
+            post(upload_project_documents).layer(DefaultBodyLimit::max(25 * 1024 * 1024)),
         )
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}",
