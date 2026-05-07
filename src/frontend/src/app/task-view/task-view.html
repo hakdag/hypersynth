@@ -1,0 +1,176 @@
+<div class="pd-page">
+  @if (loadState() === 'loading') {
+    <div class="pd-banner pd-banner--loading">Loading task…</div>
+  }
+
+  @if (loadState() === 'error' && pageError(); as msg) {
+    <div class="pd-banner pd-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="pd-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && taskDetail(); as task) {
+    <div class="pd-hero-grid">
+      <div class="pd-hero-main">
+        <nav class="pd-crumb" aria-label="Breadcrumb">
+          <a routerLink="/app/projects" class="pd-crumb__link">Projects</a>
+          <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+          <a [routerLink]="['/app/projects', task.projectId]" class="pd-crumb__link">{{
+            task.projectName
+          }}</a>
+          <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+          <a
+            [routerLink]="['/app/projects', task.projectId, 'features', task.featureId]"
+            class="pd-crumb__link"
+            >{{ task.featureTitle }}</a
+          >
+          <span class="material-symbols-outlined pd-crumb__chev" aria-hidden="true">chevron_right</span>
+          <span class="pd-crumb__current">{{ task.title }}</span>
+        </nav>
+
+        <div class="pd-hero-row">
+          <div class="pd-hero-copy">
+            <h1 class="pd-title">{{ task.title }}</h1>
+            <p class="pd-tagline">
+              Task in {{ task.featureTitle }} · {{ task.projectName }} · Short ID {{ shortTaskId(task.id) }}
+            </p>
+            <p class="tv-meta">Created {{ formatDate(task.createdAt) }}</p>
+          </div>
+          <div class="pd-hero-aside">
+            <div class="pd-hero-aside__row">
+              <a
+                [routerLink]="[
+                  '/app/projects',
+                  task.projectId,
+                  'features',
+                  task.featureId,
+                  'tasks',
+                  task.id,
+                  'edit',
+                ]"
+                class="pd-edit-link"
+              >
+                <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
+                Edit
+              </a>
+              <span [class]="statusBadgeClass(task.status)">{{ statusForDisplay(task.status) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pd-bento" aria-label="Task summary">
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">origin</span>
+          <div class="tv-origin-inline">
+            @if (isAiOrigin(task.createdBy)) {
+              <span class="fv-task-origin fv-task-origin--ai tv-origin-badge">
+                <span class="material-symbols-outlined fv-task-origin__icon" aria-hidden="true">smart_toy</span>
+                AI generated
+              </span>
+            } @else {
+              <div class="tv-origin-user">
+                @if (useCreatorPhoto(task)) {
+                  <img
+                    class="tv-origin-avatar"
+                    [src]="creatorPhotoSrc(task)"
+                    [attr.alt]="'Profile photo of ' + creatorDisplayName(task)"
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                } @else {
+                  <span class="tv-origin-placeholder" aria-hidden="true">
+                    <span class="material-symbols-outlined">person</span>
+                  </span>
+                }
+                <span class="tv-origin-name">{{ creatorDisplayName(task) }}</span>
+              </div>
+            }
+          </div>
+        </div>
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">priority</span>
+          <div class="pd-priority">
+            <span [class]="taskPriorityIconClass(task.priority)" aria-hidden="true">{{
+              taskPriorityIcon(task.priority)
+            }}</span>
+            <span class="pd-priority__text">{{ taskPriorityLabel(task.priority) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pd-split">
+      <div class="pd-split__main">
+        <section class="pd-req" aria-labelledby="tv-desc-heading">
+          <div class="pd-req__toolbar">
+            <h2 id="tv-desc-heading" class="pd-req__title">
+              <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">subject</span>
+              Description
+            </h2>
+          </div>
+          <div class="pd-req__body">
+            @if (hasExpandableDescription(task.description)) {
+              <div
+                class="pd-req-expand"
+                [class.pd-req-expand--collapsed]="!descriptionExpanded()"
+                [class.pd-req-expand--expanded]="descriptionExpanded()"
+              >
+                <p class="pd-req__text">{{ taskDescriptionText(task.description) }}</p>
+              </div>
+              <button
+                type="button"
+                class="pd-view-more"
+                (click)="toggleDescriptionExpanded()"
+                [attr.aria-expanded]="descriptionExpanded()"
+              >
+                @if (descriptionExpanded()) {
+                  View less
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_less</span>
+                } @else {
+                  View more
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_more</span>
+                }
+              </button>
+            } @else {
+              <p class="pd-req__empty">No description was provided for this task.</p>
+            }
+          </div>
+        </section>
+      </div>
+
+      <aside class="pd-split__aside" aria-label="Parent context">
+        <div class="pd-ai">
+          <div class="pd-ai__content">
+            <h3 class="pd-ai__title">
+              <span class="material-symbols-outlined pd-ai__title-icon" aria-hidden="true">account_tree</span>
+              Hierarchy
+            </h3>
+            <p class="pd-ai__lede">This task belongs to the following feature and project.</p>
+
+            <div class="pd-ai__fields">
+              <div class="pd-ai__field">
+                <span class="pd-ai__label">Feature</span>
+                <div class="pd-ai__value">{{ task.featureTitle }}</div>
+              </div>
+              <div class="pd-ai__field">
+                <span class="pd-ai__label">Project</span>
+                <div class="pd-ai__value">{{ task.projectName }}</div>
+              </div>
+            </div>
+
+            <p class="pd-ai__foot">
+              <a [routerLink]="['/app/projects', task.projectId, 'features', task.featureId]" class="pd-ai__foot-link"
+                >Back to feature</a
+              >
+              ·
+              <a [routerLink]="['/app/projects', task.projectId]" class="pd-ai__foot-link">View project</a>.
+            </p>
+          </div>
+          <span class="material-symbols-outlined pd-ai__watermark" aria-hidden="true">task_alt</span>
+        </div>
+      </aside>
+    </div>
+  }
+</div>

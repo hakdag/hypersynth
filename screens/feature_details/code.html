@@ -113,34 +113,16 @@
             gap: 24px;
         }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .soft-shadow {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        }
+        .soft-shadow-lg {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.03), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+        }
     </style>
 </head>
 <body class="bg-background font-body-md text-on-surface">
 <!-- TopAppBar -->
-<header class="fixed top-0 right-0 left-0 flex items-center justify-between px-6 z-40 bg-white/80 backdrop-blur-md h-16 border-b border-slate-200">
-<div class="flex items-center gap-8">
-<span class="text-xl font-black text-blue-900 tracking-tighter font-h1">ProjectIntel</span>
-<div class="hidden md:flex items-center bg-surface-container rounded-full px-4 py-2 w-96 border border-outline-variant/30">
-<span class="material-symbols-outlined text-outline mr-2" data-icon="search">search</span>
-<input class="bg-transparent border-none focus:ring-0 text-body-sm w-full outline-none" placeholder="Search tasks, docs, and AI assets..." type="text"/>
-</div>
-</div>
-<div class="flex items-center gap-4">
-<button class="p-2 hover:bg-slate-50 transition-colors rounded-full relative">
-<span class="material-symbols-outlined text-slate-500" data-icon="notifications">notifications</span>
-<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
-</button>
-<button class="p-2 hover:bg-slate-50 transition-colors rounded-full">
-<span class="material-symbols-outlined text-slate-500" data-icon="settings">settings</span>
-</button>
-<button class="p-2 hover:bg-slate-50 transition-colors rounded-full">
-<span class="material-symbols-outlined text-slate-500" data-icon="help">help</span>
-</button>
-<div class="h-8 w-8 rounded-full overflow-hidden ml-2 ring-2 ring-surface-container">
-<img alt="User avatar" data-alt="professional portrait of a high-tech project manager with soft studio lighting and clean minimalist background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfxSQyfw6PG278-unkKO9wEYOCWF_DKfTlYjgAaGodquXBUVX-AOfavRU330Em0SZd0Ojp0ZhkMN9kBF1YRPLCqRegNh9obLQVx6qyk8o-krbg7QzKauD6QTMjo1Og-xzSArceKUpRXHurZn6O4pjrvD0Kc-DpJONx8bsUhqgskwwXxT99LlAf-m70hPFbTElvfBfJOWX9feh119kydyE68iLmKmlWQF8ZhFBDZW9ESUr1zJBN-YOMJm7wPqD2-4nLeGEWxS1Ephs"/>
-</div>
-</div>
-</header>
 <!-- SideNavBar -->
 <aside class="fixed left-0 top-0 h-full flex flex-col pt-4 pb-6 z-50 bg-white border-r border-slate-200 w-64">
 <div class="px-6 mb-8 flex items-center gap-3">
@@ -161,7 +143,7 @@
 <span class="material-symbols-outlined group-hover:text-blue-900" data-icon="folder_managed">folder_managed</span>
 <span class="font-manrope text-sm font-medium">Projects</span>
 </a>
-<a class="flex items-center gap-3 px-4 py-3 bg-blue-50 text-blue-900 border-r-4 border-blue-900 rounded-r-none rounded-lg font-bold transition-all" href="#">
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-50 text-blue-900 border-blue-900 rounded-r-none rounded-lg font-bold transition-all shadow-sm border border-blue-100/50" href="#">
 <span class="material-symbols-outlined" data-icon="rule">rule</span>
 <span class="font-manrope text-sm">Tasks</span>
 </a>
@@ -202,11 +184,11 @@
 <p class="text-slate-500 font-body-md mt-1">Orchestrating technical requirements and AI-generated workflows for the interface sprint.</p>
 </div>
 <div class="flex gap-3">
-<button class="bg-white border border-outline-variant px-md py-sm rounded-lg font-label-md text-primary flex items-center gap-2 hover:bg-surface-container transition-colors shadow-sm">
+<button class="bg-white border border-slate-100 px-md py-sm rounded-full font-label-md text-primary flex items-center gap-2 hover:bg-slate-50 transition-all soft-shadow text-[11px]">
 <span class="material-symbols-outlined text-lg" data-icon="auto_awesome">auto_awesome</span>
                         GENERATE SUBTASKS
                     </button>
-<button class="bg-primary text-white px-md py-sm rounded-lg font-label-md flex items-center gap-2 hover:opacity-90 transition-all shadow-md">
+<button class="bg-gradient-to-r from-primary to-blue-800 text-white px-md py-sm rounded-full font-label-md flex items-center gap-2 hover:opacity-95 transition-all soft-shadow text-[11px]">
 <span class="material-symbols-outlined text-lg" data-icon="add">add</span>
                         NEW FEATURE
                     </button>
@@ -215,10 +197,7 @@
 <!-- Dashboard Grid -->
 <div class="bento-grid">
 <!-- Feature Focus Card -->
-<div class="col-span-8 bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden">
-<div class="absolute top-0 right-0 p-4">
-<span class="bg-teal-50 text-teal-700 text-[10px] font-bold px-3 py-1 rounded-full border border-teal-100 uppercase tracking-tighter">Active Sprint</span>
-</div>
+<div class="col-span-8 bg-white border border-slate-200 rounded-xl p-6 relative overflow-hidden soft-shadow-lg">
 <div class="flex items-start gap-4 mb-6">
 <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100">
 <span class="material-symbols-outlined text-blue-900 text-2xl" data-icon="data_object" style="font-variation-settings: 'FILL' 1;">data_object</span>
@@ -232,7 +211,7 @@
 <div class="space-y-1">
 <span class="text-xs font-label-md text-slate-400">STATUS</span>
 <div class="flex items-center gap-2">
-<div class="w-2 h-2 bg-secondary rounded-full"></div>
+<div class="w-2.5 h-2.5 bg-secondary rounded-full ring-4 ring-secondary/10"></div>
 <span class="font-bold text-sm text-on-surface">In Progress</span>
 </div>
 </div>
@@ -252,28 +231,13 @@
 </div>
 </div>
 <div class="border-t border-slate-100 pt-6">
-<h4 class="text-sm font-bold text-slate-700 mb-3 font-h3">Technical Requirements</h4>
-<div class="grid grid-cols-2 gap-4">
-<div class="bg-surface p-3 rounded-lg border border-slate-100">
-<div class="flex items-center justify-between mb-2">
-<span class="text-xs font-bold text-blue-900">API Integration</span>
-<span class="material-symbols-outlined text-teal-600 text-[16px]" data-icon="check_circle">check_circle</span>
-</div>
-<p class="text-[12px] text-slate-500 leading-tight">Implement real-time WebSocket connection for streaming AI responses.</p>
-</div>
-<div class="bg-surface p-3 rounded-lg border border-slate-100">
-<div class="flex items-center justify-between mb-2">
-<span class="text-xs font-bold text-blue-900">LLM Orchestration</span>
-<span class="material-symbols-outlined text-slate-300 text-[16px]" data-icon="radio_button_unchecked">radio_button_unchecked</span>
-</div>
-<p class="text-[12px] text-slate-500 leading-tight">Configuring fallback mechanisms for high-latency model calls.</p>
-</div>
-</div>
+<h4 class="text-sm font-bold text-slate-700 mb-3 font-h3 flex items-center">Requirements</h4><button class="text-xs font-bold text-primary hover:underline ml-auto flex items-center gap-1">View more <span class="material-symbols-outlined text-[14px]">expand_more</span></button>
+<div class="grid grid-cols-2 gap-4"><div class="col-span-2 bg-surface p-4 rounded-xl border border-slate-100"><p class="text-body-sm text-slate-600 leading-relaxed">The suggestion engine requires real-time WebSocket integration for streaming AI responses and robust fallback mechanisms to handle high-latency model calls, ensuring a seamless user experience across all devices.</p></div></div>
 </div>
 </div>
 <!-- Side Stats -->
 <div class="col-span-4 space-y-lg">
-<div class="bg-primary text-white rounded-xl p-6 relative overflow-hidden shadow-xl">
+<div class="bg-primary text-white rounded-xl p-6 relative overflow-hidden soft-shadow">
 <div class="relative z-10">
 <h4 class="text-sm font-label-md text-blue-300 mb-4">VELOCITY INSIGHT</h4>
 <div class="text-h1 font-h1 mb-2">82%</div>
@@ -283,7 +247,7 @@
 <span class="material-symbols-outlined text-[120px]" data-icon="monitoring">monitoring</span>
 </div>
 </div>
-<div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+<div class="bg-white border border-slate-200 rounded-xl p-6 soft-shadow">
 <h4 class="text-xs font-label-md text-slate-400 mb-4">TEAM AVAILABILITY</h4>
 <div class="flex -space-x-2">
 <img alt="Team member" class="w-8 h-8 rounded-full ring-2 ring-white" data-alt="portrait of a focused software engineer working in a modern office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClkV7zOMkJ9Xdsab0d9oC_tkvyq4R_jwFo6HK-YhaU6fRtHQpsLObyH-SL9KgvcUajAxBM2lnl5GgN1TeBEg0SeimrFLXzc7Yj078zmelR8lBcSGMblhBgt2ptxAUcvGzDnMZTfzawtT6ZGbdHZcAP0DQWf7hT8Q9rqnC3185nW4ip9s0jnPkRyIi5Zj44Uv2QZO1rV2HKhSWKOlqAVBULby5Whr7_BkGBRgnuWq-uqEhZtFX7nhxHZUpZG2WdjHWi2kREHbhV_QU"/>
@@ -297,21 +261,7 @@
 </div>
 </div>
 <!-- Task List Section -->
-<div class="col-span-12 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-<div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-<div class="flex items-center gap-4">
-<h3 class="font-h3 text-primary">Detailed Task Ledger</h3>
-<div class="h-4 w-[1px] bg-slate-300"></div>
-<div class="flex gap-2">
-<span class="bg-white border border-slate-200 text-slate-500 text-[10px] font-bold px-2 py-1 rounded">All (24)</span>
-<span class="bg-blue-900 text-white text-[10px] font-bold px-2 py-1 rounded">Active (8)</span>
-</div>
-</div>
-<div class="flex gap-2">
-<button class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="filter_list">filter_list</span></button>
-<button class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined" data-icon="sort">sort</span></button>
-</div>
-</div>
+<div class="col-span-12 bg-white border border-slate-200 rounded-xl overflow-hidden soft-shadow">
 <table class="w-full text-left border-collapse">
 <thead>
 <tr class="bg-slate-50/30 text-xs font-label-md text-slate-400 border-b border-slate-100">
@@ -466,7 +416,7 @@
 </div>
 <!-- Footer Activity Bento -->
 <div class="col-span-12 grid grid-cols-4 gap-lg">
-<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 soft-shadow">
 <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
 <span class="material-symbols-outlined text-blue-900" data-icon="chat_bubble">chat_bubble</span>
 </div>
@@ -475,7 +425,7 @@
 <div class="text-[10px] font-label-md text-slate-400 uppercase">New Comments</div>
 </div>
 </div>
-<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 soft-shadow">
 <div class="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center">
 <span class="material-symbols-outlined text-teal-600" data-icon="verified_user">verified_user</span>
 </div>
@@ -484,7 +434,7 @@
 <div class="text-[10px] font-label-md text-slate-400 uppercase">Blockers</div>
 </div>
 </div>
-<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 soft-shadow">
 <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
 <span class="material-symbols-outlined text-purple-600" data-icon="history">history</span>
 </div>
@@ -493,7 +443,7 @@
 <div class="text-[10px] font-label-md text-slate-400 uppercase">Avg. Res Time</div>
 </div>
 </div>
-<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+<div class="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 soft-shadow">
 <div class="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
 <span class="material-symbols-outlined text-amber-600" data-icon="published_with_changes">published_with_changes</span>
 </div>
@@ -507,7 +457,7 @@
 </div>
 </main>
 <!-- Contextual FAB (Restricted to Dashboard/Home/Primary action) -->
-<button class="fixed bottom-8 right-8 bg-blue-900 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50 group">
+<button class="fixed bottom-8 right-8 bg-blue-900 text-white w-14 h-14 rounded-full soft-shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50 group">
 <span class="material-symbols-outlined text-3xl" data-icon="smart_toy" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
 <div class="absolute right-16 bg-white border border-slate-200 px-4 py-2 rounded-lg text-blue-900 font-bold text-sm whitespace-nowrap shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             Ask AI Assistant

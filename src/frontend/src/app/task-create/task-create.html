@@ -1,0 +1,142 @@
+<div class="fc-page">
+  @if (loadState() === 'loading') {
+    <div class="fc-banner fc-banner--loading">Loading…</div>
+  }
+
+  @if (loadState() === 'error' && pageError(); as msg) {
+    <div class="fc-banner fc-banner--error" role="alert">{{ msg }}</div>
+    <a routerLink="/app/projects" class="fc-crumb-link-fallback">← Back to projects</a>
+  }
+
+  @if (loadState() === 'ok' && project(); as p) {
+    @if (feature(); as feat) {
+      <nav class="fc-breadcrumbs" aria-label="Breadcrumb">
+        <a routerLink="/app/projects" class="fc-crumb-link">
+          <span class="material-symbols-outlined fc-crumb-icon" aria-hidden="true">folder</span>
+          Projects
+        </a>
+        <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
+        <a [routerLink]="['/app/projects', p.id]" class="fc-crumb-link">{{ p.name }}</a>
+        <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
+        <a [routerLink]="['/app/projects', p.id, 'features', feat.id]" class="fc-crumb-link">{{
+          feat.title
+        }}</a>
+        <span class="material-symbols-outlined fc-crumb-sep" aria-hidden="true">chevron_right</span>
+        <span class="fc-crumb-current">New Task</span>
+      </nav>
+
+      <header class="fc-header">
+        <h1 class="fc-title">Create Task</h1>
+        <p class="fc-subtitle">
+          Add a task under <span class="fc-subtitle-strong">{{ feat.title }}</span> in
+          <span class="fc-subtitle-strong">{{ p.name }}</span>. New tasks start as Pending.
+        </p>
+      </header>
+
+      @if (serverError(); as err) {
+        <div class="fc-banner fc-banner--error" role="alert">{{ err }}</div>
+      }
+
+      <div class="fc-card tc-card">
+        <form class="fc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <div class="fc-status-row tc-status-row">
+            <span class="fc-status-label">Status:</span>
+            <span class="fc-status-badge">
+              <span class="fc-status-dot" aria-hidden="true"></span>
+              Pending
+            </span>
+          </div>
+
+          <div class="fc-field">
+            <label class="fc-label" for="task-title">
+              Task Title <span class="fc-req" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="task-title"
+              class="fc-input"
+              type="text"
+              autocomplete="off"
+              placeholder="e.g., Wire up API client for search"
+              formControlName="title"
+              [attr.aria-invalid]="form.controls.title.invalid && form.controls.title.touched"
+              [attr.aria-describedby]="titleError() ? 'task-title-hint' : null"
+            />
+            @if (titleError(); as te) {
+              <p id="task-title-hint" class="fc-hint fc-hint-error">{{ te }}</p>
+            }
+          </div>
+
+          <div class="fc-field">
+            <label class="fc-label" for="task-priority">Priority</label>
+            <select id="task-priority" class="fc-input" formControlName="priority">
+              @for (opt of priorityOptions; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="fc-field">
+            <label class="fc-label" for="task-assignee">Assignee</label>
+            <select id="task-assignee" class="fc-input" formControlName="assigneeMode">
+              <option value="self">{{ assigneeMeLabel() }}</option>
+              <option value="none">Unassigned</option>
+            </select>
+            <p class="fc-hint">Only your account can be assigned in this workspace.</p>
+          </div>
+
+          <div class="fc-field">
+            <label class="fc-label" for="task-desc">Description <span class="fc-opt">(Optional)</span></label>
+            <div class="fc-rich-shell">
+              <div class="fc-rich-toolbar" aria-hidden="true">
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  format_bold
+                </button>
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  format_italic
+                </button>
+                <span class="fc-toolbar-divider" aria-hidden="true"></span>
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  format_list_bulleted
+                </button>
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  format_list_numbered
+                </button>
+                <span class="fc-toolbar-divider" aria-hidden="true"></span>
+                <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
+                  link
+                </button>
+              </div>
+              <textarea
+                id="task-desc"
+                class="fc-textarea"
+                formControlName="description"
+                rows="8"
+                placeholder="Steps, acceptance notes, or links…"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="fc-actions tc-actions">
+            <button type="button" class="fc-btn fc-btn-secondary" (click)="cancel()">Cancel</button>
+            <button type="submit" class="fc-btn fc-btn-primary" [disabled]="submitting()">
+              {{ submitting() ? 'Creating…' : 'Create Task' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    }
+  }
+</div>
+
+@if (showSuccess()) {
+  <div class="fc-overlay" role="dialog" aria-modal="true" aria-labelledby="tc-success-title">
+    <div class="fc-dialog">
+      <div class="fc-success-icon material-symbols-outlined" aria-hidden="true">check_circle</div>
+      <h2 id="tc-success-title" class="fc-dialog-title">Task Created</h2>
+      <p class="fc-dialog-body">Your task was added with Pending status.</p>
+      <button type="button" class="fc-btn fc-btn-primary fc-btn-block" (click)="dismissSuccess()">
+        Back to feature
+      </button>
+    </div>
+  </div>
+}

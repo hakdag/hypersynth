@@ -1,0 +1,93 @@
+/**
+ * Task view: shared `pd-*` layout from project-detail; task-specific tweaks below.
+ */
+
+:host {
+  display: block;
+}
+
+.tv-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+
+.tv-origin-inline {
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.tv-origin-user {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+}
+
+.tv-origin-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.tv-origin-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: #e2e8f0;
+  color: #64748b;
+
+  .material-symbols-outlined {
+    font-size: 1.35rem;
+  }
+}
+
+.tv-origin-name {
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #191c1e;
+}
+
+.tv-origin-badge {
+  font-size: 0.875rem;
+}
+
+.fv-task-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.fv-task-origin__icon {
+  font-size: 0.875rem;
+  line-height: 1;
+  font-variation-settings: 'FILL' 1;
+}
+
+.fv-task-origin--manual {
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.fv-task-origin--ai {
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  color: #3124b8;
+  background: #e1e0ff;
+}

@@ -63,14 +63,145 @@
               <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
               Project Requirements
             </h2>
-            <span class="pd-req__ro"><a [routerLink]="['/app/projects', p.id, 'edit']" class="pd-req__edit">Edit</a></span>
           </div>
           <div class="pd-req__body">
-            @if (p.requirements && p.requirements.trim().length > 0) {
-              <p class="pd-req__text">{{ p.requirements }}</p>
+            @if (hasExpandableProjectRequirements(p.requirements)) {
+              <div
+                class="pd-req-expand"
+                [class.pd-req-expand--collapsed]="!requirementsExpanded()"
+                [class.pd-req-expand--expanded]="requirementsExpanded()"
+              >
+                <p class="pd-req__text">{{ projectRequirementsText(p.requirements) }}</p>
+              </div>
+              <button
+                type="button"
+                class="pd-view-more"
+                (click)="toggleRequirementsExpanded()"
+                [attr.aria-expanded]="requirementsExpanded()"
+              >
+                @if (requirementsExpanded()) {
+                  View less
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_less</span>
+                } @else {
+                  View more
+                  <span class="material-symbols-outlined pd-view-more__icon" aria-hidden="true">expand_more</span>
+                }
+              </button>
             } @else {
               <p class="pd-req__empty">No requirements were provided for this project.</p>
             }
+          </div>
+        </section>
+
+        <section class="pd-features" aria-labelledby="pd-features-heading">
+          @if (featuresLoadError(); as feMsg) {
+            <div class="pd-features__banner" role="alert">{{ feMsg }}</div>
+          }
+          <div class="pd-features__toolbar">
+            <h2 id="pd-features-heading" class="pd-features__title">
+              <span class="material-symbols-outlined pd-features__title-icon" aria-hidden="true">rule</span>
+              Features
+            </h2>
+            <a [routerLink]="['/app/projects', p.id, 'features', 'new']" class="pd-features__new-feature">
+              <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true">add</span>
+              New Feature
+            </a>
+          </div>
+          @if (!featuresLoadError() && features().length === 0) {
+            <p class="pd-features__empty">
+              No features yet. Add a feature to capture requirements for part of this project.
+            </p>
+          }
+          @if (features().length > 0) {
+            <ul class="pd-features__list">
+              @for (f of features(); track f.id) {
+                <li class="pd-features__item">
+                  <a [routerLink]="['/app/projects', p.id, 'features', f.id]" class="pd-features__link">
+                    <span class="pd-features__name">{{ f.title }}</span>
+                    <span [class]="statusBadgeClass(f.status)">{{ statusForDisplay(f.status) }}</span>
+                    <span class="material-symbols-outlined pd-features__chev" aria-hidden="true"
+                      >chevron_right</span
+                    >
+                  </a>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="pd-documents" aria-labelledby="pd-documents-heading">
+          <div class="pd-features__toolbar">
+            <h2 id="pd-documents-heading" class="pd-features__title">
+              <span class="material-symbols-outlined pd-features__title-icon" aria-hidden="true">folder</span>
+              Associated Documents
+            </h2>
+            <button type="button" class="pd-features__new-feature" (click)="openDocumentUploadModal()">
+              <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true">upload_file</span>
+              Upload New
+            </button>
+          </div>
+          @if (documentUploadSuccess(); as uploadMsg) {
+            <div class="pd-documents__banner pd-documents__banner--success" role="status">{{ uploadMsg }}</div>
+          }
+          @if (documentsLoadError(); as documentsMsg) {
+            <div class="pd-features__banner" role="alert">{{ documentsMsg }}</div>
+          }
+          @if (documentDownloadError(); as downloadMsg) {
+            <div class="pd-features__banner" role="alert">{{ downloadMsg }}</div>
+          }
+          <div class="pd-documents__table-wrap">
+            <table class="pd-documents__table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Size</th>
+                  <th scope="col">Added</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (!documentsLoadError() && documents().length === 0) {
+                  <tr>
+                    <td colspan="5" class="pd-documents__empty">
+                      No associated documents yet. Upload project documents to make them visible here.
+                    </td>
+                  </tr>
+                }
+                @for (document of documents(); track document.id) {
+                  <tr>
+                    <td class="pd-documents__name">{{ documentName(document) }}</td>
+                    <td class="pd-documents__type">{{ documentType(document) }}</td>
+                    <td class="pd-documents__size">{{ documentSize(document) }}</td>
+                    <td class="pd-documents__date">{{ documentAddedLabel(document.createdAt) }}</td>
+                    <td class="pd-documents__action-cell">
+                      <div class="pd-documents__actions">
+                        <button
+                          type="button"
+                          class="pd-upload-modal__close pd-document-action"
+                          (click)="openDocumentViewModal(document)"
+                          [disabled]="!canViewProjectDocument(document) || isViewingDocument(document)"
+                          [attr.aria-label]="documentViewLabel(document)"
+                          [attr.title]="documentViewTitle(document)"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">visibility</span>
+                        </button>
+                        <button
+                          type="button"
+                          class="pd-upload-modal__close pd-document-action"
+                          (click)="downloadProjectDocument(document)"
+                          [disabled]="downloadingDocumentId() === document.id"
+                          [attr.aria-label]="'Download ' + documentName(document)"
+                          title="Download document"
+                        >
+                          <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
@@ -110,5 +241,135 @@
         </div>
       </aside>
     </div>
+
+    @if (documentUploadModalOpen()) {
+      <div class="pd-modal-backdrop" role="presentation" (click)="closeDocumentUploadModal()">
+        <section
+          class="pd-upload-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pd-upload-modal-heading"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="pd-upload-modal__header">
+            <h2 id="pd-upload-modal-heading" class="pd-upload-modal__title">Upload Project Documents</h2>
+            <button
+              type="button"
+              class="pd-upload-modal__close"
+              (click)="closeDocumentUploadModal()"
+              [disabled]="documentUploadState() === 'uploading'"
+              aria-label="Close upload dialog"
+            >
+              <span class="material-symbols-outlined" aria-hidden="true">close</span>
+            </button>
+          </div>
+
+          <div class="pd-upload-modal__body">
+            <p class="pd-upload-modal__lede">
+              Add Markdown, text, Excel, Word, or common image files to this project.
+            </p>
+            <label class="pd-file-picker">
+              <span class="material-symbols-outlined pd-file-picker__icon" aria-hidden="true">upload_file</span>
+              <span class="pd-file-picker__copy">Choose files</span>
+              <input
+                type="file"
+                multiple
+                [attr.accept]="acceptedDocumentTypes"
+                (change)="onDocumentFilesSelected($event)"
+                [disabled]="documentUploadState() === 'uploading'"
+              />
+            </label>
+
+            @if (selectedDocumentFiles().length > 0) {
+              <ul class="pd-upload-modal__files">
+                @for (file of selectedDocumentFiles(); track file.name + file.size + file.lastModified) {
+                  <li>{{ file.name }}</li>
+                }
+              </ul>
+            }
+
+            @if (documentUploadError(); as uploadError) {
+              <div class="pd-upload-modal__error" role="alert">{{ uploadError }}</div>
+            }
+          </div>
+
+          <div class="pd-upload-modal__footer">
+            <button
+              type="button"
+              class="pd-upload-modal__secondary"
+              (click)="closeDocumentUploadModal()"
+              [disabled]="documentUploadState() === 'uploading'"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="pd-upload-modal__primary"
+              (click)="uploadSelectedDocuments()"
+              [disabled]="documentUploadState() === 'uploading'"
+            >
+              @if (documentUploadState() === 'uploading') {
+                Uploading…
+              } @else {
+                Upload
+              }
+            </button>
+          </div>
+        </section>
+      </div>
+    }
+
+    @if (documentPreviewModalOpen()) {
+      @if (documentPreview(); as preview) {
+        <div class="pd-modal-backdrop" role="presentation" (click)="closeDocumentViewModal()">
+          <section
+            class="pd-upload-modal pd-preview-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pd-preview-modal-heading"
+            (click)="$event.stopPropagation()"
+          >
+            <div class="pd-upload-modal__header">
+              <div>
+                <h2 id="pd-preview-modal-heading" class="pd-upload-modal__title">
+                  {{ documentName(preview.document) }}
+                </h2>
+                <p class="pd-preview-modal__meta">{{ documentType(preview.document) }}</p>
+              </div>
+              <button
+                type="button"
+                class="pd-upload-modal__close"
+                (click)="closeDocumentViewModal()"
+                aria-label="Close document preview"
+              >
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
+              </button>
+            </div>
+
+            <div class="pd-upload-modal__body" style="max-height: 32rem; overflow: auto">
+              @if (preview.status === 'loading') {
+                <div class="pd-preview-modal__state" role="status">Loading preview…</div>
+              }
+              @if (preview.status === 'error') {
+                <div class="pd-upload-modal__error" role="alert">
+                  {{ preview.error || 'Could not load document preview.' }}
+                </div>
+              }
+              @if (preview.status === 'ready' && preview.kind === 'image' && preview.objectUrl) {
+                <img
+                  class="pd-preview-modal__image"
+                  style="display: block; max-width: 100%; margin: 0 auto"
+                  [src]="preview.objectUrl"
+                  [alt]="'Preview of ' + documentName(preview.document)"
+                />
+              }
+              @if (preview.status === 'ready' && preview.kind === 'text') {
+                <pre style="margin: 0; white-space: pre-wrap">{{ preview.text }}</pre>
+              }
+            </div>
+          </section>
+        </div>
+      }
+    }
   }
 </div>
