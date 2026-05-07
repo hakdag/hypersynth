@@ -24,19 +24,23 @@ The project starts from scratch. The sub-features below are ordered so that each
 - [SF-11 — Task Listing and Detail View](./12-sf-11-task-listing-and-detail-view.md)
 - [SF-12 — Task Editing and Status Management](./13-sf-12-task-editing-and-status-management.md)
 - [SF-13 — Project Document Upload](./14-sf-13-project-document-upload.md)
-- [SF-14 — Project Document Listing and Selection](./15-sf-14-project-document-listing-and-selection.md)
-- [SF-15 — AI API Key Configuration Per Project](./16-sf-15-ai-api-key-configuration-per-project.md)
-- [SF-16 — AI Enhancement of Project Requirements](./17-sf-16-ai-enhancement-of-project-requirements.md)
-- [SF-17 — AI Enhancement of Feature Requirements](./18-sf-17-ai-enhancement-of-feature-requirements.md)
-- [SF-18 — AI Task Generation From Feature Requirements](./19-sf-18-ai-task-generation-from-feature-requirements.md)
+- [SF-14 — Project Document Listing](./15-sf-14-project-document-listing.md)
+- [SF-15 — Project Document Download](./16-sf-15-project-document-download.md)
+- [SF-16 — Project Document View](./17-sf-16-project-document-view.md)
+- [SF-17 — AI API Key Configuration Per Project](./18-sf-17-ai-api-key-configuration-per-project.md)
+- [SF-18 — AI Enhancement of Project Requirements](./19-sf-18-ai-enhancement-of-project-requirements.md)
+- [SF-19 — AI Enhancement of Feature Requirements](./20-sf-19-ai-enhancement-of-feature-requirements.md)
+- [SF-20 — AI Task Generation From Feature Requirements](./21-sf-20-ai-task-generation-from-feature-requirements.md)
+- [SF-21 — Project Document Selection for AI](./22-sf-21-project-document-selection-for-ai.md)
 
 ## Recommended Delivery Order
 
 1. Build the project shell and authentication foundation.
 2. Enforce personal workspace isolation before adding user-owned business data.
 3. Deliver Project → Feature → Task management manually.
-4. Add document upload and document selection.
+4. Add document upload, listing, download, and supported in-app viewing.
 5. Add AI configuration and AI-assisted workflows one capability at a time.
+6. Add explicit document selection for AI requests after the base AI workflows exist.
 
 ## Notes
 

@@ -1,4 +1,4 @@
-# SF-18 — AI Task Generation From Feature Requirements
+# SF-20 — AI Task Generation From Feature Requirements
 
 ## Purpose
 
@@ -17,7 +17,6 @@ This sub-feature is designed to be independently implementable, testable, and de
 - Provide a generate tasks action from a feature detail view.
 - Use feature requirements as primary input.
 - Use parent project requirements as optional context when available.
-- Allow selected project documents to be included as optional context.
 - Require the parent project to have an AI API key configured before executing the request.
 - Generate a list of task candidates with title and description.
 - Allow the user to review generated task candidates before saving.
@@ -32,16 +31,16 @@ This sub-feature is designed to be independently implementable, testable, and de
 - Sprint planning.
 - AI regeneration or merge conflict handling.
 - Approval roles beyond user review.
+- Document selection or document content inclusion for AI requests.
 
 ## Dependencies
 
 - SF-12 Task Editing and Status Management
-- SF-14 Project Document Listing and Selection
-- SF-15 AI API Key Configuration Per Project
+- SF-17 AI API Key Configuration Per Project
 
 ## Independent Deployment Notes
 
-Can be deployed after basic task management and AI configuration exist. It creates tasks but does not require advanced project planning features.
+Can be deployed after basic task management and AI configuration exist. It creates tasks but does not require advanced project planning features or document selection for AI.
 
 ## User Stories
 
@@ -63,12 +62,11 @@ Can be deployed after basic task management and AI configuration exist. It creat
 
 - Reads Feature.requirements.
 - Reads parent Project.requirements and Project.ai_api_key.
-- May read selected Document metadata/content as context.
 - Creates Task records: feature_id, title, description, status, created_by.
 
 ## Security and Isolation Requirements
 
-- Only owner-controlled project, feature, and selected document data are sent to AI.
+- Only owner-controlled project and feature data is sent to AI.
 - AI API key must not be exposed.
 - Failed AI requests must not create partial or corrupted task records.
 

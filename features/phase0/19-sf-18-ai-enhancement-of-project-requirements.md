@@ -1,4 +1,4 @@
-# SF-16 — AI Enhancement of Project Requirements
+# SF-18 — AI Enhancement of Project Requirements
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Allow a user to request AI-enhanced project requirements for a selected project.
 
 ## Summary
 
-This sub-feature uses the project requirements and optional selected documents to produce an improved requirement draft for the project.
+This sub-feature uses the project requirements to produce an improved requirement draft for the project.
 
 ## Scrum-Oriented Delivery Principle
 
@@ -16,7 +16,6 @@ This sub-feature is designed to be independently implementable, testable, and de
 
 - Provide an AI enhance action for project requirements.
 - Use existing project requirements as primary input.
-- Allow selected project documents to be included as optional context.
 - Require the project to have an AI API key configured before executing the request.
 - Generate enhanced project requirements as a result.
 - Allow the user to review the enhanced result before replacing the existing requirements.
@@ -29,16 +28,16 @@ This sub-feature is designed to be independently implementable, testable, and de
 - Automated acceptance without user review.
 - AI workflow orchestration beyond a single request.
 - Provider-specific prompt or model configuration.
+- Document selection or document content inclusion for AI requests.
 
 ## Dependencies
 
 - SF-06 Project Editing and Status Management
-- SF-14 Project Document Listing and Selection
-- SF-15 AI API Key Configuration Per Project
+- SF-17 AI API Key Configuration Per Project
 
 ## Independent Deployment Notes
 
-Can be deployed as the first AI capability. It only affects project requirements and does not require feature or task AI generation.
+Can be deployed as the first AI capability. It only affects project requirements and does not require feature AI enhancement, task AI generation, or document selection for AI.
 
 ## User Stories
 
@@ -49,7 +48,6 @@ Can be deployed as the first AI capability. It only affects project requirements
 
 - AI enhancement is available only for projects owned by the authenticated user.
 - The action requires an AI API key configured for the project.
-- The request can include selected documents belonging to the same project.
 - The generated result is shown for review before saving.
 - Existing project requirements are replaced only after explicit user acceptance.
 - If AI request fails, the original requirements remain unchanged.
@@ -57,12 +55,12 @@ Can be deployed as the first AI capability. It only affects project requirements
 ## Data Requirements
 
 - Reads Project.requirements.
-- May read selected Document metadata/content as context.
+- Reads Project.ai_api_key.
 - Updates Project.requirements only after user acceptance.
 
 ## Security and Isolation Requirements
 
-- Only owner-controlled project data and selected documents are sent to AI.
+- Only owner-controlled project data is sent to AI.
 - AI API key must be used without exposing it in the interface or logs.
 - Failed AI requests must not corrupt existing requirements.
 
