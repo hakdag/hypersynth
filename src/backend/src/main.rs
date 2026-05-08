@@ -1,8 +1,11 @@
 mod app_state;
 mod auth_route;
 mod configs;
+mod crypto;
+mod project_api_key_service;
 mod project_route;
 mod register_route;
+mod runtime_decrypt_error;
 mod types;
 
 use std::path::Path;
@@ -90,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool,
         session_max_age_secs: config.session_max_age_secs,
         document_upload_dir: config.document_upload_dir,
+        api_key_encryption_key: config.api_key_encryption_key,
     };
 
     let app = Router::new()

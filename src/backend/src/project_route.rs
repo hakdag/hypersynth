@@ -12,10 +12,13 @@ use tracing::{info, warn};
 
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::crypto::ApiKeyCipher;
+use crate::project_api_key_service::ProjectApiKeyService;
 use crate::types::{
-    ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
-    ProjectDetailResponse, ProjectDocumentResponse, ProjectResponse, TaskDetailResponse,
-    TaskResponse, UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
+    ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange, CreateFeatureRequest, CreateProjectRequest,
+    CreateTaskRequest, FeatureResponse, ProjectDetailResponse, ProjectDocumentResponse,
+    ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
+    UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -92,7 +95,7 @@ pub async fn get_project(
             requirements,
             status,
             created_at,
-            (ai_api_key IS NOT NULL AND btrim(ai_api_key) <> '') AS has_ai_api_key
+            (encrypted_api_key IS NOT NULL) AS has_ai_api_key
         FROM projects
         WHERE id = $1 AND user_id = $2
         "#,
@@ -172,16 +175,33 @@ pub async fn create_project(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
-    let ai_key = payload
+    let ai_key_plaintext = payload
         .ai_api_key
         .as_ref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
+    let encrypted_api_key = match ai_key_plaintext.as_deref() {
+        Some(plaintext) => {
+            let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
+            let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
+                warn!(error = %e, user_id = %user.id, "create_project: encryption failed");
+                internal_error()
+            })?;
+            Some(ciphertext)
+        }
+        None => None,
+    };
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, "create_project: begin tx failed");
+        internal_error()
+    })?;
+
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
-        INSERT INTO projects (user_id, name, requirements, status, ai_api_key)
+        INSERT INTO projects (user_id, name, requirements, status, encrypted_api_key)
         VALUES ($1, $2, $3, 'Pending', $4)
         RETURNING id, user_id, name, requirements, status, created_at
         "#,
@@ -189,11 +209,30 @@ pub async fn create_project(
     .bind(user.id)
     .bind(name)
     .bind(requirements.as_ref())
-    .bind(ai_key.as_ref())
-    .fetch_one(&state.pool)
+    .bind(encrypted_api_key.as_deref())
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, "create_project: insert failed");
+        internal_error()
+    })?;
+
+    if encrypted_api_key.is_some() {
+        ProjectApiKeyService::record_audit(
+            &mut *tx,
+            row.id,
+            user.id,
+            ApiKeyAuditEvent::Created,
+        )
+        .await
+        .map_err(|e| {
+            warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: audit insert failed");
+            internal_error()
+        })?;
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: commit failed");
         internal_error()
     })?;
 
@@ -201,6 +240,7 @@ pub async fn create_project(
         project_id = %row.id,
         user_id = %user.id,
         project_status = %row.status,
+        ai_key_audited = encrypted_api_key.is_some(),
         "api: POST /api/v1/projects -> 201 CREATED"
     );
 
@@ -257,6 +297,37 @@ pub async fn update_project(
         Some(requirements_trimmed.to_string())
     };
 
+    let new_key_plaintext = payload
+        .ai_api_key
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let key_action = if payload.clear_ai_api_key {
+        ApiKeyChange::Clear
+    } else if let Some(plaintext) = new_key_plaintext.as_deref() {
+        let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
+        let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
+            warn!(error = %e, user_id = %user.id, %project_id, "update_project: encryption failed");
+            internal_error()
+        })?;
+        ApiKeyChange::Replace(ciphertext)
+    } else {
+        ApiKeyChange::Leave
+    };
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "update_project: begin tx failed");
+        internal_error()
+    })?;
+
+    let new_ciphertext: Option<&[u8]> = match &key_action {
+        ApiKeyChange::Replace(bytes) => Some(bytes.as_slice()),
+        ApiKeyChange::Clear | ApiKeyChange::Leave => None,
+    };
+    let clear_flag = matches!(key_action, ApiKeyChange::Clear);
+
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
         UPDATE projects
@@ -264,10 +335,10 @@ pub async fn update_project(
             name = $1,
             requirements = $2,
             status = $3,
-            ai_api_key = CASE
+            encrypted_api_key = CASE
                 WHEN $4::boolean THEN NULL
-                WHEN $5 IS NOT NULL AND btrim($5) <> '' THEN btrim($5)
-                ELSE ai_api_key
+                WHEN $5::bytea IS NOT NULL THEN $5::bytea
+                ELSE encrypted_api_key
             END
         WHERE id = $6 AND user_id = $7
         RETURNING id, user_id, name, requirements, status, created_at
@@ -276,11 +347,11 @@ pub async fn update_project(
     .bind(name)
     .bind(requirements_for_db.as_ref())
     .bind(status)
-    .bind(payload.clear_ai_api_key)
-    .bind(payload.ai_api_key.as_ref())
+    .bind(clear_flag)
+    .bind(new_ciphertext)
     .bind(project_id)
     .bind(user.id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "update_project: update failed");
@@ -296,10 +367,30 @@ pub async fn update_project(
         return Err(not_found("Project not found."));
     };
 
+    let audit_event = match &key_action {
+        ApiKeyChange::Clear => Some(ApiKeyAuditEvent::Cleared),
+        ApiKeyChange::Replace(_) => Some(ApiKeyAuditEvent::Replaced),
+        ApiKeyChange::Leave => None,
+    };
+    if let Some(event) = audit_event {
+        ProjectApiKeyService::record_audit(&mut *tx, row.id, user.id, event)
+            .await
+            .map_err(|e| {
+                warn!(error = %e, user_id = %user.id, %project_id, "update_project: audit insert failed");
+                internal_error()
+            })?;
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "update_project: commit failed");
+        internal_error()
+    })?;
+
     info!(
         user_id = %user.id,
         project_id = %row.id,
         project_status = %row.status,
+        ai_key_audited = audit_event.is_some(),
         "api: PATCH /api/v1/projects/:id -> 200 OK"
     );
 

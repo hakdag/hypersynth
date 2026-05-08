@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aes-gcm = "0.10"
 argon2 = "0.5"
 axum = { version = "0.8", features = ["multipart"] }
 axum-extra = { version = "0.12.6", features = ["cookie"] }
+base64 = "0.22"
 chrono = { version = "0.4.44", features = ["serde"] }
 dotenvy = "0.15"
 hex = "0.4.3"

@@ -1,4 +1,6 @@
 mod api_error_body;
+mod api_key_audit_event;
+mod api_key_change;
 mod bootstrap_response;
 mod create_feature_request;
 mod create_project_request;
@@ -19,6 +21,8 @@ mod update_project_request;
 mod update_task_request;
 
 pub use api_error_body::ApiErrorBody;
+pub use api_key_audit_event::ApiKeyAuditEvent;
+pub use api_key_change::ApiKeyChange;
 pub use bootstrap_response::BootstrapResponse;
 pub use create_feature_request::CreateFeatureRequest;
 pub use create_project_request::CreateProjectRequest;
