@@ -3,6 +3,8 @@ use std::env;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 
+use crate::configs::AnthropicConfig;
+
 const API_KEY_ENCRYPTION_KEY_LEN: usize = 32;
 
 /// Application configuration loaded from the environment.
@@ -13,6 +15,7 @@ pub struct AppConfig {
     pub session_max_age_secs: i64,
     pub document_upload_dir: String,
     pub api_key_encryption_key: [u8; API_KEY_ENCRYPTION_KEY_LEN],
+    pub anthropic_config: AnthropicConfig,
 }
 
 impl AppConfig {
@@ -42,6 +45,7 @@ impl AppConfig {
             env::var("DOCUMENT_UPLOAD_DIR").unwrap_or_else(|_| "./uploaded-documents".into());
 
         let api_key_encryption_key = parse_api_key_encryption_key()?;
+        let anthropic_config = AnthropicConfig::from_env()?;
 
         Ok(Self {
             port,
@@ -50,6 +54,7 @@ impl AppConfig {
             session_max_age_secs,
             document_upload_dir,
             api_key_encryption_key,
+            anthropic_config,
         })
     }
 }

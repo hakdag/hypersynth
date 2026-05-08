@@ -31,6 +31,10 @@ export interface ProjectDetail extends CreatedProject {
   hasAiApiKey: boolean;
 }
 
+export interface EnhanceProjectRequirementsResponse {
+  enhancedRequirements: string;
+}
+
 export interface CreatedFeature {
   id: string;
   projectId: string;
@@ -126,6 +130,11 @@ export class ProjectApiService {
       aiApiKey: payload.aiApiKey.trim().length > 0 ? payload.aiApiKey.trim() : null,
     };
     return this.http.patch<CreatedProject>(url, body);
+  }
+
+  enhanceProjectRequirements(projectId: string): Observable<EnhanceProjectRequirementsResponse> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/ai/enhance-requirements`;
+    return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
   }
 
   createFeature(
@@ -460,6 +469,20 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not save project (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static enhanceErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not enhance requirements (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

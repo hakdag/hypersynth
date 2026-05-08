@@ -28,6 +28,9 @@
     @if (serverError(); as err) {
       <div class="pc-banner pc-banner-error" role="alert">{{ err }}</div>
     }
+    @if (enhanceError(); as enhanceMsg) {
+      <div class="pc-banner pc-banner-error" role="alert">{{ enhanceMsg }}</div>
+    }
 
     <div class="pc-grid">
       <section class="pc-main">
@@ -55,7 +58,18 @@
             </div>
 
             <div class="pc-field">
-              <span class="pc-label">Project Requirements</span>
+              <div class="pc-label" style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem">
+                <span>Project Requirements</span>
+                <button
+                  type="button"
+                  class="pc-btn pc-btn-ghost"
+                  (click)="enhanceWithAi()"
+                  [disabled]="!canEnhanceRequirements()"
+                  [attr.title]="enhanceRequirementsDisabledReason()"
+                >
+                  <span class="pc-btn-text">{{ enhancing() ? 'Enhancing…' : 'Enhance with AI' }}</span>
+                </button>
+              </div>
               <div class="pc-rich-shell">
                 <div class="pc-rich-toolbar" aria-hidden="true">
                   <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">format_bold</button>
@@ -202,6 +216,34 @@
       <button type="button" class="pc-btn pc-btn-primary pc-btn-block" (click)="dismissSuccessToDetail()">
         <span class="pc-btn-text">View project</span>
       </button>
+    </div>
+  </div>
+}
+
+@if (draftRequirements(); as draft) {
+  <div class="pc-overlay" role="dialog" aria-modal="true" aria-labelledby="pe-enhance-review-title">
+    <div class="pc-dialog" style="max-width: 70rem; width: min(95vw, 70rem)">
+      <h2 id="pe-enhance-review-title" class="pc-dialog-title">Review AI-enhanced requirements</h2>
+      <div
+        class="pc-dialog-body"
+        style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left; max-height: 60vh; overflow: auto"
+      >
+        <section>
+          <h3 style="margin: 0 0 0.5rem">Current</h3>
+          <pre style="margin: 0; white-space: pre-wrap">{{ originalRequirements() }}</pre>
+        </section>
+        <section>
+          <h3 style="margin: 0 0 0.5rem">Enhanced draft</h3>
+          <pre style="margin: 0; white-space: pre-wrap">{{ draft }}</pre>
+        </section>
+      </div>
+      <div class="pc-actions">
+        <button type="button" class="pc-btn pc-btn-ghost" (click)="rejectDraft()">Reject</button>
+        <button type="button" class="pc-btn pc-btn-ghost" (click)="rejectDraft()">Cancel</button>
+        <button type="button" class="pc-btn pc-btn-primary" (click)="acceptDraft()">
+          <span class="pc-btn-text">Accept draft</span>
+        </button>
+      </div>
     </div>
   </div>
 }

@@ -36,6 +36,10 @@ export class ProjectEdit implements OnInit, OnDestroy {
   protected readonly serverError = signal<string | null>(null);
   protected readonly showSuccess = signal(false);
   protected readonly apiKeyVisible = signal(false);
+  protected readonly enhancing = signal(false);
+  protected readonly enhanceError = signal<string | null>(null);
+  protected readonly draftRequirements = signal<string | null>(null);
+  protected readonly originalRequirements = signal('');
 
   protected readonly statuses = STATUSES;
 
@@ -147,6 +151,71 @@ export class ProjectEdit implements OnInit, OnDestroy {
           this.serverError.set(ProjectApiService.updateErrorMessage(err));
         },
       });
+  }
+
+  protected canEnhanceRequirements(): boolean {
+    if (!this.hadAiApiKey()) {
+      return false;
+    }
+    if (this.submitting() || this.enhancing() || this.loadState() !== 'ok') {
+      return false;
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    return requirements.trim().length > 0;
+  }
+
+  protected enhanceRequirementsDisabledReason(): string {
+    if (!this.hadAiApiKey()) {
+      return 'Add an AI API key to use this.';
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    if (requirements.trim().length === 0) {
+      return 'Add project requirements first.';
+    }
+    return '';
+  }
+
+  protected enhanceWithAi(): void {
+    this.enhanceError.set(null);
+    if (!this.canEnhanceRequirements()) {
+      const reason = this.enhanceRequirementsDisabledReason();
+      if (reason.length > 0) {
+        this.enhanceError.set(reason);
+      }
+      return;
+    }
+
+    const id = this.projectId();
+    const currentRequirements = this.form.controls.requirements.value ?? '';
+    this.originalRequirements.set(currentRequirements);
+    this.enhancing.set(true);
+    this.projectApi
+      .enhanceProjectRequirements(id)
+      .pipe(finalize(() => this.enhancing.set(false)))
+      .subscribe({
+        next: (result) => {
+          this.draftRequirements.set(result.enhancedRequirements);
+        },
+        error: (err: unknown) => {
+          this.enhanceError.set(ProjectApiService.enhanceErrorMessage(err));
+        },
+      });
+  }
+
+  protected acceptDraft(): void {
+    const draft = this.draftRequirements();
+    if (!draft) {
+      return;
+    }
+    this.form.patchValue({ requirements: draft });
+    this.form.controls.requirements.markAsDirty();
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
+  }
+
+  protected rejectDraft(): void {
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
   }
 
   protected cancel(): void {

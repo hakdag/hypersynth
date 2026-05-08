@@ -10,15 +10,16 @@ use axum_extra::extract::cookie::CookieJar;
 use serde_json::json;
 use tracing::{info, warn};
 
+use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::crypto::ApiKeyCipher;
 use crate::project_api_key_service::ProjectApiKeyService;
 use crate::types::{
     ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange, CreateFeatureRequest, CreateProjectRequest,
-    CreateTaskRequest, FeatureResponse, ProjectDetailResponse, ProjectDocumentResponse,
-    ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
-    UpdateTaskRequest,
+    CreateTaskRequest, EnhanceProjectRequirementsResponse, FeatureResponse, ProjectDetailResponse,
+    ProjectDocumentResponse, ProjectResponse, TaskDetailResponse, TaskResponse,
+    UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -492,6 +493,120 @@ pub async fn create_feature(
     );
 
     Ok((StatusCode::CREATED, Json(row)))
+}
+
+pub async fn enhance_project_requirements(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<EnhanceProjectRequirementsResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        "api: POST /api/v1/projects/:id/ai/enhance-requirements"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/ai/enhance-requirements -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let project_row = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"
+        SELECT name, requirements
+        FROM projects
+        WHERE id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            "enhance_project_requirements: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some((project_name, requirements_opt)) = project_row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/ai/enhance-requirements -> 404"
+        );
+        return Err(not_found("Project not found."));
+    };
+
+    let requirements = requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            bad_request("Project requirements are required before AI enhancement.")
+        })?;
+
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "enhance_project_requirements: decrypt_for_runtime failed"
+            );
+            internal_error()
+        })?
+        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+
+    let enhanced_requirements = state
+        .anthropic
+        .enhance_requirements(&api_key, &project_name, requirements)
+        .await
+        .map_err(|e| {
+            let status = match e {
+                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                    StatusCode::BAD_GATEWAY
+                }
+            };
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "enhance_project_requirements: provider call failed"
+            );
+            (
+                status,
+                Json(ApiErrorBody {
+                    message:
+                        "Could not generate enhanced requirements right now. Please try again."
+                            .into(),
+                }),
+            )
+        })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        input_len = requirements.len(),
+        output_len = enhanced_requirements.len(),
+        "api: POST /api/v1/projects/:id/ai/enhance-requirements -> 200 OK"
+    );
+
+    Ok(Json(EnhanceProjectRequirementsResponse {
+        enhanced_requirements,
+    }))
 }
 
 pub async fn list_project_features(
