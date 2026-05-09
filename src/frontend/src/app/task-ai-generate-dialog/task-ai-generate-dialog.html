@@ -1,0 +1,75 @@
+<div
+  class="tag-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="tag-dialog-title"
+  (click)="cancel()"
+>
+  <div class="tag-dialog tag-dialog--wide" (click)="$event.stopPropagation()">
+    <h2 id="tag-dialog-title" class="tag-dialog-title">Review AI-generated tasks</h2>
+    @if (projectName().trim().length > 0) {
+      <p class="tag-dialog-sub">Project: {{ projectName() }}</p>
+    }
+
+    @if (error(); as errMsg) {
+      <div class="tag-banner tag-banner--error" role="alert">{{ errMsg }}</div>
+    }
+
+    @if (generating() && proposed().length === 0) {
+      <p class="tag-loading">Generating tasks…</p>
+    } @else if (proposed().length === 0 && !generating()) {
+      <p class="tag-empty">No tasks were returned. Try again or adjust your feedback.</p>
+      @if (error()) {
+        <p class="tag-retry-wrap">
+          <button type="button" class="tag-btn tag-btn-secondary" (click)="retryGeneration()">
+            Try again
+          </button>
+        </p>
+      }
+    } @else {
+      <ul class="tag-task-list">
+        @for (t of proposed(); track $index) {
+          <li class="tag-task-card">
+            <h3 class="tag-task-title">{{ t.title }}</h3>
+            <p class="tag-task-desc">{{ t.description || '—' }}</p>
+          </li>
+        }
+      </ul>
+    }
+
+    <label class="tag-label" for="tag-feedback">Request changes</label>
+    <textarea
+      id="tag-feedback"
+      class="tag-textarea"
+      name="feedback"
+      rows="4"
+      placeholder="Describe how you want the task list revised (e.g. add testing tasks, split work differently)…"
+      [(ngModel)]="feedbackDraft"
+      [disabled]="generating() || accepting()"
+    ></textarea>
+
+    <div class="tag-dialog-actions">
+      <button type="button" class="tag-btn tag-btn-secondary" (click)="cancel()" [disabled]="accepting()">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="tag-btn tag-btn-secondary"
+        (click)="regenerate()"
+        [disabled]="regenerateDisabled() || accepting()"
+      >
+        {{ generating() ? 'Regenerating…' : 'Regenerate with feedback' }}
+      </button>
+      <button
+        type="button"
+        class="tag-btn tag-btn-primary"
+        (click)="acceptAll()"
+        [disabled]="
+          generating() || accepting() || proposed().length === 0
+        "
+      >
+        {{ accepting() ? 'Saving…' : 'Accept all' }}
+      </button>
+    </div>
+  </div>
+</div>

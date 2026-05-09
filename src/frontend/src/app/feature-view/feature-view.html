@@ -121,15 +121,31 @@
                   <span class="material-symbols-outlined fv-tasks__title-icon" aria-hidden="true">checklist</span>
                   Tasks
                 </h2>
-                <a
-                  [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
-                  class="pd-features__new-feature fv-tasks__create"
-                >
-                  <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
-                    >add_task</span
+                <div class="fv-tasks__actions">
+                  <button
+                    type="button"
+                    class="fv-tasks__ai-btn"
+                    (click)="openAiTaskDialog()"
+                    [disabled]="aiGenerateDisabled(proj, meta)"
+                    [attr.title]="
+                      aiGenerateDisabled(proj, meta) ? aiGenerateDisabledReason(proj, meta) : null
+                    "
                   >
-                  Create task
-                </a>
+                    <span class="material-symbols-outlined fv-tasks__ai-btn-icon" aria-hidden="true"
+                      >smart_toy</span
+                    >
+                    Generate Tasks with AI
+                  </button>
+                  <a
+                    [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
+                    class="pd-features__new-feature fv-tasks__create"
+                  >
+                    <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
+                      >add_task</span
+                    >
+                    Create task
+                  </a>
+                </div>
               </div>
 
               @if (taskList().length === 0) {
@@ -248,6 +264,16 @@
           </div>
         </aside>
       </div>
+
+      @if (aiTaskDialogOpen()) {
+        <app-task-ai-generate-dialog
+          [projectId]="proj.id"
+          [featureId]="meta.id"
+          [projectName]="proj.name"
+          (closed)="closeAiTaskDialog()"
+          (accepted)="onAiTasksAccepted()"
+        />
+      }
     }
   }
 </div>

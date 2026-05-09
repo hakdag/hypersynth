@@ -46,6 +46,50 @@
   color: #00236f;
 }
 
+.fv-tasks__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fv-tasks__ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid #00236f;
+  background: #ffffff;
+  color: #00236f;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.fv-tasks__ai-btn:hover:not(:disabled) {
+  background: rgb(0 35 111 / 0.06);
+}
+
+.fv-tasks__ai-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.fv-tasks__ai-btn-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
 .fv-tasks__create {
   flex-shrink: 0;
 }

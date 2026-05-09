@@ -16,10 +16,11 @@ use crate::auth_route;
 use crate::crypto::ApiKeyCipher;
 use crate::project_api_key_service::ProjectApiKeyService;
 use crate::types::{
-    ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange, CreateFeatureRequest, CreateProjectRequest,
-    CreateTaskRequest, EnhanceFeatureRequirementsResponse, EnhanceProjectRequirementsResponse,
-    FeatureResponse, ProjectDetailResponse, ProjectDocumentResponse, ProjectResponse,
-    TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
+    AcceptGeneratedTasksRequest, ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange,
+    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest,
+    EnhanceFeatureRequirementsResponse, EnhanceProjectRequirementsResponse, FeatureResponse,
+    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
+    ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
     UpdateTaskRequest,
 };
 use uuid::Uuid;
@@ -738,6 +739,342 @@ pub async fn enhance_feature_requirements(
     Ok(Json(EnhanceFeatureRequirementsResponse {
         enhanced_requirements,
     }))
+}
+
+const MAX_AI_GENERATED_TASKS: usize = 50;
+const MAX_TASK_TITLE_LEN: usize = 512;
+
+pub async fn generate_feature_tasks(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<GenerateTasksRequest>,
+) -> Result<Json<GenerateTasksResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        history_len = payload.feedback_history.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
+        r#"
+        SELECT p.name, p.requirements, f.title, f.requirements
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "generate_feature_tasks: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some((project_name, project_requirements_opt, feature_title, feature_requirements_opt)) =
+        row
+    else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    let feature_requirements = feature_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| bad_request("Feature requirements are required before AI task generation."))?;
+
+    let project_requirements_for_prompt = project_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "generate_feature_tasks: decrypt_for_runtime failed"
+            );
+            internal_error()
+        })?
+        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+
+    let tasks = state
+        .anthropic
+        .generate_tasks(
+            &api_key,
+            &project_name,
+            project_requirements_for_prompt,
+            &feature_title,
+            feature_requirements,
+            &payload.feedback_history,
+        )
+        .await
+        .map_err(|e| {
+            let status = match e {
+                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                    StatusCode::BAD_GATEWAY
+                }
+            };
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "generate_feature_tasks: provider call failed"
+            );
+            (
+                status,
+                Json(ApiErrorBody {
+                    message: "Could not generate tasks right now. Please try again.".into(),
+                }),
+            )
+        })?;
+
+    if tasks.len() > MAX_AI_GENERATED_TASKS {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            count = tasks.len(),
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 400 too many"
+        );
+        return Err(bad_request(format!(
+            "AI returned too many tasks (max {MAX_AI_GENERATED_TASKS}). Please try again with different feedback."
+        )));
+    }
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        task_count = tasks.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 200 OK"
+    );
+
+    Ok(Json(GenerateTasksResponse { tasks }))
+}
+
+pub async fn accept_generated_tasks(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<AcceptGeneratedTasksRequest>,
+) -> Result<Json<Vec<TaskResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    let task_count = payload.tasks.len();
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        task_count,
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    if payload.tasks.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 400 empty"
+        );
+        return Err(bad_request("Select at least one generated task to save."));
+    }
+
+    if payload.tasks.len() > MAX_AI_GENERATED_TASKS {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            task_count,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 400 too many"
+        );
+        return Err(bad_request(format!(
+            "You can save at most {MAX_AI_GENERATED_TASKS} tasks at once."
+        )));
+    }
+
+    for t in &payload.tasks {
+        let title = t.title.trim();
+        if title.is_empty() {
+            return Err(bad_request("Each task must have a non-empty title."));
+        }
+        if title.len() > MAX_TASK_TITLE_LEN {
+            return Err(bad_request(format!(
+                "Each task title must be at most {MAX_TASK_TITLE_LEN} characters."
+            )));
+        }
+    }
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "accept_generated_tasks: begin tx failed"
+        );
+        internal_error()
+    })?;
+
+    let mut created: Vec<TaskResponse> = Vec::new();
+
+    for candidate in payload.tasks {
+        let title = candidate.title.trim();
+        let description = candidate
+            .description
+            .trim()
+            .to_string();
+        let description_for_db = if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        };
+
+        let row = sqlx::query_as::<_, TaskResponse>(
+            r#"
+            WITH ins AS (
+                INSERT INTO tasks (
+                    feature_id,
+                    title,
+                    description,
+                    status,
+                    created_by,
+                    priority,
+                    assignee_user_id,
+                    creator_user_id
+                )
+                SELECT f.id, $4, $5, 'Pending', 'AI', 'Standard', NULL, NULL
+                FROM features f
+                INNER JOIN projects p ON p.id = f.project_id
+                WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+                RETURNING
+                    id,
+                    feature_id,
+                    title,
+                    description,
+                    status,
+                    created_by,
+                    created_at,
+                    priority,
+                    assignee_user_id,
+                    creator_user_id
+            )
+            SELECT
+                ins.id,
+                ins.feature_id,
+                ins.title,
+                ins.description,
+                ins.status,
+                ins.created_by,
+                ins.created_at,
+                ins.priority,
+                ins.assignee_user_id,
+                au.fullname AS assignee_fullname,
+                au.avatar_url AS assignee_avatar_url,
+                cu.fullname AS creator_fullname,
+                cu.avatar_url AS creator_avatar_url
+            FROM ins
+            LEFT JOIN users au ON au.id = ins.assignee_user_id
+            LEFT JOIN users cu ON cu.id = ins.creator_user_id
+            "#,
+        )
+        .bind(feature_id)
+        .bind(project_id)
+        .bind(user.id)
+        .bind(title)
+        .bind(description_for_db.as_ref())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "accept_generated_tasks: insert failed"
+            );
+            internal_error()
+        })?;
+
+        let Some(row) = row else {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 404"
+            );
+            let _ = tx.rollback().await;
+            return Err(not_found("Feature not found."));
+        };
+
+        created.push(row);
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "accept_generated_tasks: commit failed"
+        );
+        internal_error()
+    })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        saved_count = created.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 200 OK"
+    );
+
+    Ok(Json(created))
 }
 
 pub async fn list_project_features(

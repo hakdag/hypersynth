@@ -15,6 +15,7 @@ import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
 } from '../project-api.service';
+import { TaskAiGenerateDialog } from '../task-ai-generate-dialog/task-ai-generate-dialog';
 
 const VALID_FEATURE_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
 type ValidFeatureStatus = (typeof VALID_FEATURE_STATUSES)[number];
@@ -37,7 +38,7 @@ type PageResult =
 
 @Component({
   selector: 'app-feature-view',
-  imports: [RouterLink],
+  imports: [RouterLink, TaskAiGenerateDialog],
   templateUrl: './feature-view.html',
   styleUrls: ['./feature-view.scss', '../project-detail/project-detail.scss'],
 })
@@ -53,6 +54,7 @@ export class FeatureView implements OnInit, OnDestroy {
   protected readonly pageError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
   protected readonly requirementsCopyFlash = signal(false);
+  protected readonly aiTaskDialogOpen = signal(false);
 
   private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -98,6 +100,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.featureMeta.set(null);
           this.taskList.set([]);
           this.requirementsExpanded.set(false);
+          this.aiTaskDialogOpen.set(false);
           this.loadState.set('error');
           return;
         }
@@ -107,6 +110,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.featureMeta.set(null);
           this.taskList.set([]);
           this.requirementsExpanded.set(false);
+          this.aiTaskDialogOpen.set(false);
           this.loadState.set('error');
           return;
         }
@@ -114,8 +118,9 @@ export class FeatureView implements OnInit, OnDestroy {
         this.featureMeta.set(res.feature);
         this.taskList.set(res.tasks);
         this.pageError.set(null);
-        this.requirementsExpanded.set(false);
-        this.loadState.set('ok');
+          this.requirementsExpanded.set(false);
+          this.aiTaskDialogOpen.set(false);
+          this.loadState.set('ok');
       });
   }
 
@@ -264,5 +269,46 @@ export class FeatureView implements OnInit, OnDestroy {
 
   protected taskTitleRowClass(status: string): string {
     return normalizeTaskStatus(status) === 'Done' ? 'fv-task-title fv-task-title--done' : 'fv-task-title';
+  }
+
+  protected openAiTaskDialog(): void {
+    this.aiTaskDialogOpen.set(true);
+  }
+
+  protected closeAiTaskDialog(): void {
+    this.aiTaskDialogOpen.set(false);
+  }
+
+  protected onAiTasksAccepted(): void {
+    const p = this.project();
+    const f = this.featureMeta();
+    if (!p || !f) {
+      this.aiTaskDialogOpen.set(false);
+      return;
+    }
+    this.aiTaskDialogOpen.set(false);
+    this.projectApi.listTasks(p.id, f.id).subscribe({
+      next: (tasks) => this.taskList.set(tasks),
+      error: (err: unknown) => {
+        this.pageError.set(ProjectApiService.listTasksErrorMessage(err));
+      },
+    });
+  }
+
+  protected aiGenerateDisabledReason(
+    proj: ProjectDetailModel,
+    meta: CreatedFeature,
+  ): string {
+    if (!proj.hasAiApiKey) {
+      return 'Configure an AI API key on the project before generating tasks.';
+    }
+    if (this.featureRequirementsText(meta.requirements).length === 0) {
+      return 'Add feature requirements before generating tasks with AI.';
+    }
+    return '';
+  }
+
+  protected aiGenerateDisabled(proj: ProjectDetailModel, meta: CreatedFeature): boolean {
+    return this.aiGenerateDisabledReason(proj, meta).length > 0;
   }
 }

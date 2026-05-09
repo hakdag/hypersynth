@@ -35,6 +35,20 @@ export interface EnhanceProjectRequirementsResponse {
   enhancedRequirements: string;
 }
 
+export interface GeneratedTaskCandidate {
+  title: string;
+  description: string;
+}
+
+export interface TaskGenerationTurn {
+  proposedTasks: GeneratedTaskCandidate[];
+  feedback: string;
+}
+
+export interface GenerateTasksResponse {
+  tasks: GeneratedTaskCandidate[];
+}
+
 export interface CreatedFeature {
   id: string;
   projectId: string;
@@ -144,6 +158,26 @@ export class ProjectApiService {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/enhance-requirements`;
     return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
+  }
+
+  generateFeatureTasks(
+    projectId: string,
+    featureId: string,
+    feedbackHistory: TaskGenerationTurn[],
+  ): Observable<GenerateTasksResponse> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/generate-tasks`;
+    return this.http.post<GenerateTasksResponse>(url, { feedbackHistory });
+  }
+
+  acceptGeneratedTasks(
+    projectId: string,
+    featureId: string,
+    tasks: GeneratedTaskCandidate[],
+  ): Observable<CreatedTask[]> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/accept-tasks`;
+    return this.http.post<CreatedTask[]>(url, { tasks });
   }
 
   createFeature(
@@ -506,6 +540,34 @@ export class ProjectApiService {
         return 'Feature not found or you do not have access.';
       }
       return `Could not enhance feature requirements (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static generateTasksErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not generate tasks (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static acceptGeneratedTasksErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not save generated tasks (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }
