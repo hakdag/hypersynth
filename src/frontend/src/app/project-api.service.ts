@@ -137,6 +137,15 @@ export class ProjectApiService {
     return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
   }
 
+  enhanceFeatureRequirements(
+    projectId: string,
+    featureId: string,
+  ): Observable<EnhanceProjectRequirementsResponse> {
+    const b = encodeURIComponent;
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/enhance-requirements`;
+    return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
+  }
+
   createFeature(
     projectId: string,
     payload: { title: string; requirements?: string },
@@ -483,6 +492,20 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not enhance requirements (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static enhanceFeatureRequirementsErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Feature not found or you do not have access.';
+      }
+      return `Could not enhance feature requirements (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

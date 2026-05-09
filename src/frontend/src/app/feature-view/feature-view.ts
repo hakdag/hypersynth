@@ -52,6 +52,9 @@ export class FeatureView implements OnInit, OnDestroy {
   protected readonly taskList = signal<CreatedTask[]>([]);
   protected readonly pageError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
+  protected readonly requirementsCopyFlash = signal(false);
+
+  private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
     this.sub = this.route.paramMap
@@ -65,6 +68,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.loadState.set('loading');
           this.pageError.set(null);
           this.requirementsExpanded.set(false);
+          this.clearRequirementsCopyFlash();
           return forkJoin({
             project: this.projectApi.getProject(projectId),
             feature: this.projectApi.getFeature(projectId, featureId),
@@ -117,6 +121,33 @@ export class FeatureView implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.clearRequirementsCopyFlash();
+  }
+
+  private clearRequirementsCopyFlash(): void {
+    if (this.requirementsCopyTimer !== null) {
+      clearTimeout(this.requirementsCopyTimer);
+      this.requirementsCopyTimer = null;
+    }
+    this.requirementsCopyFlash.set(false);
+  }
+
+  protected copyFeatureRequirements(requirements: string | null | undefined): void {
+    const text = this.featureRequirementsText(requirements);
+    if (text.length === 0) {
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(() => {
+      if (this.requirementsCopyTimer !== null) {
+        clearTimeout(this.requirementsCopyTimer);
+        this.requirementsCopyTimer = null;
+      }
+      this.requirementsCopyFlash.set(true);
+      this.requirementsCopyTimer = setTimeout(() => {
+        this.requirementsCopyFlash.set(false);
+        this.requirementsCopyTimer = null;
+      }, 1600);
+    });
   }
 
   protected shortFeatureId(id: string): string {

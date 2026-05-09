@@ -40,6 +40,9 @@ export class ProjectEdit implements OnInit, OnDestroy {
   protected readonly enhanceError = signal<string | null>(null);
   protected readonly draftRequirements = signal<string | null>(null);
   protected readonly originalRequirements = signal('');
+  protected readonly requirementsCopyFlash = signal(false);
+
+  private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly statuses = STATUSES;
 
@@ -66,6 +69,7 @@ export class ProjectEdit implements OnInit, OnDestroy {
           this.projectId.set(id);
           this.loadState.set('loading');
           this.loadError.set(null);
+          this.clearRequirementsCopyFlash();
           return this.projectApi.getProject(id).pipe(
             map((row) => ({ kind: 'ok' as const, row })),
             catchError((err: unknown) =>
@@ -104,6 +108,30 @@ export class ProjectEdit implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.clearRequirementsCopyFlash();
+  }
+
+  private clearRequirementsCopyFlash(): void {
+    if (this.requirementsCopyTimer !== null) {
+      clearTimeout(this.requirementsCopyTimer);
+      this.requirementsCopyTimer = null;
+    }
+    this.requirementsCopyFlash.set(false);
+  }
+
+  protected copyRequirementsFromForm(): void {
+    const text = this.form.controls.requirements.value ?? '';
+    void navigator.clipboard.writeText(text).then(() => {
+      if (this.requirementsCopyTimer !== null) {
+        clearTimeout(this.requirementsCopyTimer);
+        this.requirementsCopyTimer = null;
+      }
+      this.requirementsCopyFlash.set(true);
+      this.requirementsCopyTimer = setTimeout(() => {
+        this.requirementsCopyFlash.set(false);
+        this.requirementsCopyTimer = null;
+      }, 1600);
+    });
   }
 
   private normalizeStatus(s: string): ProjectPhase0Status {

@@ -2,8 +2,9 @@ use axum::http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::ai::AiError;
+use crate::ai::build_feature_requirements_prompt;
 use crate::ai::build_prompt;
+use crate::ai::AiError;
 
 #[derive(Clone)]
 pub struct AnthropicClient {
@@ -30,6 +31,32 @@ impl AnthropicClient {
         requirements: &str,
     ) -> Result<String, AiError> {
         let (system, user) = build_prompt(project_name, requirements);
+        self.complete_enhancement(api_key, &system, &user).await
+    }
+
+    pub async fn enhance_feature_requirements(
+        &self,
+        api_key: &str,
+        project_name: &str,
+        project_requirements: Option<&str>,
+        feature_title: &str,
+        feature_requirements: &str,
+    ) -> Result<String, AiError> {
+        let (system, user) = build_feature_requirements_prompt(
+            project_name,
+            project_requirements,
+            feature_title,
+            feature_requirements,
+        );
+        self.complete_enhancement(api_key, &system, &user).await
+    }
+
+    async fn complete_enhancement(
+        &self,
+        api_key: &str,
+        system: &str,
+        user: &str,
+    ) -> Result<String, AiError> {
         let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let body = json!({
@@ -56,8 +83,7 @@ impl AnthropicClient {
 
         if !response.status().is_success() {
             return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16())
-                    .unwrap_or(StatusCode::BAD_GATEWAY),
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
             ));
         }
 
@@ -88,8 +114,7 @@ impl AnthropicClient {
 
         if !response.status().is_success() {
             return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16())
-                    .unwrap_or(StatusCode::BAD_GATEWAY),
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
             ));
         }
 
@@ -120,9 +145,18 @@ fn parse_model_rank(model_id: &str) -> (u32, u32, u32) {
     let version = model_id.strip_prefix("claude-haiku-").unwrap_or("");
     let mut parts = version.split('-');
 
-    let major = parts.next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
-    let minor = parts.next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
-    let snapshot = parts.next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+    let major = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+    let minor = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+    let snapshot = parts
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
 
     (major, minor, snapshot)
 }

@@ -64,6 +64,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected readonly documents = signal<ProjectDocument[]>([]);
   protected readonly documentsLoadError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
+  protected readonly requirementsCopyFlash = signal(false);
+
+  private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly documentUploadModalOpen = signal(false);
   protected readonly selectedDocumentFiles = signal<File[]>([]);
   protected readonly documentUploadState = signal<'idle' | 'uploading'>('idle');
@@ -93,6 +96,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.documentDownloadError.set(null);
           this.downloadingDocumentId.set(null);
           this.closeDocumentViewModal();
+          this.clearRequirementsCopyFlash();
           return this.projectApi.getProject(id).pipe(
             switchMap((row) =>
               forkJoin({
@@ -183,6 +187,33 @@ export class ProjectDetail implements OnInit, OnDestroy {
     this.downloadSub?.unsubscribe();
     this.viewSub?.unsubscribe();
     this.revokeDocumentPreviewObjectUrl();
+    this.clearRequirementsCopyFlash();
+  }
+
+  private clearRequirementsCopyFlash(): void {
+    if (this.requirementsCopyTimer !== null) {
+      clearTimeout(this.requirementsCopyTimer);
+      this.requirementsCopyTimer = null;
+    }
+    this.requirementsCopyFlash.set(false);
+  }
+
+  protected copyProjectRequirements(requirements: string | null): void {
+    const text = this.projectRequirementsText(requirements);
+    if (text.length === 0) {
+      return;
+    }
+    void navigator.clipboard.writeText(text).then(() => {
+      if (this.requirementsCopyTimer !== null) {
+        clearTimeout(this.requirementsCopyTimer);
+        this.requirementsCopyTimer = null;
+      }
+      this.requirementsCopyFlash.set(true);
+      this.requirementsCopyTimer = setTimeout(() => {
+        this.requirementsCopyFlash.set(false);
+        this.requirementsCopyTimer = null;
+      }, 1600);
+    });
   }
 
   protected completionPercent(status: string): number {

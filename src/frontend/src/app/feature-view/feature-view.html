@@ -70,6 +70,20 @@
                 <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
                 Feature Requirements
               </h2>
+              @if (hasExpandableFeatureRequirements(meta.requirements)) {
+                <button
+                  type="button"
+                  class="pd-req-copy"
+                  (click)="copyFeatureRequirements(meta.requirements)"
+                  [class.pd-req-copy--success]="requirementsCopyFlash()"
+                  title="Copy requirements to clipboard"
+                  aria-label="Copy feature requirements"
+                >
+                  <span class="material-symbols-outlined pd-req-copy__icon" aria-hidden="true">{{
+                    requirementsCopyFlash() ? 'check' : 'content_copy'
+                  }}</span>
+                </button>
+              }
             </div>
             <div class="pd-req__body">
               @if (hasExpandableFeatureRequirements(meta.requirements)) {
