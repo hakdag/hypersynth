@@ -3,6 +3,7 @@ mod app_state;
 mod auth_route;
 mod configs;
 mod crypto;
+mod document_context_service;
 mod project_api_key_service;
 mod project_route;
 mod register_route;

@@ -146,28 +146,33 @@ export class ProjectApiService {
     return this.http.patch<CreatedProject>(url, body);
   }
 
-  enhanceProjectRequirements(projectId: string): Observable<EnhanceProjectRequirementsResponse> {
+  enhanceProjectRequirements(
+    projectId: string,
+    documentIds: string[] = [],
+  ): Observable<EnhanceProjectRequirementsResponse> {
     const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/ai/enhance-requirements`;
-    return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
+    return this.http.post<EnhanceProjectRequirementsResponse>(url, { documentIds });
   }
 
   enhanceFeatureRequirements(
     projectId: string,
     featureId: string,
+    documentIds: string[] = [],
   ): Observable<EnhanceProjectRequirementsResponse> {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/enhance-requirements`;
-    return this.http.post<EnhanceProjectRequirementsResponse>(url, {});
+    return this.http.post<EnhanceProjectRequirementsResponse>(url, { documentIds });
   }
 
   generateFeatureTasks(
     projectId: string,
     featureId: string,
     feedbackHistory: TaskGenerationTurn[],
+    documentIds: string[] = [],
   ): Observable<GenerateTasksResponse> {
     const b = encodeURIComponent;
     const url = `${environment.apiBaseUrl}/api/v1/projects/${b(projectId)}/features/${b(featureId)}/ai/generate-tasks`;
-    return this.http.post<GenerateTasksResponse>(url, { feedbackHistory });
+    return this.http.post<GenerateTasksResponse>(url, { feedbackHistory, documentIds });
   }
 
   acceptGeneratedTasks(
@@ -354,6 +359,11 @@ export class ProjectApiService {
       return `Could not load features (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  /** Message when loading documents for AI context picker (same rules as listing). */
+  static loadDocumentsErrorMessage(err: unknown): string {
+    return ProjectApiService.listDocumentsErrorMessage(err);
   }
 
   static listDocumentsErrorMessage(err: unknown): string {

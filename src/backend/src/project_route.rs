@@ -14,11 +14,13 @@ use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::crypto::ApiKeyCipher;
+use crate::document_context_service::DocumentContextService;
 use crate::project_api_key_service::ProjectApiKeyService;
 use crate::types::{
     AcceptGeneratedTasksRequest, ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange,
-    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest,
-    EnhanceFeatureRequirementsResponse, EnhanceProjectRequirementsResponse, FeatureResponse,
+    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
+    EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
+    EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
     ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
     UpdateTaskRequest,
@@ -501,6 +503,7 @@ pub async fn enhance_project_requirements(
     State(state): State<AppState>,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
+    Json(payload): Json<EnhanceProjectRequirementsRequest>,
 ) -> Result<Json<EnhanceProjectRequirementsResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(
@@ -570,9 +573,23 @@ pub async fn enhance_project_requirements(
         })?
         .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
 
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
     let enhanced_requirements = state
         .anthropic
-        .enhance_requirements(&api_key, &project_name, requirements)
+        .enhance_requirements(
+            &api_key,
+            &project_name,
+            requirements,
+            &document_context,
+        )
         .await
         .map_err(|e| {
             let status = match e {
@@ -613,6 +630,7 @@ pub async fn enhance_feature_requirements(
     State(state): State<AppState>,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<EnhanceFeatureRequirementsRequest>,
 ) -> Result<Json<EnhanceFeatureRequirementsResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(
@@ -694,6 +712,15 @@ pub async fn enhance_feature_requirements(
         })?
         .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
 
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
     let enhanced_requirements = state
         .anthropic
         .enhance_feature_requirements(
@@ -702,6 +729,7 @@ pub async fn enhance_feature_requirements(
             project_requirements_for_prompt,
             &feature_title,
             feature_requirements,
+            &document_context,
         )
         .await
         .map_err(|e| {
@@ -831,6 +859,15 @@ pub async fn generate_feature_tasks(
         })?
         .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
 
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
     let tasks = state
         .anthropic
         .generate_tasks(
@@ -840,6 +877,7 @@ pub async fn generate_feature_tasks(
             &feature_title,
             feature_requirements,
             &payload.feedback_history,
+            &document_context,
         )
         .await
         .map_err(|e| {
@@ -2227,6 +2265,29 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
             message: message.into(),
         }),
     )
+}
+
+fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(ApiErrorBody {
+            message: message.into(),
+        }),
+    )
+}
+
+fn map_document_context_error(
+    err: DocumentContextError,
+) -> (StatusCode, Json<ApiErrorBody>) {
+    match err {
+        DocumentContextError::NotFoundOrForbidden => not_found("Could not resolve selected documents."),
+        DocumentContextError::ContentUnavailable => unprocessable_entity(
+            "One or more selected documents could not be loaded. Adjust your selection and try again.",
+        ),
+        DocumentContextError::UnsupportedDocumentType => unprocessable_entity(
+            "Selected document type is not supported as AI context yet.",
+        ),
+    }
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {

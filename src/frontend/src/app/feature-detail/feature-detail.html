@@ -122,6 +122,16 @@
                 <button
                   type="button"
                   class="fc-btn fc-btn-secondary fd-enhance-ai-btn"
+                  (click)="openDocumentContextPicker()"
+                  [disabled]="loadState() !== 'ok'"
+                  title="Choose project documents as optional AI context"
+                >
+                  Add Context @if (aiSelectedDocumentIds().length > 0) {
+                  ({{ aiSelectedDocumentIds().length }}) }
+                </button>
+                <button
+                  type="button"
+                  class="fc-btn fc-btn-secondary fd-enhance-ai-btn"
                   (click)="enhanceFeatureWithAi()"
                   [disabled]="!canEnhanceFeatureRequirements()"
                   [attr.title]="enhanceFeatureRequirementsDisabledReason()"
@@ -169,6 +179,15 @@
     }
   }
 </div>
+
+@if (documentContextPickerOpen() && project(); as pickerProj) {
+  <app-document-context-picker-modal
+    [projectId]="pickerProj.id"
+    [initialSelectedIds]="aiSelectedDocumentIds()"
+    (confirmed)="onDocumentContextConfirmed($event)"
+    (closed)="closeDocumentContextPicker()"
+  />
+}
 
 @if (draftRequirements(); as draft) {
   <div class="fd-overlay" role="dialog" aria-modal="true" aria-labelledby="fd-enhance-review-title">

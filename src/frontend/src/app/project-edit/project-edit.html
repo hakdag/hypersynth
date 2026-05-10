@@ -77,6 +77,18 @@
                   <button
                     type="button"
                     class="pc-btn pc-btn-ghost"
+                    (click)="openDocumentContextPicker()"
+                    [disabled]="loadState() !== 'ok'"
+                    title="Choose project documents as optional AI context"
+                  >
+                    <span class="pc-btn-text"
+                      >Add Context @if (aiSelectedDocumentIds().length > 0) {
+                      ({{ aiSelectedDocumentIds().length }}) }</span
+                    >
+                  </button>
+                  <button
+                    type="button"
+                    class="pc-btn pc-btn-ghost"
                     (click)="enhanceWithAi()"
                     [disabled]="!canEnhanceRequirements()"
                     [attr.title]="enhanceRequirementsDisabledReason()"
@@ -258,4 +270,13 @@
       </div>
     </div>
   </div>
+}
+
+@if (documentContextPickerOpen()) {
+  <app-document-context-picker-modal
+    [projectId]="projectId()"
+    [initialSelectedIds]="aiSelectedDocumentIds()"
+    (confirmed)="onDocumentContextConfirmed($event)"
+    (closed)="closeDocumentContextPicker()"
+  />
 }

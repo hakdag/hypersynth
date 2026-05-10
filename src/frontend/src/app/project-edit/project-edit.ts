@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, map, of, Subscription, switchMap } from 'rxjs';
 
+import { DocumentContextPickerModal } from '../document-context-picker-modal/document-context-picker-modal';
 import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
@@ -16,7 +17,7 @@ type ProjectPhase0Status = (typeof STATUSES)[number];
 
 @Component({
   selector: 'app-project-edit',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, DocumentContextPickerModal],
   templateUrl: './project-edit.html',
   styleUrl: './project-edit.scss',
 })
@@ -41,6 +42,8 @@ export class ProjectEdit implements OnInit, OnDestroy {
   protected readonly draftRequirements = signal<string | null>(null);
   protected readonly originalRequirements = signal('');
   protected readonly requirementsCopyFlash = signal(false);
+  protected readonly documentContextPickerOpen = signal(false);
+  protected readonly aiSelectedDocumentIds = signal<string[]>([]);
 
   private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -203,6 +206,22 @@ export class ProjectEdit implements OnInit, OnDestroy {
     return '';
   }
 
+  protected openDocumentContextPicker(): void {
+    if (this.loadState() !== 'ok') {
+      return;
+    }
+    this.documentContextPickerOpen.set(true);
+  }
+
+  protected onDocumentContextConfirmed(ids: string[]): void {
+    this.aiSelectedDocumentIds.set(ids);
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected closeDocumentContextPicker(): void {
+    this.documentContextPickerOpen.set(false);
+  }
+
   protected enhanceWithAi(): void {
     this.enhanceError.set(null);
     if (!this.canEnhanceRequirements()) {
@@ -218,7 +237,7 @@ export class ProjectEdit implements OnInit, OnDestroy {
     this.originalRequirements.set(currentRequirements);
     this.enhancing.set(true);
     this.projectApi
-      .enhanceProjectRequirements(id)
+      .enhanceProjectRequirements(id, this.aiSelectedDocumentIds())
       .pipe(finalize(() => this.enhancing.set(false)))
       .subscribe({
         next: (result) => {

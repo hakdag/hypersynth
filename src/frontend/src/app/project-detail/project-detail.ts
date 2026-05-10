@@ -3,6 +3,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 
 import {
+  documentContentType,
+  documentDisplayName,
+  documentDisplaySize,
+  documentDisplayType,
+} from '../document-display.util';
+import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
   CreatedFeature,
@@ -471,45 +477,15 @@ export class ProjectDetail implements OnInit, OnDestroy {
   }
 
   protected documentName(document: ProjectDocument): string {
-    const name = this.documentMetadataString(document, 'originalFilename');
-    return name.length > 0 ? name : 'Untitled document';
+    return documentDisplayName(document);
   }
 
   protected documentType(document: ProjectDocument): string {
-    const contentType = this.documentMetadataString(document, 'contentType').toLowerCase();
-    const name = this.documentName(document);
-    const extension = name.split('.').pop()?.trim().toLowerCase();
-
-    if (
-      contentType.startsWith('image/') ||
-      ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(extension ?? '')
-    ) {
-      return 'Image';
-    }
-
-    if (
-      contentType.startsWith('text/') ||
-      ['txt', 'md', 'csv'].includes(extension ?? '')
-    ) {
-      return 'Text';
-    }
-
-    return 'Document';
+    return documentDisplayType(document);
   }
 
   protected documentSize(document: ProjectDocument): string {
-    const rawSize = document.metadata['size'];
-    const size = typeof rawSize === 'number' ? rawSize : Number(rawSize);
-    if (!Number.isFinite(size) || size < 0) return 'Unknown';
-    if (size < 1024) return `${size} B`;
-
-    const units = ['KB', 'MB', 'GB'];
-    let value = size / 1024;
-    for (const unit of units) {
-      if (value < 1024) return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
-      value /= 1024;
-    }
-    return `${value.toFixed(1)} TB`;
+    return documentDisplaySize(document);
   }
 
   protected documentAddedLabel(iso: string): string {
@@ -573,14 +549,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
     });
   }
 
-  private documentMetadataString(document: ProjectDocument, key: string): string {
-    const value = document.metadata[key];
-    return typeof value === 'string' ? value.trim() : '';
-  }
-
   private documentPreviewKind(document: ProjectDocument): DocumentPreviewKind | null {
-    const contentType = this.documentMetadataString(document, 'contentType').toLowerCase();
-    const name = this.documentName(document);
+    const contentType = documentContentType(document).toLowerCase();
+    const name = documentDisplayName(document);
     const extension = name.split('.').pop()?.trim().toLowerCase();
 
     if (

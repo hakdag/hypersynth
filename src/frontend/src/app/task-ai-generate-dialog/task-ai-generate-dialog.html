@@ -11,6 +11,19 @@
       <p class="tag-dialog-sub">Project: {{ projectName() }}</p>
     }
 
+    <div class="tag-dialog-context">
+      <button
+        type="button"
+        class="tag-btn tag-btn-secondary"
+        (click)="openDocumentContextPicker()"
+        [disabled]="generating() || accepting()"
+        title="Choose project documents as optional AI context"
+      >
+        Add Context @if (aiSelectedDocumentIds().length > 0) {
+        ({{ aiSelectedDocumentIds().length }}) }
+      </button>
+    </div>
+
     @if (error(); as errMsg) {
       <div class="tag-banner tag-banner--error" role="alert">{{ errMsg }}</div>
     }
@@ -73,3 +86,12 @@
     </div>
   </div>
 </div>
+
+@if (documentContextPickerOpen()) {
+  <app-document-context-picker-modal
+    [projectId]="projectId()"
+    [initialSelectedIds]="aiSelectedDocumentIds()"
+    (confirmed)="onDocumentContextConfirmed($event)"
+    (closed)="closeDocumentContextPicker()"
+  />
+}

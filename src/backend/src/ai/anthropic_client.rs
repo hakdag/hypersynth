@@ -2,11 +2,13 @@ use axum::http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::ai::build_feature_requirements_prompt;
+use crate::ai::build_feature_requirements_system_prompt;
+use crate::ai::build_feature_requirements_user_content;
 use crate::ai::build_generate_tasks_messages;
-use crate::ai::build_prompt;
+use crate::ai::build_project_enhancement_system_prompt;
+use crate::ai::build_project_enhancement_user_content;
 use crate::ai::AiError;
-use crate::types::{GeneratedTaskCandidate, TaskGenerationTurn};
+use crate::types::{DocumentContextItem, GeneratedTaskCandidate, TaskGenerationTurn};
 
 #[derive(Clone)]
 pub struct AnthropicClient {
@@ -31,9 +33,11 @@ impl AnthropicClient {
         api_key: &str,
         project_name: &str,
         requirements: &str,
+        documents: &[DocumentContextItem],
     ) -> Result<String, AiError> {
-        let (system, user) = build_prompt(project_name, requirements);
-        self.complete_enhancement(api_key, &system, &user).await
+        let system = build_project_enhancement_system_prompt();
+        let user = build_project_enhancement_user_content(project_name, requirements, documents);
+        self.complete_enhancement(api_key, &system, user).await
     }
 
     pub async fn enhance_feature_requirements(
@@ -43,14 +47,17 @@ impl AnthropicClient {
         project_requirements: Option<&str>,
         feature_title: &str,
         feature_requirements: &str,
+        documents: &[DocumentContextItem],
     ) -> Result<String, AiError> {
-        let (system, user) = build_feature_requirements_prompt(
+        let system = build_feature_requirements_system_prompt();
+        let user = build_feature_requirements_user_content(
             project_name,
             project_requirements,
             feature_title,
             feature_requirements,
+            documents,
         );
-        self.complete_enhancement(api_key, &system, &user).await
+        self.complete_enhancement(api_key, &system, user).await
     }
 
     pub async fn generate_tasks(
@@ -61,6 +68,7 @@ impl AnthropicClient {
         feature_title: &str,
         feature_requirements: &str,
         feedback_history: &[TaskGenerationTurn],
+        document_context_items: &[DocumentContextItem],
     ) -> Result<Vec<GeneratedTaskCandidate>, AiError> {
         let (system, message_pairs) = build_generate_tasks_messages(
             project_name,
@@ -68,13 +76,19 @@ impl AnthropicClient {
             feature_title,
             feature_requirements,
             feedback_history,
+            document_context_items,
         );
         let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
-        let messages: Vec<Value> = message_pairs
-            .into_iter()
-            .map(|(role, content)| json!({ "role": role, "content": content }))
-            .collect();
+        let mut messages: Vec<Value> = Vec::with_capacity(message_pairs.len());
+        for (role, content) in message_pairs {
+            let msg = match content {
+                Value::String(s) => json!({ "role": role, "content": s }),
+                Value::Array(arr) => json!({ "role": role, "content": arr }),
+                _ => return Err(AiError::Decode),
+            };
+            messages.push(msg);
+        }
         let body = json!({
             "model": selected_model,
             "max_tokens": self.max_tokens,
@@ -99,24 +113,15 @@ impl AnthropicClient {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let text = payload
-            .get("content")
-            .and_then(|content| content.as_array())
-            .and_then(|content| content.first())
-            .and_then(|first| first.get("text"))
-            .and_then(|text| text.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(AiError::Empty)?;
-
-        parse_generated_tasks(text)
+        let text = extract_assistant_text(&payload)?;
+        parse_generated_tasks(&text)
     }
 
     async fn complete_enhancement(
         &self,
         api_key: &str,
         system: &str,
-        user: &str,
+        user_content: Vec<Value>,
     ) -> Result<String, AiError> {
         let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
@@ -127,7 +132,7 @@ impl AnthropicClient {
             "messages": [
                 {
                     "role": "user",
-                    "content": user
+                    "content": user_content
                 }
             ]
         });
@@ -149,17 +154,7 @@ impl AnthropicClient {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let text = payload
-            .get("content")
-            .and_then(|content| content.as_array())
-            .and_then(|content| content.first())
-            .and_then(|first| first.get("text"))
-            .and_then(|text| text.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(AiError::Empty)?;
-
-        Ok(text.to_string())
+        extract_assistant_text(&payload)
     }
 
     async fn resolve_haiku_model(&self, api_key: &str) -> Result<String, AiError> {
@@ -200,6 +195,30 @@ impl AnthropicClient {
 
         Err(AiError::Empty)
     }
+}
+
+fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
+    let content = payload
+        .get("content")
+        .and_then(|c| c.as_array())
+        .ok_or(AiError::Empty)?;
+    let mut parts: Vec<&str> = Vec::new();
+    for block in content {
+        if let Some(t) = block.get("text").and_then(|t| t.as_str()).map(str::trim) {
+            if !t.is_empty() {
+                parts.push(t);
+            }
+        }
+    }
+    if parts.is_empty() {
+        return Err(AiError::Empty);
+    }
+    let joined = parts.join("\n");
+    let trimmed = joined.trim().to_string();
+    if trimmed.is_empty() {
+        return Err(AiError::Empty);
+    }
+    Ok(trimmed)
 }
 
 fn parse_model_rank(model_id: &str) -> (u32, u32, u32) {

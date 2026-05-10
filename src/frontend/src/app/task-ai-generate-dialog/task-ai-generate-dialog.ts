@@ -3,6 +3,7 @@ import { Component, inject, input, OnInit, output, signal } from '@angular/core'
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 
+import { DocumentContextPickerModal } from '../document-context-picker-modal/document-context-picker-modal';
 import {
   CreatedTask,
   GeneratedTaskCandidate,
@@ -12,7 +13,7 @@ import {
 
 @Component({
   selector: 'app-task-ai-generate-dialog',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DocumentContextPickerModal],
   templateUrl: './task-ai-generate-dialog.html',
   styleUrl: './task-ai-generate-dialog.scss',
 })
@@ -31,6 +32,8 @@ export class TaskAiGenerateDialog implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly proposed = signal<GeneratedTaskCandidate[]>([]);
   protected readonly history = signal<TaskGenerationTurn[]>([]);
+  protected readonly documentContextPickerOpen = signal(false);
+  protected readonly aiSelectedDocumentIds = signal<string[]>([]);
   protected feedbackDraft = '';
 
   ngOnInit(): void {
@@ -39,6 +42,22 @@ export class TaskAiGenerateDialog implements OnInit {
 
   protected cancel(): void {
     this.closed.emit();
+  }
+
+  protected openDocumentContextPicker(): void {
+    if (this.generating() || this.accepting()) {
+      return;
+    }
+    this.documentContextPickerOpen.set(true);
+  }
+
+  protected onDocumentContextConfirmed(ids: string[]): void {
+    this.aiSelectedDocumentIds.set(ids);
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected closeDocumentContextPicker(): void {
+    this.documentContextPickerOpen.set(false);
   }
 
   protected acceptAll(): void {
@@ -95,7 +114,12 @@ export class TaskAiGenerateDialog implements OnInit {
     this.generating.set(true);
     this.error.set(null);
     this.projectApi
-      .generateFeatureTasks(this.projectId(), this.featureId(), history)
+      .generateFeatureTasks(
+        this.projectId(),
+        this.featureId(),
+        history,
+        this.aiSelectedDocumentIds(),
+      )
       .pipe(finalize(() => this.generating.set(false)))
       .subscribe({
         next: (res) => {
