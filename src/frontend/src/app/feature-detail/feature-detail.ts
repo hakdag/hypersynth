@@ -19,6 +19,7 @@ import {
   switchMap,
 } from 'rxjs';
 
+import { DocumentContextPickerModal } from '../document-context-picker-modal/document-context-picker-modal';
 import {
   CreatedFeature,
   ProjectApiService,
@@ -39,7 +40,7 @@ type PageResult =
 
 @Component({
   selector: 'app-feature-detail',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, DocumentContextPickerModal],
   templateUrl: './feature-detail.html',
   styleUrls: ['./feature-detail.scss', '../feature-create/feature-create.scss'],
 })
@@ -58,6 +59,15 @@ export class FeatureDetail implements OnInit, OnDestroy {
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly saveNotice = signal(false);
+  protected readonly enhancing = signal(false);
+  protected readonly enhanceError = signal<string | null>(null);
+  protected readonly draftRequirements = signal<string | null>(null);
+  protected readonly originalRequirements = signal('');
+  protected readonly requirementsCopyFlash = signal(false);
+  protected readonly documentContextPickerOpen = signal(false);
+  protected readonly aiSelectedDocumentIds = signal<string[]>([]);
+
+  private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Local-only status change before Save; cleared on load and after successful PATCH. */
   private readonly statusLocalOverride = signal<string | null>(null);
@@ -90,6 +100,7 @@ export class FeatureDetail implements OnInit, OnDestroy {
           this.serverError.set(null);
           this.saveNotice.set(false);
           this.statusLocalOverride.set(null);
+          this.clearRequirementsCopyFlash();
           return forkJoin({
             project: this.projectApi.getProject(projectId),
             feature: this.projectApi.getFeature(projectId, featureId),
@@ -143,6 +154,30 @@ export class FeatureDetail implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.clearRequirementsCopyFlash();
+  }
+
+  private clearRequirementsCopyFlash(): void {
+    if (this.requirementsCopyTimer !== null) {
+      clearTimeout(this.requirementsCopyTimer);
+      this.requirementsCopyTimer = null;
+    }
+    this.requirementsCopyFlash.set(false);
+  }
+
+  protected copyRequirementsFromForm(): void {
+    const text = this.form.controls.requirements.value ?? '';
+    void navigator.clipboard.writeText(text).then(() => {
+      if (this.requirementsCopyTimer !== null) {
+        clearTimeout(this.requirementsCopyTimer);
+        this.requirementsCopyTimer = null;
+      }
+      this.requirementsCopyFlash.set(true);
+      this.requirementsCopyTimer = setTimeout(() => {
+        this.requirementsCopyFlash.set(false);
+        this.requirementsCopyTimer = null;
+      }, 1600);
+    });
   }
 
   protected startProgress(): void {
@@ -216,5 +251,93 @@ export class FeatureDetail implements OnInit, OnDestroy {
 
   protected shortFeatureId(id: string): string {
     return id.replace(/-/g, '').slice(0, 8).toUpperCase();
+  }
+
+  protected canEnhanceFeatureRequirements(): boolean {
+    const p = this.project();
+    if (!p?.hasAiApiKey) {
+      return false;
+    }
+    if (this.submitting() || this.enhancing() || this.loadState() !== 'ok') {
+      return false;
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    return requirements.trim().length > 0;
+  }
+
+  protected enhanceFeatureRequirementsDisabledReason(): string {
+    const p = this.project();
+    if (!p?.hasAiApiKey) {
+      return 'Add an AI API key to the project to use this.';
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    if (requirements.trim().length === 0) {
+      return 'Add feature requirements first.';
+    }
+    return '';
+  }
+
+  protected openDocumentContextPicker(): void {
+    if (this.loadState() !== 'ok') {
+      return;
+    }
+    this.documentContextPickerOpen.set(true);
+  }
+
+  protected onDocumentContextConfirmed(ids: string[]): void {
+    this.aiSelectedDocumentIds.set(ids);
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected closeDocumentContextPicker(): void {
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected enhanceFeatureWithAi(): void {
+    this.enhanceError.set(null);
+    if (!this.canEnhanceFeatureRequirements()) {
+      const reason = this.enhanceFeatureRequirementsDisabledReason();
+      if (reason.length > 0) {
+        this.enhanceError.set(reason);
+      }
+      return;
+    }
+
+    const p = this.project();
+    const f = this.featureMeta();
+    if (!p || !f) {
+      return;
+    }
+
+    const currentRequirements = this.form.controls.requirements.value ?? '';
+    this.originalRequirements.set(currentRequirements);
+    this.enhancing.set(true);
+    this.projectApi
+      .enhanceFeatureRequirements(p.id, f.id, this.aiSelectedDocumentIds())
+      .pipe(finalize(() => this.enhancing.set(false)))
+      .subscribe({
+        next: (result) => {
+          this.draftRequirements.set(result.enhancedRequirements);
+        },
+        error: (err: unknown) => {
+          this.enhanceError.set(ProjectApiService.enhanceFeatureRequirementsErrorMessage(err));
+        },
+      });
+  }
+
+  protected acceptFeatureDraft(): void {
+    const draft = this.draftRequirements();
+    if (!draft) {
+      return;
+    }
+    this.form.patchValue({ requirements: draft });
+    this.form.controls.requirements.markAsDirty();
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
+  }
+
+  protected rejectFeatureDraft(): void {
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
   }
 }

@@ -587,3 +587,108 @@
   opacity: 0.55;
   pointer-events: none;
 }
+
+.pe-enhance-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  max-height: 60vh;
+  overflow: auto;
+  text-align: left;
+  color: var(--pc-on-surface);
+}
+
+@media (max-width: 48rem) {
+  .pe-enhance-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pe-enhance-col-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pc-slate-600);
+}
+
+.pe-enhance-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--pc-on-surface);
+}
+
+.pc-label-row-req {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pc-req-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+@keyframes pc-req-copy-pop {
+  0% {
+    transform: scale(0.88);
+  }
+  45% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pc-req-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--pc-outline);
+  border-radius: 0.5rem;
+  background: var(--pc-white);
+  color: var(--pc-slate-600);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.pc-req-copy:hover:not(:disabled) {
+  background: rgb(248 250 252);
+  border-color: var(--pc-slate-400);
+  color: var(--pc-primary);
+}
+
+.pc-req-copy:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.pc-req-copy__icon {
+  font-size: 1.125rem;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.pc-req-copy--success {
+  animation: pc-req-copy-pop 0.42s ease;
+  border-color: rgb(52 211 153 / 0.55);
+  background: rgb(236 253 245 / 0.95);
+  color: #047857;
+}
+
+.pc-req-copy--success .pc-req-copy__icon {
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+}

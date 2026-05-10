@@ -1,12 +1,19 @@
+mod ai;
 mod app_state;
 mod auth_route;
 mod configs;
+mod crypto;
+mod document_context_service;
+mod project_api_key_service;
 mod project_route;
 mod register_route;
+mod runtime_decrypt_error;
 mod types;
 
 use std::path::Path;
+use std::time::Duration;
 
+use ai::AnthropicClient;
 use app_state::AppState;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
@@ -16,7 +23,8 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use project_route::{
-    create_feature, create_project, create_task, download_project_document, get_project,
+    accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
+    enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks, get_project,
     get_project_feature, get_project_task, list_feature_tasks, list_project_documents,
     list_project_features, list_projects, update_project, update_project_feature,
     update_project_task, upload_project_documents,
@@ -73,6 +81,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fetch_one(&pool)
         .await?;
 
+    let anthropic_http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(config.anthropic_config.timeout_secs))
+        .build()?;
+    let anthropic = AnthropicClient::new(
+        anthropic_http,
+        config.anthropic_config.base_url.clone(),
+        config.anthropic_config.model.clone(),
+        config.anthropic_config.max_tokens,
+    );
+
     let cors = CorsLayer::new()
         .allow_origin(config.cors_origin.parse::<HeaderValue>()?)
         .allow_methods([
@@ -90,6 +108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pool,
         session_max_age_secs: config.session_max_age_secs,
         document_upload_dir: config.document_upload_dir,
+        api_key_encryption_key: config.api_key_encryption_key,
+        anthropic,
     };
 
     let app = Router::new()
@@ -103,6 +123,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}",
             get(get_project).patch(update_project),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/ai/enhance-requirements",
+            post(enhance_project_requirements),
         )
         .route(
             "/api/v1/projects/{project_id}/features",
@@ -121,6 +145,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}",
             get(get_project_feature).patch(update_project_feature),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/ai/enhance-requirements",
+            post(enhance_feature_requirements),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/ai/generate-tasks",
+            post(generate_feature_tasks),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/ai/accept-tasks",
+            post(accept_generated_tasks),
         )
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}/tasks",

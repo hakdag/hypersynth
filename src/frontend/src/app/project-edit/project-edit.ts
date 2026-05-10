@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, map, of, Subscription, switchMap } from 'rxjs';
 
+import { DocumentContextPickerModal } from '../document-context-picker-modal/document-context-picker-modal';
 import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
@@ -16,7 +17,7 @@ type ProjectPhase0Status = (typeof STATUSES)[number];
 
 @Component({
   selector: 'app-project-edit',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, DocumentContextPickerModal],
   templateUrl: './project-edit.html',
   styleUrl: './project-edit.scss',
 })
@@ -36,6 +37,15 @@ export class ProjectEdit implements OnInit, OnDestroy {
   protected readonly serverError = signal<string | null>(null);
   protected readonly showSuccess = signal(false);
   protected readonly apiKeyVisible = signal(false);
+  protected readonly enhancing = signal(false);
+  protected readonly enhanceError = signal<string | null>(null);
+  protected readonly draftRequirements = signal<string | null>(null);
+  protected readonly originalRequirements = signal('');
+  protected readonly requirementsCopyFlash = signal(false);
+  protected readonly documentContextPickerOpen = signal(false);
+  protected readonly aiSelectedDocumentIds = signal<string[]>([]);
+
+  private requirementsCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly statuses = STATUSES;
 
@@ -62,6 +72,7 @@ export class ProjectEdit implements OnInit, OnDestroy {
           this.projectId.set(id);
           this.loadState.set('loading');
           this.loadError.set(null);
+          this.clearRequirementsCopyFlash();
           return this.projectApi.getProject(id).pipe(
             map((row) => ({ kind: 'ok' as const, row })),
             catchError((err: unknown) =>
@@ -100,6 +111,30 @@ export class ProjectEdit implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
+    this.clearRequirementsCopyFlash();
+  }
+
+  private clearRequirementsCopyFlash(): void {
+    if (this.requirementsCopyTimer !== null) {
+      clearTimeout(this.requirementsCopyTimer);
+      this.requirementsCopyTimer = null;
+    }
+    this.requirementsCopyFlash.set(false);
+  }
+
+  protected copyRequirementsFromForm(): void {
+    const text = this.form.controls.requirements.value ?? '';
+    void navigator.clipboard.writeText(text).then(() => {
+      if (this.requirementsCopyTimer !== null) {
+        clearTimeout(this.requirementsCopyTimer);
+        this.requirementsCopyTimer = null;
+      }
+      this.requirementsCopyFlash.set(true);
+      this.requirementsCopyTimer = setTimeout(() => {
+        this.requirementsCopyFlash.set(false);
+        this.requirementsCopyTimer = null;
+      }, 1600);
+    });
   }
 
   private normalizeStatus(s: string): ProjectPhase0Status {
@@ -147,6 +182,87 @@ export class ProjectEdit implements OnInit, OnDestroy {
           this.serverError.set(ProjectApiService.updateErrorMessage(err));
         },
       });
+  }
+
+  protected canEnhanceRequirements(): boolean {
+    if (!this.hadAiApiKey()) {
+      return false;
+    }
+    if (this.submitting() || this.enhancing() || this.loadState() !== 'ok') {
+      return false;
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    return requirements.trim().length > 0;
+  }
+
+  protected enhanceRequirementsDisabledReason(): string {
+    if (!this.hadAiApiKey()) {
+      return 'Add an AI API key to use this.';
+    }
+    const requirements = this.form.controls.requirements.value ?? '';
+    if (requirements.trim().length === 0) {
+      return 'Add project requirements first.';
+    }
+    return '';
+  }
+
+  protected openDocumentContextPicker(): void {
+    if (this.loadState() !== 'ok') {
+      return;
+    }
+    this.documentContextPickerOpen.set(true);
+  }
+
+  protected onDocumentContextConfirmed(ids: string[]): void {
+    this.aiSelectedDocumentIds.set(ids);
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected closeDocumentContextPicker(): void {
+    this.documentContextPickerOpen.set(false);
+  }
+
+  protected enhanceWithAi(): void {
+    this.enhanceError.set(null);
+    if (!this.canEnhanceRequirements()) {
+      const reason = this.enhanceRequirementsDisabledReason();
+      if (reason.length > 0) {
+        this.enhanceError.set(reason);
+      }
+      return;
+    }
+
+    const id = this.projectId();
+    const currentRequirements = this.form.controls.requirements.value ?? '';
+    this.originalRequirements.set(currentRequirements);
+    this.enhancing.set(true);
+    this.projectApi
+      .enhanceProjectRequirements(id, this.aiSelectedDocumentIds())
+      .pipe(finalize(() => this.enhancing.set(false)))
+      .subscribe({
+        next: (result) => {
+          this.draftRequirements.set(result.enhancedRequirements);
+        },
+        error: (err: unknown) => {
+          this.enhanceError.set(ProjectApiService.enhanceErrorMessage(err));
+        },
+      });
+  }
+
+  protected acceptDraft(): void {
+    const draft = this.draftRequirements();
+    if (!draft) {
+      return;
+    }
+    this.form.patchValue({ requirements: draft });
+    this.form.controls.requirements.markAsDirty();
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
+  }
+
+  protected rejectDraft(): void {
+    this.draftRequirements.set(null);
+    this.originalRequirements.set('');
   }
 
   protected cancel(): void {

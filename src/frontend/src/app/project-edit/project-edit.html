@@ -28,6 +28,9 @@
     @if (serverError(); as err) {
       <div class="pc-banner pc-banner-error" role="alert">{{ err }}</div>
     }
+    @if (enhanceError(); as enhanceMsg) {
+      <div class="pc-banner pc-banner-error" role="alert">{{ enhanceMsg }}</div>
+    }
 
     <div class="pc-grid">
       <section class="pc-main">
@@ -55,7 +58,45 @@
             </div>
 
             <div class="pc-field">
-              <span class="pc-label">Project Requirements</span>
+              <div class="pc-label pc-label-row-req">
+                <span>Project Requirements</span>
+                <div class="pc-req-toolbar-actions">
+                  <button
+                    type="button"
+                    class="pc-req-copy"
+                    (click)="copyRequirementsFromForm()"
+                    [class.pc-req-copy--success]="requirementsCopyFlash()"
+                    [disabled]="form.controls.requirements.value.length === 0"
+                    title="Copy requirements to clipboard"
+                    aria-label="Copy project requirements"
+                  >
+                    <span class="material-symbols-outlined pc-req-copy__icon" aria-hidden="true">{{
+                      requirementsCopyFlash() ? 'check' : 'content_copy'
+                    }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="pc-btn pc-btn-ghost"
+                    (click)="openDocumentContextPicker()"
+                    [disabled]="loadState() !== 'ok'"
+                    title="Choose project documents as optional AI context"
+                  >
+                    <span class="pc-btn-text"
+                      >Add Context @if (aiSelectedDocumentIds().length > 0) {
+                      ({{ aiSelectedDocumentIds().length }}) }</span
+                    >
+                  </button>
+                  <button
+                    type="button"
+                    class="pc-btn pc-btn-ghost"
+                    (click)="enhanceWithAi()"
+                    [disabled]="!canEnhanceRequirements()"
+                    [attr.title]="enhanceRequirementsDisabledReason()"
+                  >
+                    <span class="pc-btn-text">{{ enhancing() ? 'Enhancing…' : 'Enhance with AI' }}</span>
+                  </button>
+                </div>
+              </div>
               <div class="pc-rich-shell">
                 <div class="pc-rich-toolbar" aria-hidden="true">
                   <button type="button" class="pc-toolbar-btn material-symbols-outlined" tabindex="-1">format_bold</button>
@@ -204,4 +245,38 @@
       </button>
     </div>
   </div>
+}
+
+@if (draftRequirements(); as draft) {
+  <div class="pc-overlay" role="dialog" aria-modal="true" aria-labelledby="pe-enhance-review-title">
+    <div class="pc-dialog" style="max-width: 70rem; width: min(95vw, 70rem)">
+      <h2 id="pe-enhance-review-title" class="pc-dialog-title">Review AI-enhanced requirements</h2>
+      <div class="pc-dialog-body pe-enhance-compare">
+        <section>
+          <h3 class="pe-enhance-col-title">Current</h3>
+          <pre class="pe-enhance-pre">{{ originalRequirements() }}</pre>
+        </section>
+        <section>
+          <h3 class="pe-enhance-col-title">Enhanced draft</h3>
+          <pre class="pe-enhance-pre">{{ draft }}</pre>
+        </section>
+      </div>
+      <div class="pc-actions">
+        <button type="button" class="pc-btn pc-btn-ghost" (click)="rejectDraft()">Reject</button>
+        <button type="button" class="pc-btn pc-btn-ghost" (click)="rejectDraft()">Cancel</button>
+        <button type="button" class="pc-btn pc-btn-primary" (click)="acceptDraft()">
+          <span class="pc-btn-text">Accept draft</span>
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (documentContextPickerOpen()) {
+  <app-document-context-picker-modal
+    [projectId]="projectId()"
+    [initialSelectedIds]="aiSelectedDocumentIds()"
+    (confirmed)="onDocumentContextConfirmed($event)"
+    (closed)="closeDocumentContextPicker()"
+  />
 }

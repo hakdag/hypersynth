@@ -71,15 +71,13 @@ pub async fn login(
     let token_hash = hash_session_token(&raw);
     let expires_at = Utc::now() + ChronoDuration::seconds(state.session_max_age_secs);
 
-    sqlx::query(
-        r#"INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)"#,
-    )
-    .bind(user.id)
-    .bind(&token_hash)
-    .bind(expires_at)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| internal_error())?;
+    sqlx::query(r#"INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)"#)
+        .bind(user.id)
+        .bind(&token_hash)
+        .bind(expires_at)
+        .execute(&state.pool)
+        .await
+        .map_err(|_| internal_error())?;
 
     let token_cookie = hex::encode(raw);
     let cookie = Cookie::build((SESSION_COOKIE, token_cookie))

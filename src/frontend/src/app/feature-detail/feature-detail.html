@@ -46,6 +46,9 @@
       @if (serverError(); as err) {
         <div class="fc-banner fc-banner--error" role="alert">{{ err }}</div>
       }
+      @if (enhanceError(); as enhanceMsg) {
+        <div class="fc-banner fc-banner--error" role="alert">{{ enhanceMsg }}</div>
+      }
 
       @if (saveNotice()) {
         <div class="fd-save-notice" role="status">Changes saved.</div>
@@ -98,9 +101,45 @@
           </div>
 
           <div class="fc-field">
-            <label class="fc-label" for="feat-reqs">
-              Feature Requirements <span class="fc-opt">(Optional)</span>
-            </label>
+            <div class="fc-label-row">
+              <label class="fc-label fc-label-row__text" for="feat-reqs">
+                Feature Requirements <span class="fc-opt">(Optional)</span>
+              </label>
+              <div class="fc-req-toolbar-actions">
+                <button
+                  type="button"
+                  class="fc-req-copy"
+                  (click)="copyRequirementsFromForm()"
+                  [class.fc-req-copy--success]="requirementsCopyFlash()"
+                  [disabled]="form.controls.requirements.value.length === 0"
+                  title="Copy requirements to clipboard"
+                  aria-label="Copy feature requirements"
+                >
+                  <span class="material-symbols-outlined fc-req-copy__icon" aria-hidden="true">{{
+                    requirementsCopyFlash() ? 'check' : 'content_copy'
+                  }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="fc-btn fc-btn-secondary fd-enhance-ai-btn"
+                  (click)="openDocumentContextPicker()"
+                  [disabled]="loadState() !== 'ok'"
+                  title="Choose project documents as optional AI context"
+                >
+                  Add Context @if (aiSelectedDocumentIds().length > 0) {
+                  ({{ aiSelectedDocumentIds().length }}) }
+                </button>
+                <button
+                  type="button"
+                  class="fc-btn fc-btn-secondary fd-enhance-ai-btn"
+                  (click)="enhanceFeatureWithAi()"
+                  [disabled]="!canEnhanceFeatureRequirements()"
+                  [attr.title]="enhanceFeatureRequirementsDisabledReason()"
+                >
+                  {{ enhancing() ? 'Enhancing…' : 'Enhance with AI' }}
+                </button>
+              </div>
+            </div>
             <div class="fc-rich-shell">
               <div class="fc-rich-toolbar" aria-hidden="true">
                 <button type="button" class="fc-toolbar-btn material-symbols-outlined" tabindex="-1">
@@ -140,3 +179,35 @@
     }
   }
 </div>
+
+@if (documentContextPickerOpen() && project(); as pickerProj) {
+  <app-document-context-picker-modal
+    [projectId]="pickerProj.id"
+    [initialSelectedIds]="aiSelectedDocumentIds()"
+    (confirmed)="onDocumentContextConfirmed($event)"
+    (closed)="closeDocumentContextPicker()"
+  />
+}
+
+@if (draftRequirements(); as draft) {
+  <div class="fd-overlay" role="dialog" aria-modal="true" aria-labelledby="fd-enhance-review-title">
+    <div class="fd-dialog fd-dialog--wide">
+      <h2 id="fd-enhance-review-title" class="fd-dialog-title">Review AI-enhanced feature requirements</h2>
+      <div class="fd-enhance-compare">
+        <section class="fd-enhance-col">
+          <h3 class="fd-enhance-col-title">Current</h3>
+          <pre class="fd-enhance-pre">{{ originalRequirements() }}</pre>
+        </section>
+        <section class="fd-enhance-col">
+          <h3 class="fd-enhance-col-title">Enhanced draft</h3>
+          <pre class="fd-enhance-pre">{{ draft }}</pre>
+        </section>
+      </div>
+      <div class="fd-dialog-actions">
+        <button type="button" class="fc-btn fc-btn-secondary" (click)="rejectFeatureDraft()">Reject</button>
+        <button type="button" class="fc-btn fc-btn-secondary" (click)="rejectFeatureDraft()">Cancel</button>
+        <button type="button" class="fc-btn fc-btn-primary" (click)="acceptFeatureDraft()">Accept draft</button>
+      </div>
+    </div>
+  </div>
+}

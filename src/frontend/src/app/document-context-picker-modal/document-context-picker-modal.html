@@ -1,0 +1,51 @@
+<div
+  class="dcp-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="dcp-title"
+  (click)="cancel()"
+>
+  <div class="dcp-dialog" (click)="$event.stopPropagation()">
+    <h2 id="dcp-title" class="dcp-title">Add document context for AI</h2>
+    <p class="dcp-sub">Only selected documents are sent with the next AI request.</p>
+
+    @if (loadError(); as err) {
+      <div class="dcp-banner dcp-banner--error" role="alert">{{ err }}</div>
+    } @else if (loading()) {
+      <p class="dcp-loading">Loading documents…</p>
+    } @else if (documents().length === 0) {
+      <p class="dcp-empty">No documents uploaded for this project yet.</p>
+    } @else {
+      <ul class="dcp-list" aria-label="Project documents">
+        @for (doc of documents(); track doc.id) {
+          <li class="dcp-row">
+            <label class="dcp-label">
+              <input
+                type="checkbox"
+                class="dcp-check"
+                [checked]="isChecked(doc.id)"
+                (change)="toggle(doc.id, $any($event.target).checked)"
+              />
+              <span class="dcp-meta">
+                <span class="dcp-name">{{ docName(doc) }}</span>
+                <span class="dcp-type-size">{{ docType(doc) }} · {{ docSize(doc) }}</span>
+              </span>
+            </label>
+          </li>
+        }
+      </ul>
+    }
+
+    <div class="dcp-actions">
+      <button type="button" class="dcp-btn dcp-btn-secondary" (click)="cancel()">Cancel</button>
+      <button
+        type="button"
+        class="dcp-btn dcp-btn-primary"
+        (click)="confirm()"
+        [disabled]="loading() || loadError() !== null"
+      >
+        Confirm selection
+      </button>
+    </div>
+  </div>
+</div>

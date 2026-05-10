@@ -63,6 +63,20 @@
               <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">description</span>
               Project Requirements
             </h2>
+            @if (hasExpandableProjectRequirements(p.requirements)) {
+              <button
+                type="button"
+                class="pd-req-copy"
+                (click)="copyProjectRequirements(p.requirements)"
+                [class.pd-req-copy--success]="requirementsCopyFlash()"
+                title="Copy requirements to clipboard"
+                aria-label="Copy project requirements"
+              >
+                <span class="material-symbols-outlined pd-req-copy__icon" aria-hidden="true">{{
+                  requirementsCopyFlash() ? 'check' : 'content_copy'
+                }}</span>
+              </button>
+            }
           </div>
           <div class="pd-req__body">
             @if (hasExpandableProjectRequirements(p.requirements)) {

@@ -10,12 +10,20 @@ use axum_extra::extract::cookie::CookieJar;
 use serde_json::json;
 use tracing::{info, warn};
 
+use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::crypto::ApiKeyCipher;
+use crate::document_context_service::DocumentContextService;
+use crate::project_api_key_service::ProjectApiKeyService;
 use crate::types::{
-    ApiErrorBody, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, FeatureResponse,
-    ProjectDetailResponse, ProjectDocumentResponse, ProjectResponse, TaskDetailResponse,
-    TaskResponse, UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
+    AcceptGeneratedTasksRequest, ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange,
+    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
+    EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
+    EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
+    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
+    ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
+    UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -92,7 +100,7 @@ pub async fn get_project(
             requirements,
             status,
             created_at,
-            (ai_api_key IS NOT NULL AND btrim(ai_api_key) <> '') AS has_ai_api_key
+            (encrypted_api_key IS NOT NULL) AS has_ai_api_key
         FROM projects
         WHERE id = $1 AND user_id = $2
         "#,
@@ -172,16 +180,33 @@ pub async fn create_project(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
-    let ai_key = payload
+    let ai_key_plaintext = payload
         .ai_api_key
         .as_ref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
+    let encrypted_api_key = match ai_key_plaintext.as_deref() {
+        Some(plaintext) => {
+            let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
+            let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
+                warn!(error = %e, user_id = %user.id, "create_project: encryption failed");
+                internal_error()
+            })?;
+            Some(ciphertext)
+        }
+        None => None,
+    };
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, "create_project: begin tx failed");
+        internal_error()
+    })?;
+
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
-        INSERT INTO projects (user_id, name, requirements, status, ai_api_key)
+        INSERT INTO projects (user_id, name, requirements, status, encrypted_api_key)
         VALUES ($1, $2, $3, 'Pending', $4)
         RETURNING id, user_id, name, requirements, status, created_at
         "#,
@@ -189,11 +214,30 @@ pub async fn create_project(
     .bind(user.id)
     .bind(name)
     .bind(requirements.as_ref())
-    .bind(ai_key.as_ref())
-    .fetch_one(&state.pool)
+    .bind(encrypted_api_key.as_deref())
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, "create_project: insert failed");
+        internal_error()
+    })?;
+
+    if encrypted_api_key.is_some() {
+        ProjectApiKeyService::record_audit(
+            &mut *tx,
+            row.id,
+            user.id,
+            ApiKeyAuditEvent::Created,
+        )
+        .await
+        .map_err(|e| {
+            warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: audit insert failed");
+            internal_error()
+        })?;
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: commit failed");
         internal_error()
     })?;
 
@@ -201,6 +245,7 @@ pub async fn create_project(
         project_id = %row.id,
         user_id = %user.id,
         project_status = %row.status,
+        ai_key_audited = encrypted_api_key.is_some(),
         "api: POST /api/v1/projects -> 201 CREATED"
     );
 
@@ -257,6 +302,37 @@ pub async fn update_project(
         Some(requirements_trimmed.to_string())
     };
 
+    let new_key_plaintext = payload
+        .ai_api_key
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let key_action = if payload.clear_ai_api_key {
+        ApiKeyChange::Clear
+    } else if let Some(plaintext) = new_key_plaintext.as_deref() {
+        let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
+        let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
+            warn!(error = %e, user_id = %user.id, %project_id, "update_project: encryption failed");
+            internal_error()
+        })?;
+        ApiKeyChange::Replace(ciphertext)
+    } else {
+        ApiKeyChange::Leave
+    };
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "update_project: begin tx failed");
+        internal_error()
+    })?;
+
+    let new_ciphertext: Option<&[u8]> = match &key_action {
+        ApiKeyChange::Replace(bytes) => Some(bytes.as_slice()),
+        ApiKeyChange::Clear | ApiKeyChange::Leave => None,
+    };
+    let clear_flag = matches!(key_action, ApiKeyChange::Clear);
+
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
         UPDATE projects
@@ -264,10 +340,10 @@ pub async fn update_project(
             name = $1,
             requirements = $2,
             status = $3,
-            ai_api_key = CASE
+            encrypted_api_key = CASE
                 WHEN $4::boolean THEN NULL
-                WHEN $5 IS NOT NULL AND btrim($5) <> '' THEN btrim($5)
-                ELSE ai_api_key
+                WHEN $5::bytea IS NOT NULL THEN $5::bytea
+                ELSE encrypted_api_key
             END
         WHERE id = $6 AND user_id = $7
         RETURNING id, user_id, name, requirements, status, created_at
@@ -276,11 +352,11 @@ pub async fn update_project(
     .bind(name)
     .bind(requirements_for_db.as_ref())
     .bind(status)
-    .bind(payload.clear_ai_api_key)
-    .bind(payload.ai_api_key.as_ref())
+    .bind(clear_flag)
+    .bind(new_ciphertext)
     .bind(project_id)
     .bind(user.id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "update_project: update failed");
@@ -296,10 +372,30 @@ pub async fn update_project(
         return Err(not_found("Project not found."));
     };
 
+    let audit_event = match &key_action {
+        ApiKeyChange::Clear => Some(ApiKeyAuditEvent::Cleared),
+        ApiKeyChange::Replace(_) => Some(ApiKeyAuditEvent::Replaced),
+        ApiKeyChange::Leave => None,
+    };
+    if let Some(event) = audit_event {
+        ProjectApiKeyService::record_audit(&mut *tx, row.id, user.id, event)
+            .await
+            .map_err(|e| {
+                warn!(error = %e, user_id = %user.id, %project_id, "update_project: audit insert failed");
+                internal_error()
+            })?;
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(error = %e, user_id = %user.id, %project_id, "update_project: commit failed");
+        internal_error()
+    })?;
+
     info!(
         user_id = %user.id,
         project_id = %row.id,
         project_status = %row.status,
+        ai_key_audited = audit_event.is_some(),
         "api: PATCH /api/v1/projects/:id -> 200 OK"
     );
 
@@ -401,6 +497,622 @@ pub async fn create_feature(
     );
 
     Ok((StatusCode::CREATED, Json(row)))
+}
+
+pub async fn enhance_project_requirements(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(project_id): Path<Uuid>,
+    Json(payload): Json<EnhanceProjectRequirementsRequest>,
+) -> Result<Json<EnhanceProjectRequirementsResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        "api: POST /api/v1/projects/:id/ai/enhance-requirements"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/ai/enhance-requirements -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let project_row = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"
+        SELECT name, requirements
+        FROM projects
+        WHERE id = $1 AND user_id = $2
+        "#,
+    )
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            "enhance_project_requirements: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some((project_name, requirements_opt)) = project_row else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            "api: POST /api/v1/projects/:id/ai/enhance-requirements -> 404"
+        );
+        return Err(not_found("Project not found."));
+    };
+
+    let requirements = requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| bad_request("Project requirements are required before AI enhancement."))?;
+
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "enhance_project_requirements: decrypt_for_runtime failed"
+            );
+            internal_error()
+        })?
+        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
+    let enhanced_requirements = state
+        .anthropic
+        .enhance_requirements(
+            &api_key,
+            &project_name,
+            requirements,
+            &document_context,
+        )
+        .await
+        .map_err(|e| {
+            let status = match e {
+                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                    StatusCode::BAD_GATEWAY
+                }
+            };
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "enhance_project_requirements: provider call failed"
+            );
+            (
+                status,
+                Json(ApiErrorBody {
+                    message:
+                        "Could not generate enhanced requirements right now. Please try again."
+                            .into(),
+                }),
+            )
+        })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        input_len = requirements.len(),
+        output_len = enhanced_requirements.len(),
+        "api: POST /api/v1/projects/:id/ai/enhance-requirements -> 200 OK"
+    );
+
+    Ok(Json(EnhanceProjectRequirementsResponse {
+        enhanced_requirements,
+    }))
+}
+
+pub async fn enhance_feature_requirements(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<EnhanceFeatureRequirementsRequest>,
+) -> Result<Json<EnhanceFeatureRequirementsResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/enhance-requirements"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/enhance-requirements -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
+        r#"
+        SELECT p.name, p.requirements, f.title, f.requirements
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "enhance_feature_requirements: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some((project_name, project_requirements_opt, feature_title, feature_requirements_opt)) =
+        row
+    else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/enhance-requirements -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    let feature_requirements = feature_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| bad_request("Feature requirements are required before AI enhancement."))?;
+
+    let project_requirements_for_prompt = project_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "enhance_feature_requirements: decrypt_for_runtime failed"
+            );
+            internal_error()
+        })?
+        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
+    let enhanced_requirements = state
+        .anthropic
+        .enhance_feature_requirements(
+            &api_key,
+            &project_name,
+            project_requirements_for_prompt,
+            &feature_title,
+            feature_requirements,
+            &document_context,
+        )
+        .await
+        .map_err(|e| {
+            let status = match e {
+                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                    StatusCode::BAD_GATEWAY
+                }
+            };
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "enhance_feature_requirements: provider call failed"
+            );
+            (
+                status,
+                Json(ApiErrorBody {
+                    message:
+                        "Could not generate enhanced requirements right now. Please try again."
+                            .into(),
+                }),
+            )
+        })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        input_len = feature_requirements.len(),
+        output_len = enhanced_requirements.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/enhance-requirements -> 200 OK"
+    );
+
+    Ok(Json(EnhanceFeatureRequirementsResponse {
+        enhanced_requirements,
+    }))
+}
+
+const MAX_AI_GENERATED_TASKS: usize = 50;
+const MAX_TASK_TITLE_LEN: usize = 512;
+
+pub async fn generate_feature_tasks(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<GenerateTasksRequest>,
+) -> Result<Json<GenerateTasksResponse>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        history_len = payload.feedback_history.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
+        r#"
+        SELECT p.name, p.requirements, f.title, f.requirements
+        FROM features f
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        "#,
+    )
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(user.id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "generate_feature_tasks: query failed"
+        );
+        internal_error()
+    })?;
+
+    let Some((project_name, project_requirements_opt, feature_title, feature_requirements_opt)) =
+        row
+    else {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 404"
+        );
+        return Err(not_found("Feature not found."));
+    };
+
+    let feature_requirements = feature_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| bad_request("Feature requirements are required before AI task generation."))?;
+
+    let project_requirements_for_prompt = project_requirements_opt
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                "generate_feature_tasks: decrypt_for_runtime failed"
+            );
+            internal_error()
+        })?
+        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+
+    let document_context = DocumentContextService::load_for_project(
+        &state.pool,
+        project_id,
+        user.id,
+        &payload.document_context.document_ids,
+    )
+    .await
+    .map_err(map_document_context_error)?;
+
+    let tasks = state
+        .anthropic
+        .generate_tasks(
+            &api_key,
+            &project_name,
+            project_requirements_for_prompt,
+            &feature_title,
+            feature_requirements,
+            &payload.feedback_history,
+            &document_context,
+        )
+        .await
+        .map_err(|e| {
+            let status = match e {
+                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                    StatusCode::BAD_GATEWAY
+                }
+            };
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "generate_feature_tasks: provider call failed"
+            );
+            (
+                status,
+                Json(ApiErrorBody {
+                    message: "Could not generate tasks right now. Please try again.".into(),
+                }),
+            )
+        })?;
+
+    if tasks.len() > MAX_AI_GENERATED_TASKS {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            count = tasks.len(),
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 400 too many"
+        );
+        return Err(bad_request(format!(
+            "AI returned too many tasks (max {MAX_AI_GENERATED_TASKS}). Please try again with different feedback."
+        )));
+    }
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        task_count = tasks.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks -> 200 OK"
+    );
+
+    Ok(Json(GenerateTasksResponse { tasks }))
+}
+
+pub async fn accept_generated_tasks(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<AcceptGeneratedTasksRequest>,
+) -> Result<Json<Vec<TaskResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let has_cookie = auth_route::has_session_cookie(&jar);
+    let task_count = payload.tasks.len();
+    info!(
+        has_cookie,
+        %project_id,
+        %feature_id,
+        task_count,
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks"
+    );
+
+    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+        .await
+        .map_err(|(status, json)| {
+            warn!(
+                status = status.as_u16(),
+                message = %json.message,
+                has_cookie,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> auth error response"
+            );
+            (status, json)
+        })?;
+
+    if payload.tasks.is_empty() {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 400 empty"
+        );
+        return Err(bad_request("Select at least one generated task to save."));
+    }
+
+    if payload.tasks.len() > MAX_AI_GENERATED_TASKS {
+        warn!(
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            task_count,
+            "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 400 too many"
+        );
+        return Err(bad_request(format!(
+            "You can save at most {MAX_AI_GENERATED_TASKS} tasks at once."
+        )));
+    }
+
+    for t in &payload.tasks {
+        let title = t.title.trim();
+        if title.is_empty() {
+            return Err(bad_request("Each task must have a non-empty title."));
+        }
+        if title.len() > MAX_TASK_TITLE_LEN {
+            return Err(bad_request(format!(
+                "Each task title must be at most {MAX_TASK_TITLE_LEN} characters."
+            )));
+        }
+    }
+
+    let mut tx = state.pool.begin().await.map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "accept_generated_tasks: begin tx failed"
+        );
+        internal_error()
+    })?;
+
+    let mut created: Vec<TaskResponse> = Vec::new();
+
+    for candidate in payload.tasks {
+        let title = candidate.title.trim();
+        let description = candidate
+            .description
+            .trim()
+            .to_string();
+        let description_for_db = if description.is_empty() {
+            None
+        } else {
+            Some(description)
+        };
+
+        let row = sqlx::query_as::<_, TaskResponse>(
+            r#"
+            WITH ins AS (
+                INSERT INTO tasks (
+                    feature_id,
+                    title,
+                    description,
+                    status,
+                    created_by,
+                    priority,
+                    assignee_user_id,
+                    creator_user_id
+                )
+                SELECT f.id, $4, $5, 'Pending', 'AI', 'Standard', NULL, NULL
+                FROM features f
+                INNER JOIN projects p ON p.id = f.project_id
+                WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+                RETURNING
+                    id,
+                    feature_id,
+                    title,
+                    description,
+                    status,
+                    created_by,
+                    created_at,
+                    priority,
+                    assignee_user_id,
+                    creator_user_id
+            )
+            SELECT
+                ins.id,
+                ins.feature_id,
+                ins.title,
+                ins.description,
+                ins.status,
+                ins.created_by,
+                ins.created_at,
+                ins.priority,
+                ins.assignee_user_id,
+                au.fullname AS assignee_fullname,
+                au.avatar_url AS assignee_avatar_url,
+                cu.fullname AS creator_fullname,
+                cu.avatar_url AS creator_avatar_url
+            FROM ins
+            LEFT JOIN users au ON au.id = ins.assignee_user_id
+            LEFT JOIN users cu ON cu.id = ins.creator_user_id
+            "#,
+        )
+        .bind(feature_id)
+        .bind(project_id)
+        .bind(user.id)
+        .bind(title)
+        .bind(description_for_db.as_ref())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "accept_generated_tasks: insert failed"
+            );
+            internal_error()
+        })?;
+
+        let Some(row) = row else {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 404"
+            );
+            let _ = tx.rollback().await;
+            return Err(not_found("Feature not found."));
+        };
+
+        created.push(row);
+    }
+
+    tx.commit().await.map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "accept_generated_tasks: commit failed"
+        );
+        internal_error()
+    })?;
+
+    info!(
+        user_id = %user.id,
+        %project_id,
+        %feature_id,
+        saved_count = created.len(),
+        "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 200 OK"
+    );
+
+    Ok(Json(created))
 }
 
 pub async fn list_project_features(
@@ -1553,6 +2265,29 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
             message: message.into(),
         }),
     )
+}
+
+fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(ApiErrorBody {
+            message: message.into(),
+        }),
+    )
+}
+
+fn map_document_context_error(
+    err: DocumentContextError,
+) -> (StatusCode, Json<ApiErrorBody>) {
+    match err {
+        DocumentContextError::NotFoundOrForbidden => not_found("Could not resolve selected documents."),
+        DocumentContextError::ContentUnavailable => unprocessable_entity(
+            "One or more selected documents could not be loaded. Adjust your selection and try again.",
+        ),
+        DocumentContextError::UnsupportedDocumentType => unprocessable_entity(
+            "Selected document type is not supported as AI context yet.",
+        ),
+    }
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
