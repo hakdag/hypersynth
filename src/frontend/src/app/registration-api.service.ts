@@ -4,7 +4,10 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
 
+export type RegisterAccountType = 'personal' | 'company';
+
 export interface RegisterPayload {
+  accountType: RegisterAccountType;
   fullname: string;
   email: string;
   password: string;

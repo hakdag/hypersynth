@@ -1,3 +1,4 @@
+mod account_type;
 mod accept_generated_tasks_request;
 mod ai_document_context_request;
 mod api_error_body;
@@ -33,6 +34,7 @@ mod update_feature_request;
 mod update_project_request;
 mod update_task_request;
 
+pub use account_type::AccountType;
 pub use accept_generated_tasks_request::AcceptGeneratedTasksRequest;
 pub use ai_document_context_request::AiDocumentContextRequest;
 pub use api_error_body::ApiErrorBody;

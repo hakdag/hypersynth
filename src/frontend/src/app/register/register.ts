@@ -10,7 +10,10 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { BootstrapApiService } from '../bootstrap-api.service';
-import { RegistrationApiService } from '../registration-api.service';
+import {
+  RegistrationApiService,
+  RegisterAccountType,
+} from '../registration-api.service';
 
 function phase0PasswordRules(control: AbstractControl): ValidationErrors | null {
   const v = control.value as string | null | undefined;
@@ -39,6 +42,7 @@ export class Register implements OnInit {
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly serverSuccess = signal<string | null>(null);
+  protected readonly selectedAccountType = signal<RegisterAccountType | null>(null);
 
   protected readonly form = this.fb.nonNullable.group({
     fullname: ['', [Validators.required, Validators.maxLength(512)]],
@@ -51,18 +55,42 @@ export class Register implements OnInit {
     this.bootstrapApi.loadBootstrap();
   }
 
+  protected selectAccountType(accountType: RegisterAccountType): void {
+    this.serverError.set(null);
+    this.serverSuccess.set(null);
+    this.selectedAccountType.set(accountType);
+  }
+
+  protected changeAccountType(): void {
+    this.serverError.set(null);
+    this.serverSuccess.set(null);
+    this.selectedAccountType.set(null);
+  }
+
+  protected accountTypeLabel(): string {
+    const accountType = this.selectedAccountType();
+    if (accountType === 'company') {
+      return 'Company Account';
+    }
+    if (accountType === 'personal') {
+      return 'Personal Account';
+    }
+    return '';
+  }
+
   protected submit(): void {
     this.serverError.set(null);
     this.serverSuccess.set(null);
     this.form.markAllAsTouched();
-    if (this.form.invalid || this.submitting()) {
+    const accountType = this.selectedAccountType();
+    if (this.form.invalid || this.submitting() || accountType === null) {
       return;
     }
 
     const { fullname, email, password } = this.form.getRawValue();
     this.submitting.set(true);
 
-    this.registrationApi.register({ fullname, email, password }).subscribe({
+    this.registrationApi.register({ accountType, fullname, email, password }).subscribe({
       next: (res) => {
         this.submitting.set(false);
         this.serverSuccess.set(res.message);

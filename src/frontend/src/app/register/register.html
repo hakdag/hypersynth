@@ -11,8 +11,13 @@
     <div class="card">
       <div class="card-body">
         <div class="card-intro">
-          <h2 class="card-heading">Create Account</h2>
-          <p class="card-sub">Get started with your collaborative workspace</p>
+          @if (selectedAccountType() === null) {
+            <h2 class="card-heading">Choose Account Type</h2>
+            <p class="card-sub">Select how you want to use HyperSynth</p>
+          } @else {
+            <h2 class="card-heading">Create Account</h2>
+            <p class="card-sub">Get started with your collaborative workspace</p>
+          }
         </div>
 
         @if (serverSuccess(); as ok) {
@@ -23,7 +28,36 @@
           <div class="alert alert-error" role="alert">{{ err }}</div>
         }
 
-        <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        @if (selectedAccountType() === null) {
+          <div class="account-type-grid" role="group" aria-label="Account type">
+            <button
+              class="account-type-card"
+              type="button"
+              (click)="selectAccountType('personal')"
+            >
+              <span class="material-symbols-outlined account-type-icon" aria-hidden="true">person</span>
+              <span class="account-type-title">Personal Account</span>
+              <span class="account-type-copy">For individual use and personal projects.</span>
+            </button>
+            <button
+              class="account-type-card"
+              type="button"
+              (click)="selectAccountType('company')"
+            >
+              <span class="material-symbols-outlined account-type-icon" aria-hidden="true">domain</span>
+              <span class="account-type-title">Company Account</span>
+              <span class="account-type-copy">For teams and company workspaces.</span>
+            </button>
+          </div>
+        } @else {
+          <p class="account-type-summary">
+            Account type: <strong>{{ accountTypeLabel() }}</strong>
+            <button class="account-type-change" type="button" (click)="changeAccountType()">
+              Change
+            </button>
+          </p>
+
+          <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
           <div class="field">
             <label class="label" for="reg-name">Full Name</label>
             <div class="input-wrap">
@@ -97,6 +131,7 @@
             }
           </button>
         </form>
+        }
       </div>
 
       <div class="card-footer">
