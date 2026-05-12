@@ -1,0 +1,165 @@
+<div class="pc-page">
+  @if (loadState() === 'loading') {
+    <div class="pc-banner pc-banner-load">Loading company profile…</div>
+  }
+
+  @if (loadState() === 'error' && loadError(); as msg) {
+    <div class="pc-banner pc-banner-error" role="alert">{{ msg }}</div>
+  }
+  @if (loadState() === 'ok') {
+    <header class="pc-header">
+      <h1 class="pc-title">Company Profile</h1>
+      <p class="pc-subtitle">
+        Review and update your company information. Required fields are marked with an asterisk.
+      </p>
+    </header>
+
+    @if (serverSuccess(); as ok) {
+      <div class="pc-banner pc-banner-success" role="status">{{ ok }}</div>
+    }
+
+    @if (serverError(); as err) {
+      <div class="pc-banner pc-banner-error" role="alert">{{ err }}</div>
+    }
+
+    <div class="pc-grid">
+      <section class="pc-main">
+        <div class="pc-card pc-card-form">
+          <form class="pc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-name">
+                Company Name <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="company-profile-name"
+                class="pc-input"
+                type="text"
+                autocomplete="organization"
+                formControlName="name"
+              />
+              @if (fieldError('name'); as fe) {
+                <p class="pc-hint pc-hint-error">{{ fe }}</p>
+              }
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-email">
+                Company Email <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="company-profile-email"
+                class="pc-input"
+                type="email"
+                autocomplete="organization"
+                formControlName="companyEmail"
+              />
+              @if (fieldError('companyEmail'); as fe) {
+                <p class="pc-hint pc-hint-error">{{ fe }}</p>
+              }
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-country">
+                Country <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <select id="company-profile-country" class="pc-input" formControlName="country">
+                <option value="" disabled>Select country</option>
+                @for (country of countryOptions; track country) {
+                  <option [value]="country">{{ country }}</option>
+                }
+              </select>
+              @if (fieldError('country'); as fe) {
+                <p class="pc-hint pc-hint-error">{{ fe }}</p>
+              }
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-timezone">
+                Timezone <span class="pc-req" aria-hidden="true">*</span>
+              </label>
+              <select id="company-profile-timezone" class="pc-input" formControlName="timezone">
+                <option value="" disabled>Select timezone</option>
+                @for (timezone of timezoneOptions; track timezone) {
+                  <option [value]="timezone">{{ timezone }}</option>
+                }
+              </select>
+              @if (fieldError('timezone'); as fe) {
+                <p class="pc-hint pc-hint-error">{{ fe }}</p>
+              }
+            </div>
+
+            <h2 class="pc-section-title">Optional details</h2>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-legal-name">Legal Company Name</label>
+              <input
+                id="company-profile-legal-name"
+                class="pc-input"
+                type="text"
+                formControlName="legalName"
+              />
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-website">Website</label>
+              <input id="company-profile-website" class="pc-input" type="text" formControlName="website" />
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-industry">Industry</label>
+              <input id="company-profile-industry" class="pc-input" type="text" formControlName="industry" />
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-size">Company Size</label>
+              <input id="company-profile-size" class="pc-input" type="text" formControlName="companySize" />
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-phone">Phone Number</label>
+              <input id="company-profile-phone" class="pc-input" type="text" formControlName="phone" />
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-billing-email">Billing Email</label>
+              <input
+                id="company-profile-billing-email"
+                class="pc-input"
+                type="email"
+                formControlName="billingEmail"
+              />
+              @if (fieldError('billingEmail'); as fe) {
+                <p class="pc-hint pc-hint-error">{{ fe }}</p>
+              }
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-address">Address</label>
+              <textarea
+                id="company-profile-address"
+                class="pc-input pc-textarea"
+                rows="3"
+                formControlName="address"
+              ></textarea>
+            </div>
+
+            <div class="pc-field">
+              <label class="pc-label" for="company-profile-tax">Tax / VAT Number</label>
+              <input id="company-profile-tax" class="pc-input" type="text" formControlName="taxVatNumber" />
+            </div>
+
+            <div class="pc-form-actions">
+              <button class="pc-btn pc-btn-primary" type="submit" [disabled]="submitting() || form.invalid">
+                {{ submitting() ? 'Saving…' : 'Save changes' }}
+              </button>
+            </div>
+
+            @if (updatedAt(); as ts) {
+              <p class="pc-meta">Last updated: {{ formatUpdatedAt(ts) }}</p>
+            }
+          </form>
+        </div>
+      </section>
+    </div>
+  }
+</div>

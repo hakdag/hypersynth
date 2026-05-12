@@ -10,39 +10,13 @@ import {
 import { RouterLink } from '@angular/router';
 
 import { BootstrapApiService } from '../bootstrap-api.service';
+import { buildTimezoneOptions, COUNTRY_OPTIONS } from '../company-form-options';
 import {
   RegistrationApiService,
   RegisterAccountType,
 } from '../registration-api.service';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,64}$/;
-
-const COUNTRY_OPTIONS = [
-  'United States',
-  'United Kingdom',
-  'Canada',
-  'Germany',
-  'France',
-  'Netherlands',
-  'Australia',
-  'India',
-  'Japan',
-  'Other',
-] as const;
-
-const FALLBACK_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Berlin',
-  'Europe/Paris',
-  'Asia/Tokyo',
-  'Asia/Kolkata',
-  'Australia/Sydney',
-] as const;
 
 function phase0PasswordRules(control: AbstractControl): ValidationErrors | null {
   const v = control.value as string | null | undefined;
@@ -88,7 +62,7 @@ export class Register implements OnInit {
   protected readonly serverSuccess = signal<string | null>(null);
   protected readonly selectedAccountType = signal<RegisterAccountType | null>(null);
   protected readonly countryOptions = COUNTRY_OPTIONS;
-  protected readonly timezoneOptions = this.buildTimezoneOptions();
+  protected readonly timezoneOptions = buildTimezoneOptions();
 
   protected readonly personalForm = this.fb.nonNullable.group({
     fullname: ['', [Validators.required, Validators.maxLength(512)]],
@@ -309,15 +283,5 @@ export class Register implements OnInit {
       return '';
     }
     return 'Password and confirmation do not match.';
-  }
-
-  private buildTimezoneOptions(): readonly string[] {
-    const supported = Intl as typeof Intl & {
-      supportedValuesOf?: (key: 'timeZone') => string[];
-    };
-    if (typeof supported.supportedValuesOf === 'function') {
-      return supported.supportedValuesOf('timeZone');
-    }
-    return FALLBACK_TIMEZONES;
   }
 }

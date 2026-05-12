@@ -2,10 +2,13 @@ import { Routes } from '@angular/router';
 
 import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
+import { companyGuard } from './company.guard';
+import { CompanyProfile } from './company-profile/company-profile';
 import { FeatureCreate } from './feature-create/feature-create';
 import { FeatureDetail } from './feature-detail/feature-detail';
 import { FeatureView } from './feature-view/feature-view';
 import { Login } from './login/login';
+import { NotFound } from './not-found/not-found';
 import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
 import { ProjectEdit } from './project-edit/project-edit';
@@ -39,6 +42,8 @@ export const routes: Routes = [
       { path: 'projects/:projectId/features/:featureId', component: FeatureView },
       { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
+      { path: 'company', component: CompanyProfile, canActivate: [companyGuard] },
+      { path: '404', component: NotFound },
       { path: 'account', component: AccountPlaceholder },
     ],
   },
