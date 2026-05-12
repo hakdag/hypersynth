@@ -53,6 +53,12 @@ pub async fn register_user(
     let hash_str = password_hash.to_string();
     let account_type = payload.account_type.as_db_value();
 
+    if payload.account_type == AccountType::Company {
+        return Err(bad_request(
+            "Company registration is not supported on this endpoint. Use /api/v1/companies/register.",
+        ));
+    }
+
     let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
 
     let user_id = match sqlx::query_scalar::<_, Uuid>(
@@ -84,30 +90,6 @@ pub async fn register_user(
             return Err(internal_error());
         }
     };
-
-    if payload.account_type == AccountType::Company {
-        let company_id = sqlx::query_scalar::<_, Uuid>(
-            r#"
-            INSERT INTO companies DEFAULT VALUES
-            RETURNING id
-            "#,
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|_| internal_error())?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO company_users (company_id, user_id)
-            VALUES ($1, $2)
-            "#,
-        )
-        .bind(company_id)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| internal_error())?;
-    }
 
     tx.commit().await.map_err(|_| internal_error())?;
 

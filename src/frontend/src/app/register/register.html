@@ -1,5 +1,5 @@
 <main class="register-main">
-  <div class="register-column">
+  <div class="register-column" [class.register-column-wide]="selectedAccountType() === 'company'">
     <div class="brand-block">
       <div class="brand-icon-wrap" aria-hidden="true">
         <span class="material-symbols-outlined brand-icon">hub</span>
@@ -14,6 +14,9 @@
           @if (selectedAccountType() === null) {
             <h2 class="card-heading">Choose Account Type</h2>
             <p class="card-sub">Select how you want to use HyperSynth</p>
+          } @else if (selectedAccountType() === 'company') {
+            <h2 class="card-heading">Register Company</h2>
+            <p class="card-sub">Create your company workspace and admin account</p>
           } @else {
             <h2 class="card-heading">Create Account</h2>
             <p class="card-sub">Get started with your collaborative workspace</p>
@@ -57,80 +60,272 @@
             </button>
           </p>
 
-          <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-          <div class="field">
-            <label class="label" for="reg-name">Full Name</label>
-            <div class="input-wrap">
-              <span class="input-icon material-symbols-outlined" aria-hidden="true">person</span>
-              <input
-                class="input"
-                id="reg-name"
-                type="text"
-                formControlName="fullname"
-                placeholder="John Doe"
-                autocomplete="name"
-              />
-            </div>
-            @if (fieldError('fullname')) {
-              <p class="field-error">{{ fieldError('fullname') }}</p>
-            }
-          </div>
+          @if (selectedAccountType() === 'personal') {
+            <form class="form" [formGroup]="personalForm" (ngSubmit)="submitPersonal()" novalidate>
+              <div class="field">
+                <label class="label" for="reg-name">Full Name</label>
+                <div class="input-wrap">
+                  <span class="input-icon material-symbols-outlined" aria-hidden="true">person</span>
+                  <input
+                    class="input"
+                    id="reg-name"
+                    type="text"
+                    formControlName="fullname"
+                    placeholder="John Doe"
+                    autocomplete="name"
+                  />
+                </div>
+                @if (personalFieldError('fullname')) {
+                  <p class="field-error">{{ personalFieldError('fullname') }}</p>
+                }
+              </div>
 
-          <div class="field">
-            <label class="label" for="reg-email">Email Address</label>
-            <div class="input-wrap">
-              <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
-              <input
-                class="input"
-                id="reg-email"
-                type="email"
-                formControlName="email"
-                placeholder="name@company.com"
-                autocomplete="email"
-              />
-            </div>
-            @if (fieldError('email')) {
-              <p class="field-error">{{ fieldError('email') }}</p>
-            }
-          </div>
+              <div class="field">
+                <label class="label" for="reg-email">Email Address</label>
+                <div class="input-wrap">
+                  <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
+                  <input
+                    class="input"
+                    id="reg-email"
+                    type="email"
+                    formControlName="email"
+                    placeholder="name@company.com"
+                    autocomplete="email"
+                  />
+                </div>
+                @if (personalFieldError('email')) {
+                  <p class="field-error">{{ personalFieldError('email') }}</p>
+                }
+              </div>
 
-          <div class="field">
-            <label class="label" for="reg-password">Password</label>
-            <div class="input-wrap">
-              <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
-              <input
-                class="input"
-                id="reg-password"
-                type="password"
-                formControlName="password"
-                placeholder="Min. 8 characters, letter & number"
-                autocomplete="new-password"
-              />
-            </div>
-            @if (fieldError('password')) {
-              <p class="field-error">{{ fieldError('password') }}</p>
-            }
-          </div>
+              <div class="field">
+                <label class="label" for="reg-password">Password</label>
+                <div class="input-wrap">
+                  <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
+                  <input
+                    class="input"
+                    id="reg-password"
+                    type="password"
+                    formControlName="password"
+                    placeholder="Min. 8 characters, letter & number"
+                    autocomplete="new-password"
+                  />
+                </div>
+                @if (personalFieldError('password')) {
+                  <p class="field-error">{{ personalFieldError('password') }}</p>
+                }
+              </div>
 
-          <div class="terms-row">
-            <input class="checkbox" id="reg-terms" type="checkbox" formControlName="terms" />
-            <label class="terms-label" for="reg-terms">
-              I agree to the <a class="inline-link" href="#" (click)="$event.preventDefault()">Terms of Service</a>
-              and
-              <a class="inline-link" href="#" (click)="$event.preventDefault()">Privacy Policy</a>.
-            </label>
-          </div>
-          @if (fieldError('terms')) {
-            <p class="field-error terms-error">{{ fieldError('terms') }}</p>
+              <div class="terms-row">
+                <input class="checkbox" id="reg-terms" type="checkbox" formControlName="terms" />
+                <label class="terms-label" for="reg-terms">
+                  I agree to the <a class="inline-link" href="#" (click)="$event.preventDefault()">Terms of Service</a>
+                  and
+                  <a class="inline-link" href="#" (click)="$event.preventDefault()">Privacy Policy</a>.
+                </label>
+              </div>
+              @if (personalFieldError('terms')) {
+                <p class="field-error terms-error">{{ personalFieldError('terms') }}</p>
+              }
+
+              <button class="submit" type="submit" [disabled]="submitting() || personalForm.invalid">
+                <span>{{ submitting() ? 'Creating…' : 'Create Account' }}</span>
+                @if (!submitting()) {
+                  <span class="material-symbols-outlined submit-icon" aria-hidden="true">arrow_forward</span>
+                }
+              </button>
+            </form>
+          } @else {
+            <form class="form" [formGroup]="companyForm" (ngSubmit)="submitCompany()" novalidate>
+              <section class="form-section" formGroupName="company">
+                <h3 class="section-heading">Company details</h3>
+
+                <div class="field">
+                  <label class="label" for="company-name">Company Name</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">domain</span>
+                    <input
+                      class="input"
+                      id="company-name"
+                      type="text"
+                      formControlName="name"
+                      placeholder="Acme Corporation"
+                      autocomplete="organization"
+                    />
+                  </div>
+                  @if (companyDetailsFieldError('name')) {
+                    <p class="field-error">{{ companyDetailsFieldError('name') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="company-email">Company Email</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
+                    <input
+                      class="input"
+                      id="company-email"
+                      type="email"
+                      formControlName="companyEmail"
+                      placeholder="contact@company.com"
+                      autocomplete="organization"
+                    />
+                  </div>
+                  @if (companyDetailsFieldError('companyEmail')) {
+                    <p class="field-error">{{ companyDetailsFieldError('companyEmail') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="company-country">Country</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">public</span>
+                    <select class="input input-select" id="company-country" formControlName="country">
+                      <option value="" disabled>Select country</option>
+                      @for (country of countryOptions; track country) {
+                        <option [value]="country">{{ country }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (companyDetailsFieldError('country')) {
+                    <p class="field-error">{{ companyDetailsFieldError('country') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="company-timezone">Timezone</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">schedule</span>
+                    <select class="input input-select" id="company-timezone" formControlName="timezone">
+                      <option value="" disabled>Select timezone</option>
+                      @for (timezone of timezoneOptions; track timezone) {
+                        <option [value]="timezone">{{ timezone }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (companyDetailsFieldError('timezone')) {
+                    <p class="field-error">{{ companyDetailsFieldError('timezone') }}</p>
+                  }
+                </div>
+              </section>
+
+              <section class="form-section" formGroupName="admin">
+                <h3 class="section-heading">Company admin</h3>
+
+                <div class="field">
+                  <label class="label" for="admin-full-name">Full Name</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">person</span>
+                    <input
+                      class="input"
+                      id="admin-full-name"
+                      type="text"
+                      formControlName="fullName"
+                      placeholder="Jane Doe"
+                      autocomplete="name"
+                    />
+                  </div>
+                  @if (companyAdminFieldError('fullName')) {
+                    <p class="field-error">{{ companyAdminFieldError('fullName') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="admin-email">Email Address</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">mail</span>
+                    <input
+                      class="input"
+                      id="admin-email"
+                      type="email"
+                      formControlName="email"
+                      placeholder="admin@company.com"
+                      autocomplete="email"
+                    />
+                  </div>
+                  @if (companyAdminFieldError('email')) {
+                    <p class="field-error">{{ companyAdminFieldError('email') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="admin-username">Username</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">badge</span>
+                    <input
+                      class="input"
+                      id="admin-username"
+                      type="text"
+                      formControlName="username"
+                      placeholder="jane.doe"
+                      autocomplete="username"
+                    />
+                  </div>
+                  @if (companyAdminFieldError('username')) {
+                    <p class="field-error">{{ companyAdminFieldError('username') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="admin-password">Password</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
+                    <input
+                      class="input"
+                      id="admin-password"
+                      type="password"
+                      formControlName="password"
+                      placeholder="Min. 8 characters, letter & number"
+                      autocomplete="new-password"
+                    />
+                  </div>
+                  @if (companyAdminFieldError('password')) {
+                    <p class="field-error">{{ companyAdminFieldError('password') }}</p>
+                  }
+                </div>
+
+                <div class="field">
+                  <label class="label" for="admin-password-confirmation">Confirm Password</label>
+                  <div class="input-wrap">
+                    <span class="input-icon material-symbols-outlined" aria-hidden="true">lock</span>
+                    <input
+                      class="input"
+                      id="admin-password-confirmation"
+                      type="password"
+                      formControlName="passwordConfirmation"
+                      placeholder="Re-enter password"
+                      autocomplete="new-password"
+                    />
+                  </div>
+                  @if (companyAdminFieldError('passwordConfirmation')) {
+                    <p class="field-error">{{ companyAdminFieldError('passwordConfirmation') }}</p>
+                  }
+                  @if (companyPasswordMismatchError()) {
+                    <p class="field-error">{{ companyPasswordMismatchError() }}</p>
+                  }
+                </div>
+              </section>
+
+              <div class="terms-row">
+                <input class="checkbox" id="company-terms" type="checkbox" formControlName="terms" />
+                <label class="terms-label" for="company-terms">
+                  I agree to the <a class="inline-link" href="#" (click)="$event.preventDefault()">Terms of Service</a>
+                  and
+                  <a class="inline-link" href="#" (click)="$event.preventDefault()">Privacy Policy</a>.
+                </label>
+              </div>
+              @if (companyTermsError()) {
+                <p class="field-error terms-error">{{ companyTermsError() }}</p>
+              }
+
+              <button class="submit" type="submit" [disabled]="submitting() || companyForm.invalid">
+                <span>{{ submitting() ? 'Creating…' : 'Create Company Account' }}</span>
+                @if (!submitting()) {
+                  <span class="material-symbols-outlined submit-icon" aria-hidden="true">arrow_forward</span>
+                }
+              </button>
+            </form>
           }
-
-          <button class="submit" type="submit" [disabled]="submitting() || form.invalid">
-            <span>{{ submitting() ? 'Creating…' : 'Create Account' }}</span>
-            @if (!submitting()) {
-              <span class="material-symbols-outlined submit-icon" aria-hidden="true">arrow_forward</span>
-            }
-          </button>
-        </form>
         }
       </div>
 

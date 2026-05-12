@@ -1,6 +1,7 @@
 mod ai;
 mod app_state;
 mod auth_route;
+mod company_registration_route;
 mod configs;
 mod crypto;
 mod document_context_service;
@@ -29,6 +30,7 @@ use project_route::{
     list_project_features, list_projects, update_project, update_project_feature,
     update_project_task, upload_project_documents,
 };
+use company_registration_route::register_company;
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -116,6 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/health", get(health))
         .route("/api/v1/bootstrap", get(bootstrap))
         .route("/api/v1/register", post(register_user))
+        .route("/api/v1/companies/register", post(register_company))
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))

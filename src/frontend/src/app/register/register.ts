@@ -15,6 +15,35 @@ import {
   RegisterAccountType,
 } from '../registration-api.service';
 
+const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,64}$/;
+
+const COUNTRY_OPTIONS = [
+  'United States',
+  'United Kingdom',
+  'Canada',
+  'Germany',
+  'France',
+  'Netherlands',
+  'Australia',
+  'India',
+  'Japan',
+  'Other',
+] as const;
+
+const FALLBACK_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Asia/Kolkata',
+  'Australia/Sydney',
+] as const;
+
 function phase0PasswordRules(control: AbstractControl): ValidationErrors | null {
   const v = control.value as string | null | undefined;
   if (v === null || v === undefined || v.length === 0) {
@@ -24,6 +53,21 @@ function phase0PasswordRules(control: AbstractControl): ValidationErrors | null 
   const hasDigit = /\d/.test(v);
   if (!hasLetter || !hasDigit) {
     return { phase0Password: true };
+  }
+  return null;
+}
+
+function passwordConfirmationMatch(group: AbstractControl): ValidationErrors | null {
+  const password = group.get('password')?.value as string | null | undefined;
+  const confirmation = group.get('passwordConfirmation')?.value as string | null | undefined;
+  if (password === null || password === undefined || password.length === 0) {
+    return null;
+  }
+  if (confirmation === null || confirmation === undefined || confirmation.length === 0) {
+    return null;
+  }
+  if (password !== confirmation) {
+    return { passwordMismatch: true };
   }
   return null;
 }
@@ -43,11 +87,33 @@ export class Register implements OnInit {
   protected readonly serverError = signal<string | null>(null);
   protected readonly serverSuccess = signal<string | null>(null);
   protected readonly selectedAccountType = signal<RegisterAccountType | null>(null);
+  protected readonly countryOptions = COUNTRY_OPTIONS;
+  protected readonly timezoneOptions = this.buildTimezoneOptions();
 
-  protected readonly form = this.fb.nonNullable.group({
+  protected readonly personalForm = this.fb.nonNullable.group({
     fullname: ['', [Validators.required, Validators.maxLength(512)]],
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8), phase0PasswordRules]],
+    terms: [false, Validators.requiredTrue],
+  });
+
+  protected readonly companyForm = this.fb.nonNullable.group({
+    company: this.fb.nonNullable.group({
+      name: ['', [Validators.required, Validators.maxLength(255)]],
+      companyEmail: ['', [Validators.required, Validators.email]],
+      country: ['', Validators.required],
+      timezone: ['', Validators.required],
+    }),
+    admin: this.fb.nonNullable.group(
+      {
+        fullName: ['', [Validators.required, Validators.maxLength(512)]],
+        email: ['', [Validators.required, Validators.email]],
+        username: ['', [Validators.required, Validators.pattern(USERNAME_PATTERN)]],
+        password: ['', [Validators.required, Validators.minLength(8), phase0PasswordRules]],
+        passwordConfirmation: ['', Validators.required],
+      },
+      { validators: passwordConfirmationMatch },
+    ),
     terms: [false, Validators.requiredTrue],
   });
 
@@ -65,6 +131,18 @@ export class Register implements OnInit {
     this.serverError.set(null);
     this.serverSuccess.set(null);
     this.selectedAccountType.set(null);
+    this.personalForm.reset({ terms: false });
+    this.companyForm.reset({
+      company: { name: '', companyEmail: '', country: '', timezone: '' },
+      admin: {
+        fullName: '',
+        email: '',
+        username: '',
+        password: '',
+        passwordConfirmation: '',
+      },
+      terms: false,
+    });
   }
 
   protected accountTypeLabel(): string {
@@ -78,23 +156,22 @@ export class Register implements OnInit {
     return '';
   }
 
-  protected submit(): void {
+  protected submitPersonal(): void {
     this.serverError.set(null);
     this.serverSuccess.set(null);
-    this.form.markAllAsTouched();
-    const accountType = this.selectedAccountType();
-    if (this.form.invalid || this.submitting() || accountType === null) {
+    this.personalForm.markAllAsTouched();
+    if (this.personalForm.invalid || this.submitting()) {
       return;
     }
 
-    const { fullname, email, password } = this.form.getRawValue();
+    const { fullname, email, password } = this.personalForm.getRawValue();
     this.submitting.set(true);
 
-    this.registrationApi.register({ accountType, fullname, email, password }).subscribe({
+    this.registrationApi.register({ accountType: 'personal', fullname, email, password }).subscribe({
       next: (res) => {
         this.submitting.set(false);
         this.serverSuccess.set(res.message);
-        this.form.reset({ terms: false });
+        this.personalForm.reset({ terms: false });
       },
       error: (err: unknown) => {
         this.submitting.set(false);
@@ -103,8 +180,56 @@ export class Register implements OnInit {
     });
   }
 
-  protected fieldError(controlName: 'fullname' | 'email' | 'password' | 'terms'): string {
-    const c = this.form.controls[controlName];
+  protected submitCompany(): void {
+    this.serverError.set(null);
+    this.serverSuccess.set(null);
+    this.companyForm.markAllAsTouched();
+    if (this.companyForm.invalid || this.submitting()) {
+      return;
+    }
+
+    const { company, admin } = this.companyForm.getRawValue();
+    this.submitting.set(true);
+
+    this.registrationApi
+      .registerCompany({
+        name: company.name,
+        companyEmail: company.companyEmail,
+        country: company.country,
+        timezone: company.timezone,
+        fullName: admin.fullName,
+        email: admin.email,
+        username: admin.username,
+        password: admin.password,
+        passwordConfirmation: admin.passwordConfirmation,
+      })
+      .subscribe({
+        next: (res) => {
+          this.submitting.set(false);
+          this.serverSuccess.set(res.message);
+          this.companyForm.reset({
+            company: { name: '', companyEmail: '', country: '', timezone: '' },
+            admin: {
+              fullName: '',
+              email: '',
+              username: '',
+              password: '',
+              passwordConfirmation: '',
+            },
+            terms: false,
+          });
+        },
+        error: (err: unknown) => {
+          this.submitting.set(false);
+          this.serverError.set(RegistrationApiService.errorMessage(err));
+        },
+      });
+  }
+
+  protected personalFieldError(
+    controlName: 'fullname' | 'email' | 'password' | 'terms',
+  ): string {
+    const c = this.personalForm.controls[controlName];
     if (!c.touched || !c.errors) {
       return '';
     }
@@ -126,5 +251,73 @@ export class Register implements OnInit {
       }
     }
     return '';
+  }
+
+  protected companyDetailsFieldError(
+    controlName: 'name' | 'companyEmail' | 'country' | 'timezone',
+  ): string {
+    const c = this.companyForm.controls.company.controls[controlName];
+    return this.controlErrorMessage(c);
+  }
+
+  protected companyAdminFieldError(
+    controlName: 'fullName' | 'email' | 'username' | 'password' | 'passwordConfirmation',
+  ): string {
+    const c = this.companyForm.controls.admin.controls[controlName];
+    return this.controlErrorMessage(c);
+  }
+
+  private controlErrorMessage(c: AbstractControl): string {
+    if (!c.touched || !c.errors) {
+      return '';
+    }
+    if (c.errors['required']) {
+      return 'This field is required.';
+    }
+    if (c.errors['email']) {
+      return 'Enter a valid email address.';
+    }
+    if (c.errors['maxlength']) {
+      return 'This value is too long.';
+    }
+    if (c.errors['pattern']) {
+      return 'Username must be 3–64 characters and may only contain letters, numbers, underscores, dots, and hyphens.';
+    }
+    if (c.errors['minlength']) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (c.errors['phase0Password']) {
+      return 'Password must include at least one letter and one number.';
+    }
+    return '';
+  }
+
+  protected companyTermsError(): string {
+    const c = this.companyForm.controls.terms;
+    if (!c.touched || !c.errors) {
+      return '';
+    }
+    if (c.errors['required']) {
+      return 'You must accept the terms to continue.';
+    }
+    return '';
+  }
+
+  protected companyPasswordMismatchError(): string {
+    const admin = this.companyForm.controls.admin;
+    if (!admin.touched || !admin.errors?.['passwordMismatch']) {
+      return '';
+    }
+    return 'Password and confirmation do not match.';
+  }
+
+  private buildTimezoneOptions(): readonly string[] {
+    const supported = Intl as typeof Intl & {
+      supportedValuesOf?: (key: 'timeZone') => string[];
+    };
+    if (typeof supported.supportedValuesOf === 'function') {
+      return supported.supportedValuesOf('timeZone');
+    }
+    return FALLBACK_TIMEZONES;
   }
 }
