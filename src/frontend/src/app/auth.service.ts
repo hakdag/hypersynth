@@ -2,12 +2,14 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 
 import { AuthApiService, CurrentUser } from './auth-api.service';
+import { CompanyAccessService } from './company-access.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AuthService {
   private readonly authApi = inject(AuthApiService);
+  private readonly companyAccess = inject(CompanyAccessService);
 
   private readonly user = signal<CurrentUser | null>(null);
 
@@ -33,6 +35,11 @@ export class AuthService {
   }
 
   logout(): Observable<void> {
-    return this.authApi.logout().pipe(tap(() => this.user.set(null)));
+    return this.authApi.logout().pipe(
+      tap(() => {
+        this.user.set(null);
+        this.companyAccess.clearAssociationCache();
+      }),
+    );
   }
 }

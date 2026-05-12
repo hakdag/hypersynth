@@ -47,6 +47,16 @@
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">contact_support</span>
           <span>Support</span>
         </span>
+        @if (hasCompanyAssociation()) {
+          <a
+            routerLink="/app/company"
+            class="sidebar-link"
+            [class.sidebar-link-active]="companyNavActive()"
+          >
+            <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">apartment</span>
+            <span>Company</span>
+          </a>
+        }
         <a routerLink="/app/account" class="sidebar-link" routerLinkActive="sidebar-link-active">
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">settings</span>
           <span>Settings</span>

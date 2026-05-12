@@ -7,7 +7,7 @@ use password_hash::rand_core::OsRng;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::types::{ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
+use crate::types::{AccountType, ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
 
 const MIN_PASSWORD_LEN: usize = 8;
 
@@ -51,28 +51,31 @@ pub async fn register_user(
         .map_err(|_| internal_error())?;
 
     let hash_str = password_hash.to_string();
+    let account_type = payload.account_type.as_db_value();
 
-    let insert_result = sqlx::query_scalar::<_, Uuid>(
+    if payload.account_type == AccountType::Company {
+        return Err(bad_request(
+            "Company registration is not supported on this endpoint. Use /api/v1/companies/register.",
+        ));
+    }
+
+    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
+
+    let user_id = match sqlx::query_scalar::<_, Uuid>(
         r#"
-        INSERT INTO users (fullname, email, password_hash)
-        VALUES ($1, lower(trim($2)), $3)
+        INSERT INTO users (fullname, email, password_hash, account_type)
+        VALUES ($1, lower(trim($2)), $3, $4)
         RETURNING id
         "#,
     )
     .bind(fullname)
     .bind(email)
     .bind(&hash_str)
-    .fetch_one(&state.pool)
-    .await;
-
-    match insert_result {
-        Ok(id) => Ok((
-            StatusCode::CREATED,
-            Json(RegisterSuccessResponse {
-                id,
-                message: "Your account has been created.".into(),
-            }),
-        )),
+    .bind(account_type)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(id) => id,
         Err(e) => {
             if let Some(db) = e.as_database_error() {
                 if db.code().as_deref() == Some("23505") {
@@ -84,9 +87,19 @@ pub async fn register_user(
                     ));
                 }
             }
-            Err(internal_error())
+            return Err(internal_error());
         }
-    }
+    };
+
+    tx.commit().await.map_err(|_| internal_error())?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(RegisterSuccessResponse {
+            id: user_id,
+            message: "Your account has been created.".into(),
+        }),
+    ))
 }
 
 fn email_contains_at_and_dot(email: &str) -> bool {
