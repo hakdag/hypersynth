@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
+use crate::authorization;
 use crate::types::{ApiErrorBody, CompanyResponse, UpdateCompanyRequest};
 
 pub async fn get_current_company(
@@ -22,8 +23,8 @@ pub async fn update_current_company(
     jar: CookieJar,
     Json(payload): Json<UpdateCompanyRequest>,
 ) -> Result<Json<CompanyResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    // TODO(SF-13): enforce company_admin role
     let user = require_authenticated_user(&state.pool, &jar).await?;
+    authorization::require_company_role(&user, authorization::MANAGE_COMPANY_PROFILE).await?;
     let company = fetch_company_for_user(&state.pool, user.id).await?;
 
     let name = payload.name.trim();

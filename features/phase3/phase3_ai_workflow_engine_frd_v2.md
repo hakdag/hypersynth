@@ -16,6 +16,16 @@ This phase ensures:
 - Users collaborate safely with AI
 - System maintains full traceability and auditability
 
+## 1.1 Relationship to Phase 2.5
+
+Phase 2.5 (Insights & Performance) establishes a deterministic, rule-based insights panel and a KPI baseline. Phase 3 is the natural place to layer AI on top of that foundation:
+
+- AI-generated explanations and recommended actions attached to Phase 2.5 insights
+- AI summaries of project health, bottlenecks, and trends
+- AI suggestions for unblocking dependency bottlenecks or rebalancing workload
+
+These AI surfaces must follow the same approval, versioning, and role rules defined in this document. The deterministic insights and KPIs from Phase 2.5 remain authoritative; AI output augments them but does not replace them.
+
 ---
 
 # 2. Key Additions in This Revision

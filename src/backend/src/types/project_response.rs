@@ -7,7 +7,8 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct ProjectResponse {
     pub id: Uuid,
-    pub user_id: Uuid,
+    pub owner_user_id: Option<Uuid>,
+    pub company_id: Option<Uuid>,
     pub name: String,
     pub requirements: Option<String>,
     pub status: String,

@@ -1,6 +1,7 @@
 mod ai;
 mod app_state;
 mod auth_route;
+mod authorization;
 mod company_registration_route;
 mod company_route;
 mod configs;
@@ -10,6 +11,7 @@ mod project_api_key_service;
 mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
+mod tenant_scope_service;
 mod types;
 
 use std::path::Path;

@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
+import { AuthService } from '../auth.service';
 import { CompanyApiService, Company } from '../company-api.service';
 import { buildTimezoneOptions, COUNTRY_OPTIONS } from '../company-form-options';
 
@@ -16,6 +17,9 @@ type LoadState = 'loading' | 'ok' | 'error';
 export class CompanyProfile implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly companyApi = inject(CompanyApiService);
+  private readonly auth = inject(AuthService);
+
+  protected readonly canManageCompanyProfile = this.auth.canManageCompanyProfile;
 
   protected readonly loadState = signal<LoadState>('loading');
   protected readonly loadError = signal<string | null>(null);
@@ -42,6 +46,9 @@ export class CompanyProfile implements OnInit {
   });
 
   ngOnInit(): void {
+    if (!this.canManageCompanyProfile()) {
+      this.form.disable({ emitEvent: false });
+    }
     this.companyApi.getCompany().subscribe({
       next: (company) => {
         this.patchForm(company);

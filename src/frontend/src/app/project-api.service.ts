@@ -20,7 +20,8 @@ export interface UpdateProjectPayload {
 
 export interface CreatedProject {
   id: string;
-  userId: string;
+  ownerUserId: string | null;
+  companyId: string | null;
   name: string;
   requirements: string | null;
   status: string;
