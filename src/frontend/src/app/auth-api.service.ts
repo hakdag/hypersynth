@@ -4,11 +4,18 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
 
+export type AccountType = 'personal' | 'company';
+
+export type CompanyRole = 'company_admin' | 'project_manager' | 'contributor' | 'viewer';
+
 export interface CurrentUser {
   id: string;
   fullname: string;
   email: string;
   avatarUrl: string | null;
+  accountType: AccountType;
+  role: CompanyRole | null;
+  companyId: string | null;
 }
 
 @Injectable({

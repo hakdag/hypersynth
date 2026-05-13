@@ -1,11 +1,9 @@
-use serde::Serialize;
 use uuid::Uuid;
 
 use crate::types::{AccountType, CompanyRole};
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CurrentUserBody {
+#[derive(Debug)]
+pub struct SessionUser {
     pub id: Uuid,
     pub fullname: String,
     pub email: String,

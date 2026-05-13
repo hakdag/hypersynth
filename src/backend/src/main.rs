@@ -1,6 +1,7 @@
 mod ai;
 mod app_state;
 mod auth_route;
+mod authorization;
 mod company_registration_route;
 mod company_route;
 mod configs;

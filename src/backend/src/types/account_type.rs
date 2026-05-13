@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountType {
     Personal,
@@ -12,6 +12,14 @@ impl AccountType {
         match self {
             AccountType::Personal => "personal",
             AccountType::Company => "company",
+        }
+    }
+
+    pub fn from_db_value(value: &str) -> Option<Self> {
+        match value {
+            "personal" => Some(AccountType::Personal),
+            "company" => Some(AccountType::Company),
+            _ => None,
         }
     }
 }
