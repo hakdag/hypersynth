@@ -71,7 +71,8 @@ impl TenantScopeService {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiErrorBody {
                     message: "Something went wrong. Please try again.".into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -82,7 +83,8 @@ impl TenantScopeService {
                 StatusCode::NOT_FOUND,
                 Json(ApiErrorBody {
                     message: "Project not found.".into(),
-                }),
+            ..Default::default()
+        }),
             ))
         }
     }

@@ -4,12 +4,12 @@ use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use chrono::{Duration as ChronoDuration, Utc};
 use rand_core::{OsRng, RngCore};
-use sha2::{Digest, Sha256};
 use tracing::warn;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::invitation_token_service::hash_invitation_token;
 use crate::authorization;
 use crate::email::InvitationEmail;
 use crate::tenant_scope_service::TenantScopeService;
@@ -17,22 +17,7 @@ use crate::types::{
     ApiErrorBody, CompanyRole, CreateInvitationRequest, Invitation, InvitationResponse,
     InvitationStatus, TenantScope,
 };
-
-fn hash_invitation_token(raw: &[u8; 32]) -> String {
-    hex::encode(Sha256::digest(raw))
-}
-
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
+use crate::user_registration::email_contains_at_and_dot;
 
 fn company_role_invite_label(role: CompanyRole) -> &'static str {
     match role {
@@ -123,7 +108,8 @@ pub async fn create_invitation(
                 StatusCode::NOT_FOUND,
                 Json(ApiErrorBody {
                     message: "Project not found.".into(),
-                }),
+            ..Default::default()
+        }),
             ));
         }
     }
@@ -208,7 +194,8 @@ pub async fn create_invitation(
                         Json(ApiErrorBody {
                             message: "An invitation is already pending for this email address."
                                 .into(),
-                        }),
+            ..Default::default()
+        }),
                     ));
                 }
             }
@@ -250,7 +237,8 @@ pub async fn create_invitation(
             StatusCode::BAD_GATEWAY,
             Json(ApiErrorBody {
                 message: "Invitation was created but the invitation email could not be sent. Please try again or contact support.".into(),
-            }),
+            ..Default::default()
+        }),
         ));
     }
 
@@ -376,6 +364,7 @@ fn not_found() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: "Invitation not found.".into(),
+            ..Default::default()
         }),
     )
 }
@@ -385,6 +374,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -394,6 +384,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

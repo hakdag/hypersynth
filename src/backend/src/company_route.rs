@@ -8,6 +8,7 @@ use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization;
 use crate::types::{ApiErrorBody, CompanyResponse, UpdateCompanyRequest};
+use crate::user_registration::email_contains_at_and_dot;
 
 pub async fn get_current_company(
     State(state): State<AppState>,
@@ -184,18 +185,6 @@ fn optional_trimmed(value: Option<String>) -> Option<String> {
     }
 }
 
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
 fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErrorBody>) {
     let message = match constraint {
         Some("idx_companies_company_email_lower") => {
@@ -205,7 +194,9 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message }),
+        Json(ApiErrorBody { message,
+            ..Default::default()
+        }),
     )
 }
 
@@ -214,6 +205,7 @@ fn not_found() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: "No company is associated with your account.".into(),
+            ..Default::default()
         }),
     )
 }
@@ -223,6 +215,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -232,6 +225,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

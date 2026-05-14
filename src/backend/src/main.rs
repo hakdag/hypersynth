@@ -8,13 +8,16 @@ mod configs;
 mod crypto;
 mod document_context_service;
 mod email;
+mod invitation_accept_route;
 mod invitation_route;
+mod invitation_token_service;
 mod project_api_key_service;
 mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
 mod tenant_scope_service;
 mod types;
+mod user_registration;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -30,6 +33,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use email::SmtpEmailSender;
+use invitation_accept_route::{
+    accept_invitation_confirm, accept_invitation_register, preview_invitation,
+};
 use invitation_route::{cancel_invitation, create_invitation, list_invitations};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
@@ -160,6 +166,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/invitations/{invitation_id}/cancel",
             post(cancel_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept/preview",
+            get(preview_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept/register",
+            post(accept_invitation_register),
+        )
+        .route(
+            "/api/v1/invitations/accept/confirm",
+            post(accept_invitation_confirm),
         )
         .route("/api/v1/projects", get(list_projects).post(create_project))
         .route(

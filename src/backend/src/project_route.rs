@@ -656,7 +656,8 @@ pub async fn enhance_project_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -805,7 +806,8 @@ pub async fn enhance_feature_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -958,7 +960,8 @@ pub async fn generate_feature_tasks(
                 status,
                 Json(ApiErrorBody {
                     message: "Could not generate tasks right now. Please try again.".into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -2393,6 +2396,7 @@ fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2402,6 +2406,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2411,6 +2416,7 @@ fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErro
         StatusCode::UNPROCESSABLE_ENTITY,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2434,6 +2440,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

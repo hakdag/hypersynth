@@ -4,6 +4,7 @@ import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
 import { companyGuard } from './company.guard';
 import { CompanyProfile } from './company-profile/company-profile';
+import { InvitationAccept } from './invitation-accept/invitation-accept';
 import { InvitationCreate } from './invitation-create/invitation-create';
 import { InvitationList } from './invitation-list/invitation-list';
 import { inviteUsersGuard } from './invite-users.guard';
@@ -26,6 +27,7 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'register' },
   { path: 'register', component: Register },
   { path: 'login', component: Login },
+  { path: 'invitations/accept', component: InvitationAccept },
   {
     path: 'app',
     component: Shell,

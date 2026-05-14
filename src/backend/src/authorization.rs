@@ -41,6 +41,7 @@ pub fn forbidden(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>)
         StatusCode::FORBIDDEN,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }

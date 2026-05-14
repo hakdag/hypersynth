@@ -16,6 +16,7 @@ use crate::app_state::AppState;
 use crate::types::{
     AccountType, ApiErrorBody, CompanyRole, CurrentUserBody, LoginRequest, SessionUser,
 };
+use crate::user_registration::email_contains_at_and_dot;
 
 const SESSION_COOKIE: &str = "hypersynth_session";
 const GENERIC_AUTH_FAILURE: &str = "Invalid email or password.";
@@ -27,13 +28,7 @@ pub(crate) fn has_session_cookie(jar: &CookieJar) -> bool {
 #[derive(sqlx::FromRow)]
 struct UserAuthRow {
     id: Uuid,
-    fullname: String,
-    email: String,
     password_hash: String,
-    avatar_url: Option<String>,
-    account_type: String,
-    role: Option<String>,
-    company_id: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -69,15 +64,8 @@ pub async fn login(
         r#"
         SELECT
             u.id,
-            u.fullname,
-            u.email,
-            u.password_hash,
-            u.avatar_url,
-            u.account_type,
-            u.role,
-            cu.company_id
+            u.password_hash
         FROM users u
-        LEFT JOIN company_users cu ON cu.user_id = u.id
         WHERE u.email = lower(trim($1))
         "#,
     )
@@ -95,16 +83,54 @@ pub async fn login(
         return Err(unauthorized_auth());
     }
 
+    let (jar, body) = establish_session_for_user(
+        &state.pool,
+        state.session_max_age_secs,
+        jar,
+        user.id,
+    )
+    .await?;
+    Ok((jar, Json(body)))
+}
+
+/// Creates a new session row and session cookie for the given user (e.g. after login or invitation acceptance).
+pub async fn establish_session_for_user(
+    pool: &PgPool,
+    session_max_age_secs: i64,
+    jar: CookieJar,
+    user_id: Uuid,
+) -> Result<(CookieJar, CurrentUserBody), (StatusCode, Json<ApiErrorBody>)> {
+    let row = sqlx::query_as::<_, SessionUserRow>(
+        r#"
+        SELECT
+            u.id,
+            u.fullname,
+            u.email,
+            u.avatar_url,
+            u.account_type,
+            u.role,
+            cu.company_id
+        FROM users u
+        LEFT JOIN company_users cu ON cu.user_id = u.id
+        WHERE u.id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or_else(internal_error)?;
+
     let mut raw = [0u8; 32];
     OsRng.fill_bytes(&mut raw);
     let token_hash = hash_session_token(&raw);
-    let expires_at = Utc::now() + ChronoDuration::seconds(state.session_max_age_secs);
+    let expires_at = Utc::now() + ChronoDuration::seconds(session_max_age_secs);
 
     sqlx::query(r#"INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)"#)
-        .bind(user.id)
+        .bind(row.id)
         .bind(&token_hash)
         .bind(expires_at)
-        .execute(&state.pool)
+        .execute(pool)
         .await
         .map_err(|_| internal_error())?;
 
@@ -113,24 +139,24 @@ pub async fn login(
         .path("/")
         .http_only(true)
         .same_site(SameSite::Lax)
-        .max_age(CookieDuration::seconds(state.session_max_age_secs))
+        .max_age(CookieDuration::seconds(session_max_age_secs))
         .build();
 
-    let account_type = AccountType::from_db_value(user.account_type.as_str())
+    let account_type = AccountType::from_db_value(row.account_type.as_str())
         .ok_or_else(internal_error)?;
-    let role = decode_role(user.role.as_deref())?;
+    let role = decode_role(row.role.as_deref())?;
 
     let jar = jar.add(cookie);
     let body = CurrentUserBody {
-        id: user.id,
-        fullname: user.fullname,
-        email: user.email,
-        avatar_url: user.avatar_url,
+        id: row.id,
+        fullname: row.fullname,
+        email: row.email,
+        avatar_url: row.avatar_url,
         account_type,
         role,
-        company_id: user.company_id,
+        company_id: row.company_id,
     };
-    Ok((jar, Json(body)))
+    Ok((jar, body))
 }
 
 pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
@@ -266,23 +292,12 @@ fn verify_password_hash(hash: &str, password: &str) -> bool {
         .is_ok()
 }
 
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
 fn unauthorized_auth() -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::UNAUTHORIZED,
         Json(ApiErrorBody {
             message: GENERIC_AUTH_FAILURE.into(),
+            ..Default::default()
         }),
     )
 }
@@ -292,6 +307,7 @@ fn unauthenticated() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::UNAUTHORIZED,
         Json(ApiErrorBody {
             message: "You need to sign in to continue.".into(),
+            ..Default::default()
         }),
     )
 }
@@ -301,6 +317,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -310,6 +327,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

@@ -63,7 +63,7 @@
 
       <div class="inv-actions">
         <button type="button" class="inv-btn inv-btn-ghost" (click)="cancel()">Cancel</button>
-        <button type="submit" class="inv-btn inv-btn-primary" [disabled]="submitting()">
+        <button type="submit" class="inv-btn inv-btn-primary" [disabled]="submitting() || form.invalid">
           {{ submitting() ? 'Sending…' : 'Send invitation' }}
         </button>
       </div>
