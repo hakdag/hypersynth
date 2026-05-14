@@ -5,6 +5,12 @@ use crate::types::{AccountType, ApiErrorBody, CompanyRole, SessionUser};
 
 pub const MANAGE_COMPANY_PROFILE: &[CompanyRole] = &[CompanyRole::CompanyAdmin];
 
+/// Per Phase 1 FRD §5.3: Company Admin and Project Manager may invite users.
+pub const INVITE_USERS: &[CompanyRole] = &[
+    CompanyRole::CompanyAdmin,
+    CompanyRole::ProjectManager,
+];
+
 pub async fn require_company_role(
     user: &SessionUser,
     allowed: &[CompanyRole],
@@ -35,6 +41,7 @@ pub fn forbidden(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>)
         StatusCode::FORBIDDEN,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }

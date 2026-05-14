@@ -2,12 +2,20 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 
+import { AuthService } from '../auth.service';
+import { CompanyUsersApiService, type CompanyUser } from '../company-users-api.service';
+
 import {
   documentContentType,
   documentDisplayName,
   documentDisplaySize,
   documentDisplayType,
 } from '../document-display.util';
+import {
+  ProjectMembersApiService,
+  type ProjectMember,
+  type ProjectMembershipRole,
+} from '../project-members-api.service';
 import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
@@ -34,6 +42,11 @@ interface DocumentPreviewState {
   error: string | null;
 }
 
+type MemberLoadResult =
+  | { kind: 'skip' }
+  | { kind: 'ok'; members: ProjectMember[] }
+  | { kind: 'error'; message: string };
+
 type DetailResult =
   | { kind: 'invalid' }
   | {
@@ -43,6 +56,8 @@ type DetailResult =
       documents: ProjectDocument[];
       featuresMessage: string | null;
       documentsMessage: string | null;
+      members: ProjectMember[];
+      membersMessage: string | null;
     }
   | { kind: 'error'; message: string };
 
@@ -55,6 +70,9 @@ type DetailResult =
 export class ProjectDetail implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly projectApi = inject(ProjectApiService);
+  private readonly auth = inject(AuthService);
+  private readonly membersApi = inject(ProjectMembersApiService);
+  private readonly companyUsersApi = inject(CompanyUsersApiService);
   private sub: Subscription | null = null;
   private uploadSub: Subscription | null = null;
   private documentsSub: Subscription | null = null;
@@ -69,6 +87,17 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected readonly featuresLoadError = signal<string | null>(null);
   protected readonly documents = signal<ProjectDocument[]>([]);
   protected readonly documentsLoadError = signal<string | null>(null);
+  protected readonly members = signal<ProjectMember[]>([]);
+  protected readonly membersLoadError = signal<string | null>(null);
+  protected readonly membersActionError = signal<string | null>(null);
+  protected readonly addMemberModalOpen = signal(false);
+  protected readonly companyUsers = signal<CompanyUser[]>([]);
+  protected readonly companyUsersLoadError = signal<string | null>(null);
+  protected readonly addMemberSubmitting = signal(false);
+  protected readonly addMemberSelectedUserId = signal<string>('');
+  protected readonly addMemberProjectRole = signal<ProjectMembershipRole>('contributor');
+  private addMemberSub: Subscription | null = null;
+  private membersRefreshSub: Subscription | null = null;
   protected readonly requirementsExpanded = signal(false);
   protected readonly requirementsCopyFlash = signal(false);
 
@@ -103,6 +132,7 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.downloadingDocumentId.set(null);
           this.closeDocumentViewModal();
           this.clearRequirementsCopyFlash();
+          this.addMemberModalOpen.set(false);
           return this.projectApi.getProject(id).pipe(
             switchMap((row) =>
               forkJoin({
@@ -124,14 +154,27 @@ export class ProjectDetail implements OnInit, OnDestroy {
                     }),
                   ),
                 ),
+                membersResult: this.auth.isCompanyUser()
+                  ? this.membersApi.listMembers(row.id).pipe(
+                      map((members): MemberLoadResult => ({ kind: 'ok', members })),
+                      catchError((err: unknown) =>
+                        of<MemberLoadResult>({
+                          kind: 'error',
+                          message: ProjectMembersApiService.errorMessage(err),
+                        }),
+                      ),
+                    )
+                  : of<MemberLoadResult>({ kind: 'skip' }),
               }).pipe(
-                map(({ featuresResult, documentsResult }): DetailResult => ({
+                map(({ featuresResult, documentsResult, membersResult }): DetailResult => ({
                   kind: 'ok',
                   row,
                   features: featuresResult.kind === 'ok' ? featuresResult.features : [],
                   documents: documentsResult.kind === 'ok' ? documentsResult.documents : [],
                   featuresMessage: featuresResult.kind === 'error' ? featuresResult.message : null,
                   documentsMessage: documentsResult.kind === 'error' ? documentsResult.message : null,
+                  members: membersResult.kind === 'ok' ? membersResult.members : [],
+                  membersMessage: membersResult.kind === 'error' ? membersResult.message : null,
                 })),
               ),
             ),
@@ -152,6 +195,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.featuresLoadError.set(null);
           this.documents.set([]);
           this.documentsLoadError.set(null);
+          this.members.set([]);
+          this.membersLoadError.set(null);
+          this.membersActionError.set(null);
           this.documentDownloadError.set(null);
           this.downloadingDocumentId.set(null);
           this.requirementsExpanded.set(false);
@@ -167,6 +213,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
           this.featuresLoadError.set(null);
           this.documents.set([]);
           this.documentsLoadError.set(null);
+          this.members.set([]);
+          this.membersLoadError.set(null);
+          this.membersActionError.set(null);
           this.documentDownloadError.set(null);
           this.downloadingDocumentId.set(null);
           this.requirementsExpanded.set(false);
@@ -178,6 +227,9 @@ export class ProjectDetail implements OnInit, OnDestroy {
         this.project.set(res.row);
         this.features.set(res.features);
         this.documents.set(res.documents);
+        this.members.set(res.members);
+        this.membersLoadError.set(res.membersMessage);
+        this.membersActionError.set(null);
         this.featuresLoadError.set(res.featuresMessage);
         this.documentsLoadError.set(res.documentsMessage);
         this.detailError.set(null);
@@ -192,6 +244,8 @@ export class ProjectDetail implements OnInit, OnDestroy {
     this.documentsSub?.unsubscribe();
     this.downloadSub?.unsubscribe();
     this.viewSub?.unsubscribe();
+    this.addMemberSub?.unsubscribe();
+    this.membersRefreshSub?.unsubscribe();
     this.revokeDocumentPreviewObjectUrl();
     this.clearRequirementsCopyFlash();
   }
@@ -512,6 +566,125 @@ export class ProjectDetail implements OnInit, OnDestroy {
   protected isViewingDocument(document: ProjectDocument): boolean {
     const preview = this.documentPreview();
     return preview?.document.id === document.id && preview.status === 'loading';
+  }
+
+  protected showProjectMembersSection(): boolean {
+    return this.auth.isCompanyUser();
+  }
+
+  protected canManageProjectMembers(): boolean {
+    const u = this.auth.currentUser();
+    if (!u || u.accountType !== 'company') return false;
+    if (u.role === 'company_admin') return true;
+    return this.members().some((m) => m.userId === u.id && m.projectRole === 'project_manager');
+  }
+
+  protected candidateCompanyUsers(): CompanyUser[] {
+    const u = this.auth.currentUser();
+    const memberIds = new Set(this.members().map((m) => m.userId));
+    return this.companyUsers().filter((c) => c.id !== u?.id && !memberIds.has(c.id));
+  }
+
+  protected onAddMemberUserSelected(event: Event): void {
+    const el = event.target as HTMLSelectElement;
+    this.addMemberSelectedUserId.set(el.value);
+  }
+
+  protected onAddMemberRoleSelected(event: Event): void {
+    const el = event.target as HTMLSelectElement;
+    this.addMemberProjectRole.set(el.value as ProjectMembershipRole);
+  }
+
+  protected openAddMemberModal(): void {
+    this.membersActionError.set(null);
+    this.companyUsersLoadError.set(null);
+    this.addMemberSelectedUserId.set('');
+    this.addMemberProjectRole.set('contributor');
+    this.addMemberModalOpen.set(true);
+    this.companyUsers.set([]);
+    this.addMemberSub?.unsubscribe();
+    this.addMemberSub = this.companyUsersApi.listCompanyUsers().subscribe({
+      next: (rows) => this.companyUsers.set(rows),
+      error: (err: unknown) =>
+        this.companyUsersLoadError.set(CompanyUsersApiService.errorMessage(err)),
+    });
+  }
+
+  protected closeAddMemberModal(): void {
+    if (this.addMemberSubmitting()) return;
+    this.addMemberModalOpen.set(false);
+  }
+
+  protected submitAddMember(): void {
+    const p = this.project();
+    const uid = this.addMemberSelectedUserId().trim();
+    if (!p || uid.length === 0) {
+      this.membersActionError.set('Select a team member to add.');
+      return;
+    }
+    this.addMemberSubmitting.set(true);
+    this.membersActionError.set(null);
+    this.addMemberSub?.unsubscribe();
+    this.addMemberSub = this.membersApi
+      .addMember(p.id, { userId: uid, projectRole: this.addMemberProjectRole() })
+      .subscribe({
+        next: (member) => {
+          this.members.update((list) => {
+            const without = list.filter((m) => m.userId !== member.userId);
+            return [...without, member];
+          });
+          this.addMemberSubmitting.set(false);
+          this.addMemberModalOpen.set(false);
+        },
+        error: (err: unknown) => {
+          this.membersActionError.set(ProjectMembersApiService.errorMessage(err));
+          this.addMemberSubmitting.set(false);
+        },
+      });
+  }
+
+  protected removeProjectMemberRow(member: ProjectMember): void {
+    const p = this.project();
+    if (!p) return;
+    if (!window.confirm(`Remove ${member.fullname} from this project?`)) return;
+    this.membersActionError.set(null);
+    this.membersRefreshSub?.unsubscribe();
+    this.membersRefreshSub = this.membersApi.removeMember(p.id, member.userId).subscribe({
+      next: () => {
+        this.members.update((list) => list.filter((m) => m.userId !== member.userId));
+      },
+      error: (err: unknown) =>
+        this.membersActionError.set(ProjectMembersApiService.errorMessage(err)),
+    });
+  }
+
+  protected companyRoleLabel(role: ProjectMember['companyRole']): string {
+    if (!role) return '—';
+    switch (role) {
+      case 'company_admin':
+        return 'Company Admin';
+      case 'project_manager':
+        return 'Project Manager';
+      case 'contributor':
+        return 'Contributor';
+      case 'viewer':
+        return 'Viewer';
+      default:
+        return role;
+    }
+  }
+
+  protected projectRoleLabel(role: ProjectMembershipRole): string {
+    switch (role) {
+      case 'project_manager':
+        return 'Project Manager';
+      case 'contributor':
+        return 'Contributor';
+      case 'viewer':
+        return 'Viewer';
+      default:
+        return role;
+    }
   }
 
   private isAllowedDocumentFile(name: string): boolean {

@@ -64,14 +64,23 @@ impl ProjectApiKeyService {
             FROM projects
             WHERE id = $1
               AND (
-                ($2::uuid IS NOT NULL AND company_id = $2)
-                OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+                ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+                OR
+                ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                    $4::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = projects.id AND pm.user_id = $5
+                    )
+                ))
               )
             "#,
         )
         .bind(project_id)
         .bind(scope.company_id_or_null())
         .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .fetch_optional(&state.pool)
         .await?;
 

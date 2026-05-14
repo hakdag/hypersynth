@@ -1,0 +1,185 @@
+@use 'sass:color';
+
+$surface-page: #f7f9fb;
+$surface-lowest: #ffffff;
+$outline-variant: #c5c5d3;
+$outline: #757682;
+$primary: #00236f;
+$on-primary: #ffffff;
+$on-surface: #191c1e;
+$on-surface-variant: #444651;
+$error: #ba1a1a;
+
+:host {
+  display: block;
+  min-height: 100vh;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: $on-surface;
+  background-color: $surface-page;
+  background-image:
+    radial-gradient(at 0% 0%, hsla(220, 100%, 95%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(210, 100%, 92%, 1) 0, transparent 50%);
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+.invite-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+}
+
+.invite-column {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.brand-block {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.brand-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: color.change($primary, $alpha: 0.08);
+  margin-bottom: 12px;
+}
+
+.brand-icon {
+  font-size: 28px;
+  color: $primary;
+}
+
+.brand-title {
+  margin: 0;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.brand-tagline {
+  margin: 8px 0 0;
+  color: $on-surface-variant;
+  font-size: 13px;
+}
+
+.card {
+  background: $surface-lowest;
+  border: 1px solid $outline-variant;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+.card-body {
+  padding: 24px;
+}
+
+.card-heading {
+  margin: 0 0 8px;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.card-sub {
+  margin: 0 0 20px;
+  color: $on-surface-variant;
+  font-size: 14px;
+}
+
+.alert {
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.alert-error {
+  background: color.change($error, $alpha: 0.08);
+  color: $error;
+  border: 1px solid color.change($error, $alpha: 0.25);
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: $on-surface-variant;
+}
+
+.field-input {
+  border: 1px solid $outline-variant;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.field-input:disabled {
+  background: #f4f4f6;
+  color: $on-surface-variant;
+}
+
+.field-error {
+  font-size: 12px;
+  color: $error;
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: $primary;
+  color: $on-primary;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: $primary;
+  border: 1px solid $outline-variant;
+  margin-top: 8px;
+}

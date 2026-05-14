@@ -4,6 +4,10 @@ import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
 import { companyGuard } from './company.guard';
 import { CompanyProfile } from './company-profile/company-profile';
+import { InvitationAccept } from './invitation-accept/invitation-accept';
+import { InvitationCreate } from './invitation-create/invitation-create';
+import { InvitationList } from './invitation-list/invitation-list';
+import { inviteUsersGuard } from './invite-users.guard';
 import { FeatureCreate } from './feature-create/feature-create';
 import { FeatureDetail } from './feature-detail/feature-detail';
 import { FeatureView } from './feature-view/feature-view';
@@ -23,6 +27,7 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'register' },
   { path: 'register', component: Register },
   { path: 'login', component: Login },
+  { path: 'invitations/accept', component: InvitationAccept },
   {
     path: 'app',
     component: Shell,
@@ -43,6 +48,16 @@ export const routes: Routes = [
       { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'company', component: CompanyProfile, canActivate: [companyGuard] },
+      {
+        path: 'team/invitations',
+        component: InvitationList,
+        canActivate: [companyGuard, inviteUsersGuard],
+      },
+      {
+        path: 'team/invitations/new',
+        component: InvitationCreate,
+        canActivate: [companyGuard, inviteUsersGuard],
+      },
       { path: '404', component: NotFound },
       { path: 'account', component: AccountPlaceholder },
     ],

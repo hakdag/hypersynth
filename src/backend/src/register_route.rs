@@ -1,15 +1,13 @@
-use argon2::password_hash::{PasswordHasher, SaltString};
-use argon2::Argon2;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use password_hash::rand_core::OsRng;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::types::{AccountType, ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
-
-const MIN_PASSWORD_LEN: usize = 8;
+use crate::user_registration::{
+    email_contains_at_and_dot, hash_password_argon2, password_policy_error,
+};
 
 pub async fn register_user(
     State(state): State<AppState>,
@@ -31,26 +29,11 @@ pub async fn register_user(
         return Err(bad_request("Enter a valid email address."));
     }
 
-    if password.len() < MIN_PASSWORD_LEN {
-        return Err(bad_request(format!(
-            "Password must be at least {} characters.",
-            MIN_PASSWORD_LEN
-        )));
+    if let Some(msg) = password_policy_error(password) {
+        return Err(bad_request(msg));
     }
 
-    if !password_has_letter_and_digit(password) {
-        return Err(bad_request(
-            "Password must include at least one letter and one number.",
-        ));
-    }
-
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| internal_error())?;
-
-    let hash_str = password_hash.to_string();
+    let hash_str = hash_password_argon2(password).map_err(|_| internal_error())?;
     let account_type = payload.account_type.as_db_value();
 
     if payload.account_type == AccountType::Company {
@@ -81,9 +64,9 @@ pub async fn register_user(
                 if db.code().as_deref() == Some("23505") {
                     return Err((
                         StatusCode::CONFLICT,
-                        Json(ApiErrorBody {
-                            message: "An account with this email already exists.".into(),
-                        }),
+                        Json(ApiErrorBody::msg(
+                            "An account with this email already exists.",
+                        )),
                     ));
                 }
             }
@@ -102,48 +85,16 @@ pub async fn register_user(
     ))
 }
 
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
-fn password_has_letter_and_digit(password: &str) -> bool {
-    let mut letter = false;
-    let mut digit = false;
-    for ch in password.chars() {
-        if ch.is_alphabetic() {
-            letter = true;
-        } else if ch.is_ascii_digit() {
-            digit = true;
-        }
-        if letter && digit {
-            return true;
-        }
-    }
-    false
-}
-
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::BAD_REQUEST,
-        Json(ApiErrorBody {
-            message: message.into(),
-        }),
+        Json(ApiErrorBody::msg(message)),
     )
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ApiErrorBody {
-            message: "Something went wrong. Please try again.".into(),
-        }),
+        Json(ApiErrorBody::msg("Something went wrong. Please try again.")),
     )
 }

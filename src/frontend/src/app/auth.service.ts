@@ -42,6 +42,11 @@ export class AuthService {
     return this.authApi.login({ email, password }).pipe(tap((u) => this.user.set(u)));
   }
 
+  /** Sets the cached user after session-changing flows (e.g. invitation acceptance). */
+  setSessionUser(user: CurrentUser): void {
+    this.user.set(user);
+  }
+
   logout(): Observable<void> {
     return this.authApi.logout().pipe(
       tap(() => {

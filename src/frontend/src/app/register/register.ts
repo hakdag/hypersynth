@@ -7,7 +7,7 @@ import {
   ValidationErrors,
   Validators,
 } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { BootstrapApiService } from '../bootstrap-api.service';
 import { buildTimezoneOptions, COUNTRY_OPTIONS } from '../company-form-options';
@@ -55,11 +55,11 @@ function passwordConfirmationMatch(group: AbstractControl): ValidationErrors | n
 export class Register implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly registrationApi = inject(RegistrationApiService);
+  private readonly router = inject(Router);
   protected readonly bootstrapApi = inject(BootstrapApiService);
 
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
-  protected readonly serverSuccess = signal<string | null>(null);
   protected readonly selectedAccountType = signal<RegisterAccountType | null>(null);
   protected readonly countryOptions = COUNTRY_OPTIONS;
   protected readonly timezoneOptions = buildTimezoneOptions();
@@ -97,13 +97,11 @@ export class Register implements OnInit {
 
   protected selectAccountType(accountType: RegisterAccountType): void {
     this.serverError.set(null);
-    this.serverSuccess.set(null);
     this.selectedAccountType.set(accountType);
   }
 
   protected changeAccountType(): void {
     this.serverError.set(null);
-    this.serverSuccess.set(null);
     this.selectedAccountType.set(null);
     this.personalForm.reset({ terms: false });
     this.companyForm.reset({
@@ -132,7 +130,6 @@ export class Register implements OnInit {
 
   protected submitPersonal(): void {
     this.serverError.set(null);
-    this.serverSuccess.set(null);
     this.personalForm.markAllAsTouched();
     if (this.personalForm.invalid || this.submitting()) {
       return;
@@ -142,10 +139,9 @@ export class Register implements OnInit {
     this.submitting.set(true);
 
     this.registrationApi.register({ accountType: 'personal', fullname, email, password }).subscribe({
-      next: (res) => {
+      next: () => {
         this.submitting.set(false);
-        this.serverSuccess.set(res.message);
-        this.personalForm.reset({ terms: false });
+        void this.router.navigateByUrl('/login');
       },
       error: (err: unknown) => {
         this.submitting.set(false);
@@ -156,7 +152,6 @@ export class Register implements OnInit {
 
   protected submitCompany(): void {
     this.serverError.set(null);
-    this.serverSuccess.set(null);
     this.companyForm.markAllAsTouched();
     if (this.companyForm.invalid || this.submitting()) {
       return;
@@ -178,20 +173,9 @@ export class Register implements OnInit {
         passwordConfirmation: admin.passwordConfirmation,
       })
       .subscribe({
-        next: (res) => {
+        next: () => {
           this.submitting.set(false);
-          this.serverSuccess.set(res.message);
-          this.companyForm.reset({
-            company: { name: '', companyEmail: '', country: '', timezone: '' },
-            admin: {
-              fullName: '',
-              email: '',
-              username: '',
-              password: '',
-              passwordConfirmation: '',
-            },
-            terms: false,
-          });
+          void this.router.navigateByUrl('/login');
         },
         error: (err: unknown) => {
           this.submitting.set(false);

@@ -29,15 +29,24 @@ impl DocumentContextService {
             INNER JOIN projects p ON p.id = d.project_id
             WHERE d.project_id = $1
               AND (
-                ($2::uuid IS NOT NULL AND p.company_id = $2)
-                OR ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+                ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+                OR
+                ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                    $4::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $5
+                    )
+                ))
               )
-              AND d.id = ANY($4)
+              AND d.id = ANY($6)
             "#,
         )
         .bind(project_id)
         .bind(scope.company_id_or_null())
         .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .bind(&ordered)
         .fetch_all(pool)
         .await

@@ -57,13 +57,22 @@ pub async fn list_projects(
         SELECT id, owner_user_id, company_id, name, requirements, status, created_at
         FROM projects
         WHERE
-            ($1::uuid IS NOT NULL AND company_id = $1)
-            OR ($2::uuid IS NOT NULL AND owner_user_id = $2 AND company_id IS NULL)
+            ($2::uuid IS NOT NULL AND owner_user_id = $2 AND company_id IS NULL)
+            OR
+            ($1::uuid IS NOT NULL AND company_id = $1 AND (
+                $3::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $4
+                )
+            ))
         ORDER BY created_at DESC
         "#,
     )
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -115,14 +124,23 @@ pub async fn get_project(
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -264,6 +282,29 @@ pub async fn create_project(
         })?;
     }
 
+    if scope_company_id.is_some() && !scope.is_company_admin() {
+        sqlx::query(
+            r#"
+            INSERT INTO project_memberships (project_id, user_id, role)
+            VALUES ($1, $2, 'project_manager')
+            ON CONFLICT (project_id, user_id) DO NOTHING
+            "#,
+        )
+        .bind(row.id)
+        .bind(user.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                project_id = %row.id,
+                "create_project: membership insert failed"
+            );
+            internal_error()
+        })?;
+    }
+
     tx.commit().await.map_err(|e| {
         warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: commit failed");
         internal_error()
@@ -376,8 +417,15 @@ pub async fn update_project(
             END
         WHERE id = $6
           AND (
-            ($7::uuid IS NOT NULL AND company_id = $7)
-            OR ($8::uuid IS NOT NULL AND owner_user_id = $8 AND company_id IS NULL)
+            ($8::uuid IS NOT NULL AND owner_user_id = $8 AND company_id IS NULL)
+            OR
+            ($7::uuid IS NOT NULL AND company_id = $7 AND (
+                $9::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $10
+                )
+            ))
           )
         RETURNING id, owner_user_id, company_id, name, requirements, status, created_at
         "#,
@@ -390,6 +438,8 @@ pub async fn update_project(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| {
@@ -463,7 +513,8 @@ pub async fn create_feature(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
-    let (scope_company_id, scope_owner_user_id) = scope_bindings(scope);
+    let (scope_company_id, scope_owner_user_id, scope_is_admin, scope_user_id) =
+        scope.project_access_binds();
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -488,14 +539,23 @@ pub async fn create_feature(
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_id)
     .bind(scope_company_id)
     .bind(scope_owner_user_id)
+    .bind(scope_is_admin)
+    .bind(scope_user_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -572,14 +632,23 @@ pub async fn enhance_project_requirements(
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -656,7 +725,8 @@ pub async fn enhance_project_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -708,8 +778,15 @@ pub async fn enhance_feature_requirements(
         WHERE f.id = $1
           AND f.project_id = $2
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         "#,
     )
@@ -717,6 +794,8 @@ pub async fn enhance_feature_requirements(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -805,7 +884,8 @@ pub async fn enhance_feature_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -862,8 +942,15 @@ pub async fn generate_feature_tasks(
         WHERE f.id = $1
           AND f.project_id = $2
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         "#,
     )
@@ -871,6 +958,8 @@ pub async fn generate_feature_tasks(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -958,7 +1047,8 @@ pub async fn generate_feature_tasks(
                 status,
                 Json(ApiErrorBody {
                     message: "Could not generate tasks right now. Please try again.".into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -1088,14 +1178,21 @@ pub async fn accept_generated_tasks(
                     assignee_user_id,
                     creator_user_id
                 )
-                SELECT f.id, $4, $5, 'Pending', 'AI', 'Standard', NULL, NULL
+                SELECT f.id, $7, $8, 'Pending', 'AI', 'Standard', NULL, NULL
                 FROM features f
                 INNER JOIN projects p ON p.id = f.project_id
                 WHERE f.id = $1
                   AND f.project_id = $2
                   AND (
-                    ($3::uuid IS NOT NULL AND p.company_id = $3)
-                    OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                    ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                    OR
+                    ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                        $5::boolean
+                        OR EXISTS (
+                            SELECT 1 FROM project_memberships pm
+                            WHERE pm.project_id = p.id AND pm.user_id = $6
+                        )
+                    ))
                   )
                 RETURNING
                     id,
@@ -1132,6 +1229,8 @@ pub async fn accept_generated_tasks(
         .bind(project_id)
         .bind(scope.company_id_or_null())
         .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .bind(title)
         .bind(description_for_db.as_ref())
         .fetch_optional(&mut *tx)
@@ -1211,8 +1310,15 @@ pub async fn list_project_features(
         INNER JOIN projects p ON p.id = f.project_id
         WHERE f.project_id = $1
           AND (
-            ($2::uuid IS NOT NULL AND p.company_id = $2)
-            OR ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $5
+                )
+            ))
           )
         ORDER BY f.created_at DESC
         "#,
@@ -1220,6 +1326,8 @@ pub async fn list_project_features(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1265,8 +1373,15 @@ pub async fn list_project_documents(
         INNER JOIN projects p ON p.id = d.project_id
         WHERE d.project_id = $1
           AND (
-            ($2::uuid IS NOT NULL AND p.company_id = $2)
-            OR ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $5
+                )
+            ))
           )
         ORDER BY d.created_at DESC
         "#,
@@ -1274,6 +1389,8 @@ pub async fn list_project_documents(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1320,8 +1437,15 @@ pub async fn download_project_document(
         WHERE d.id = $1
           AND d.project_id = $2
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         "#,
     )
@@ -1329,6 +1453,8 @@ pub async fn download_project_document(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1434,14 +1560,23 @@ pub async fn upload_project_documents(
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1620,8 +1755,15 @@ pub async fn get_project_feature(
         WHERE f.id = $1
           AND f.project_id = $2
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         "#,
     )
@@ -1629,6 +1771,8 @@ pub async fn get_project_feature(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1706,8 +1850,15 @@ pub async fn list_feature_tasks(
         WHERE t.feature_id = $1
           AND f.project_id = $2
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         ORDER BY t.created_at DESC
         "#,
@@ -1716,6 +1867,8 @@ pub async fn list_feature_tasks(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1795,8 +1948,15 @@ pub async fn get_project_task(
           AND t.feature_id = $2
           AND f.project_id = $3
           AND (
-            ($4::uuid IS NOT NULL AND p.company_id = $4)
-            OR ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            OR
+            ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                $6::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $7
+                )
+            ))
           )
         "#,
     )
@@ -1805,6 +1965,8 @@ pub async fn get_project_task(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1941,14 +2103,21 @@ pub async fn create_task(
                 assignee_user_id,
                 creator_user_id
             )
-            SELECT f.id, $4, $5, 'Pending', 'User', $6, $7, $8
+            SELECT f.id, $7, $8, 'Pending', 'User', $9, $10, $11
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
             WHERE f.id = $1
               AND f.project_id = $2
               AND (
-                ($3::uuid IS NOT NULL AND p.company_id = $3)
-                OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                OR
+                ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                    $5::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $6
+                    ))
+                )
               )
             RETURNING
                 id,
@@ -1985,6 +2154,8 @@ pub async fn create_task(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(description.as_ref())
     .bind(priority_val)
@@ -2085,16 +2256,23 @@ pub async fn update_project_feature(
     let row = sqlx::query_as::<_, FeatureResponse>(
         r#"
         UPDATE features f
-        SET title = $4,
-            requirements = $5,
-            status = $6
+        SET title = $7,
+            requirements = $8,
+            status = $9
         FROM projects p
         WHERE f.id = $1
           AND f.project_id = $2
           AND p.id = f.project_id
           AND (
-            ($3::uuid IS NOT NULL AND p.company_id = $3)
-            OR ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
           )
         RETURNING f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
         "#,
@@ -2103,6 +2281,8 @@ pub async fn update_project_feature(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(requirements.as_ref())
     .bind(status_trimmed)
@@ -2245,11 +2425,11 @@ pub async fn update_project_task(
         r#"
         WITH updated AS (
             UPDATE tasks t
-            SET title = $5,
-                description = $6,
-                status = $7,
-                priority = $8,
-                assignee_user_id = $9
+            SET title = $8,
+                description = $9,
+                status = $10,
+                priority = $11,
+                assignee_user_id = $12
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
             WHERE t.id = $1
@@ -2257,8 +2437,15 @@ pub async fn update_project_task(
               AND f.id = $2
               AND f.project_id = $3
               AND (
-                ($4::uuid IS NOT NULL AND p.company_id = $4)
-                OR ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+                ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+                OR
+                ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                    $6::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $7
+                    ))
+                )
               )
             RETURNING t.id
         )
@@ -2292,6 +2479,8 @@ pub async fn update_project_task(
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(description.as_ref())
     .bind(status_trimmed)
@@ -2393,6 +2582,7 @@ fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2402,6 +2592,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2411,6 +2602,7 @@ fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErro
         StatusCode::UNPROCESSABLE_ENTITY,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2434,6 +2626,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

@@ -1,19 +1,16 @@
-use argon2::password_hash::{PasswordHasher, SaltString};
-use argon2::Argon2;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use password_hash::rand_core::OsRng;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::types::{
     ApiErrorBody, CompanyRegistrationRequest, CompanyRegistrationResponse,
 };
-
-const MIN_PASSWORD_LEN: usize = 8;
-const MIN_USERNAME_LEN: usize = 3;
-const MAX_USERNAME_LEN: usize = 64;
+use crate::user_registration::{
+    email_contains_at_and_dot, hash_password_argon2, password_policy_error, username_is_valid,
+    USERNAME_VALIDATION_MESSAGE,
+};
 
 pub async fn register_company(
     State(state): State<AppState>,
@@ -66,35 +63,18 @@ pub async fn register_company(
     }
 
     if !username_is_valid(username) {
-        return Err(bad_request(
-            "Username must be 3–64 characters and may only contain letters, numbers, underscores, dots, and hyphens.",
-        ));
+        return Err(bad_request(USERNAME_VALIDATION_MESSAGE));
     }
 
-    if password.len() < MIN_PASSWORD_LEN {
-        return Err(bad_request(format!(
-            "Password must be at least {} characters.",
-            MIN_PASSWORD_LEN
-        )));
-    }
-
-    if !password_has_letter_and_digit(password) {
-        return Err(bad_request(
-            "Password must include at least one letter and one number.",
-        ));
+    if let Some(msg) = password_policy_error(password) {
+        return Err(bad_request(msg));
     }
 
     if password != password_confirmation {
         return Err(bad_request("Password and confirmation do not match."));
     }
 
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| internal_error())?;
-
-    let hash_str = password_hash.to_string();
+    let hash_str = hash_password_argon2(password).map_err(|_| internal_error())?;
 
     let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
 
@@ -180,44 +160,6 @@ pub async fn register_company(
     ))
 }
 
-fn username_is_valid(username: &str) -> bool {
-    let len = username.chars().count();
-    if len < MIN_USERNAME_LEN || len > MAX_USERNAME_LEN {
-        return false;
-    }
-    username
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == '-')
-}
-
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
-fn password_has_letter_and_digit(password: &str) -> bool {
-    let mut letter = false;
-    let mut digit = false;
-    for ch in password.chars() {
-        if ch.is_alphabetic() {
-            letter = true;
-        } else if ch.is_ascii_digit() {
-            digit = true;
-        }
-        if letter && digit {
-            return true;
-        }
-    }
-    false
-}
-
 fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErrorBody>) {
     let message = match constraint {
         Some("idx_companies_company_email_lower") => {
@@ -229,7 +171,9 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message }),
+        Json(ApiErrorBody { message,
+            ..Default::default()
+        }),
     )
 }
 
@@ -238,6 +182,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -247,6 +192,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

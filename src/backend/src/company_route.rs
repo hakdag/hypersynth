@@ -7,7 +7,52 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization;
-use crate::types::{ApiErrorBody, CompanyResponse, UpdateCompanyRequest};
+use crate::types::{AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse, UpdateCompanyRequest};
+use crate::user_registration::email_contains_at_and_dot;
+
+pub async fn list_company_users(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> Result<Json<Vec<CompanyUserResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let user = require_authenticated_user(&state.pool, &jar).await?;
+    if user.account_type != AccountType::Company {
+        return Err(authorization::forbidden(
+            "You do not have permission to perform this action.",
+        ));
+    }
+    let company_id = user.company_id.ok_or_else(|| {
+        authorization::forbidden("Company membership is required for this action.")
+    })?;
+
+    let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>)>(
+        r#"
+        SELECT u.id, u.fullname, u.email, u.role
+        FROM users u
+        INNER JOIN company_users cu ON cu.user_id = u.id
+        WHERE cu.company_id = $1
+        ORDER BY lower(u.fullname) ASC
+        "#,
+    )
+    .bind(company_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for (id, fullname, email, role_raw) in rows {
+        let role = role_raw
+            .as_deref()
+            .and_then(CompanyRole::from_db_value);
+        out.push(CompanyUserResponse {
+            id,
+            fullname,
+            email,
+            role,
+        });
+    }
+
+    Ok(Json(out))
+}
 
 pub async fn get_current_company(
     State(state): State<AppState>,
@@ -184,18 +229,6 @@ fn optional_trimmed(value: Option<String>) -> Option<String> {
     }
 }
 
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
-
 fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErrorBody>) {
     let message = match constraint {
         Some("idx_companies_company_email_lower") => {
@@ -205,7 +238,9 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message }),
+        Json(ApiErrorBody { message,
+            ..Default::default()
+        }),
     )
 }
 
@@ -214,6 +249,7 @@ fn not_found() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: "No company is associated with your account.".into(),
+            ..Default::default()
         }),
     )
 }
@@ -223,6 +259,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -232,6 +269,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

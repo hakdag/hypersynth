@@ -7,14 +7,21 @@ mod company_route;
 mod configs;
 mod crypto;
 mod document_context_service;
+mod email;
+mod invitation_accept_route;
+mod invitation_route;
+mod invitation_token_service;
 mod project_api_key_service;
+mod project_membership_route;
 mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
 mod tenant_scope_service;
 mod types;
+mod user_registration;
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ai::AnthropicClient;
@@ -23,9 +30,15 @@ use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
+use email::SmtpEmailSender;
+use invitation_accept_route::{
+    accept_invitation_confirm, accept_invitation_register, preview_invitation,
+};
+use invitation_route::{cancel_invitation, create_invitation, list_invitations};
+use project_membership_route::{add_project_member, list_project_members, remove_project_member};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
     enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks, get_project,
@@ -34,7 +47,7 @@ use project_route::{
     update_project_task, upload_project_documents,
 };
 use company_registration_route::register_company;
-use company_route::{get_current_company, update_current_company};
+use company_route::{get_current_company, list_company_users, update_current_company};
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -76,9 +89,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     load_src_env()?;
     let config = AppConfig::from_env().map_err(|e| format!("configuration error: {}", e))?;
 
+    let AppConfig {
+        port,
+        database_url,
+        cors_origin,
+        session_max_age_secs,
+        document_upload_dir,
+        api_key_encryption_key,
+        anthropic_config,
+        invitation_config,
+        smtp_config,
+    } = config;
+
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&config.database_url)
+        .connect(&database_url)
         .await?;
 
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -88,17 +113,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let anthropic_http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(config.anthropic_config.timeout_secs))
+        .timeout(Duration::from_secs(anthropic_config.timeout_secs))
         .build()?;
     let anthropic = AnthropicClient::new(
         anthropic_http,
-        config.anthropic_config.base_url.clone(),
-        config.anthropic_config.model.clone(),
-        config.anthropic_config.max_tokens,
+        anthropic_config.base_url,
+        anthropic_config.model,
+        anthropic_config.max_tokens,
     );
 
     let cors = CorsLayer::new()
-        .allow_origin(config.cors_origin.parse::<HeaderValue>()?)
+        .allow_origin(cors_origin.parse::<HeaderValue>()?)
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
@@ -110,12 +135,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_headers([CONTENT_TYPE, ACCEPT])
         .allow_credentials(true);
 
+    let smtp_sender =
+        SmtpEmailSender::try_new(&smtp_config).map_err(|e| format!("SMTP setup: {e}"))?;
+    let email_sender: Arc<dyn email::EmailSender + Send + Sync> = Arc::new(smtp_sender);
+
     let state = AppState {
         pool,
-        session_max_age_secs: config.session_max_age_secs,
-        document_upload_dir: config.document_upload_dir,
-        api_key_encryption_key: config.api_key_encryption_key,
+        session_max_age_secs,
+        document_upload_dir,
+        api_key_encryption_key,
         anthropic,
+        email_sender,
+        invitation_config,
     };
 
     let app = Router::new()
@@ -127,13 +158,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/company",
             get(get_current_company).patch(update_current_company),
         )
+        .route("/api/v1/company/users", get(list_company_users))
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route(
+            "/api/v1/invitations",
+            get(list_invitations).post(create_invitation),
+        )
+        .route(
+            "/api/v1/invitations/{invitation_id}/cancel",
+            post(cancel_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept/preview",
+            get(preview_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept/register",
+            post(accept_invitation_register),
+        )
+        .route(
+            "/api/v1/invitations/accept/confirm",
+            post(accept_invitation_confirm),
+        )
         .route("/api/v1/projects", get(list_projects).post(create_project))
         .route(
             "/api/v1/projects/{project_id}",
             get(get_project).patch(update_project),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/members",
+            get(list_project_members).post(add_project_member),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/members/{user_id}",
+            delete(remove_project_member),
         )
         .route(
             "/api/v1/projects/{project_id}/ai/enhance-requirements",
@@ -181,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     eprintln!("listening on http://{}", addr);
     axum::serve(listener, app).await?;

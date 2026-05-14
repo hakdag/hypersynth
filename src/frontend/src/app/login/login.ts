@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 
 import { AuthApiService } from '../auth-api.service';
 import { AuthService } from '../auth.service';
@@ -33,7 +33,7 @@ export class Login implements OnInit {
 
     this.auth.ensureAuthenticated().subscribe((ok) => {
       if (ok) {
-        const target = this.route.snapshot.queryParamMap.get('returnUrl') || '/app/projects';
+        const target = readReturnTarget(this.route.snapshot.queryParamMap);
         void this.router.navigateByUrl(target);
       }
     });
@@ -52,7 +52,7 @@ export class Login implements OnInit {
     this.auth.login(email, password).subscribe({
       next: () => {
         this.submitting.set(false);
-        const target = this.route.snapshot.queryParamMap.get('returnUrl') || '/app/projects';
+        const target = readReturnTarget(this.route.snapshot.queryParamMap);
         void this.router.navigateByUrl(target);
       },
       error: (err: unknown) => {
@@ -75,4 +75,12 @@ export class Login implements OnInit {
     }
     return '';
   }
+}
+
+function readReturnTarget(map: ParamMap): string {
+  const raw = map.get('returnTo') ?? map.get('returnUrl');
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return '/app/projects';
+  }
+  return raw;
 }

@@ -155,6 +155,16 @@ cargo run --manifest-path src/backend/Cargo.toml
 
 Environment variables already set in the process still apply; `.env` only fills unset keys (via `dotenvy` semantics for loaded file).
 
+**Team invitations (SF-15)** also require:
+
+| Variable | Purpose |
+|---|---|
+| `APP_BASE_URL` | Public base URL of the web app (no trailing slash), e.g. `http://localhost:4200`, used in invitation email links. |
+| `INVITATION_EXPIRES_IN_HOURS` | Optional; default `168` (7 days). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Outbound SMTP relay (e.g. Mailpit on `localhost:1025`). |
+| `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | From address and display name on invitation emails. |
+| `SMTP_STARTTLS` | `true` or `false` (default `true` if unset). Use **`false` for MailHog** — that selects **plain SMTP** (no TLS). `true` uses STARTTLS (typical port 587). |
+
 The API listens on `PORT` (default `3000`) and terminates immediately if PostgreSQL cannot be reached — ensure `docker compose` is healthy before starting the backend.
 
 Bootstrap endpoints exposed for the shell:
@@ -163,6 +173,9 @@ Bootstrap endpoints exposed for the shell:
 |---|---|---|
 | `GET` | `/api/v1/health` | Process liveness and database probe (`SELECT 1`) |
 | `GET` | `/api/v1/bootstrap` | Application name plus Phase 0 status label ordering |
+| `GET` | `/api/v1/invitations` | List invitations created by the current user (company; SF-15) |
+| `POST` | `/api/v1/invitations` | Create a pending invitation and send email (SF-15) |
+| `POST` | `/api/v1/invitations/{id}/cancel` | Cancel a pending invitation (SF-15) |
 
 Responses are plain JSON shaped for Angular clients (`camelCase` fields on bootstrap).
 
