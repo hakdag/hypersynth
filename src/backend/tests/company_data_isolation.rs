@@ -155,14 +155,23 @@ async fn company_and_personal_projects_are_isolated() -> Result<(), Box<dyn std:
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_b_id)
     .bind(company_a_id)
     .bind(Option::<Uuid>::None)
+    .bind(true)
+    .bind(company_a_user_id)
     .fetch_optional(&mut *tx)
     .await?;
     assert!(company_a_cannot_read_b.is_none());
@@ -173,13 +182,22 @@ async fn company_and_personal_projects_are_isolated() -> Result<(), Box<dyn std:
         FROM projects
         WHERE id = $1
           AND (
-            ($2::uuid IS NOT NULL AND company_id = $2)
-            OR ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
           )
         "#,
     )
     .bind(project_a_id)
     .bind(Option::<Uuid>::None)
+    .bind(personal_user_id)
+    .bind(false)
     .bind(personal_user_id)
     .fetch_optional(&mut *tx)
     .await?;
@@ -190,12 +208,21 @@ async fn company_and_personal_projects_are_isolated() -> Result<(), Box<dyn std:
         SELECT COUNT(*)
         FROM projects
         WHERE
-            ($1::uuid IS NOT NULL AND company_id = $1)
-            OR ($2::uuid IS NOT NULL AND owner_user_id = $2 AND company_id IS NULL)
+            ($2::uuid IS NOT NULL AND owner_user_id = $2 AND company_id IS NULL)
+            OR
+            ($1::uuid IS NOT NULL AND company_id = $1 AND (
+                $3::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $4
+                )
+            ))
         "#,
     )
     .bind(company_a_id)
     .bind(Option::<Uuid>::None)
+    .bind(true)
+    .bind(company_a_user_id)
     .fetch_one(&mut *tx)
     .await?;
     assert_eq!(company_a_visible_count, 1);

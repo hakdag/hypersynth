@@ -23,10 +23,6 @@
           }
         </div>
 
-        @if (serverSuccess(); as ok) {
-          <div class="alert alert-success" role="status">{{ ok }}</div>
-        }
-
         @if (serverError(); as err) {
           <div class="alert alert-error" role="alert">{{ err }}</div>
         }

@@ -12,6 +12,7 @@ mod invitation_accept_route;
 mod invitation_route;
 mod invitation_token_service;
 mod project_api_key_service;
+mod project_membership_route;
 mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
@@ -29,7 +30,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
 use email::SmtpEmailSender;
@@ -37,6 +38,7 @@ use invitation_accept_route::{
     accept_invitation_confirm, accept_invitation_register, preview_invitation,
 };
 use invitation_route::{cancel_invitation, create_invitation, list_invitations};
+use project_membership_route::{add_project_member, list_project_members, remove_project_member};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
     enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks, get_project,
@@ -45,7 +47,7 @@ use project_route::{
     update_project_task, upload_project_documents,
 };
 use company_registration_route::register_company;
-use company_route::{get_current_company, update_current_company};
+use company_route::{get_current_company, list_company_users, update_current_company};
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -156,6 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/company",
             get(get_current_company).patch(update_current_company),
         )
+        .route("/api/v1/company/users", get(list_company_users))
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
@@ -183,6 +186,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}",
             get(get_project).patch(update_project),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/members",
+            get(list_project_members).post(add_project_member),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/members/{user_id}",
+            delete(remove_project_member),
         )
         .route(
             "/api/v1/projects/{project_id}/ai/enhance-requirements",

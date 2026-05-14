@@ -7,8 +7,52 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization;
-use crate::types::{ApiErrorBody, CompanyResponse, UpdateCompanyRequest};
+use crate::types::{AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse, UpdateCompanyRequest};
 use crate::user_registration::email_contains_at_and_dot;
+
+pub async fn list_company_users(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> Result<Json<Vec<CompanyUserResponse>>, (StatusCode, Json<ApiErrorBody>)> {
+    let user = require_authenticated_user(&state.pool, &jar).await?;
+    if user.account_type != AccountType::Company {
+        return Err(authorization::forbidden(
+            "You do not have permission to perform this action.",
+        ));
+    }
+    let company_id = user.company_id.ok_or_else(|| {
+        authorization::forbidden("Company membership is required for this action.")
+    })?;
+
+    let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>)>(
+        r#"
+        SELECT u.id, u.fullname, u.email, u.role
+        FROM users u
+        INNER JOIN company_users cu ON cu.user_id = u.id
+        WHERE cu.company_id = $1
+        ORDER BY lower(u.fullname) ASC
+        "#,
+    )
+    .bind(company_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for (id, fullname, email, role_raw) in rows {
+        let role = role_raw
+            .as_deref()
+            .and_then(CompanyRole::from_db_value);
+        out.push(CompanyUserResponse {
+            id,
+            fullname,
+            email,
+            role,
+        });
+    }
+
+    Ok(Json(out))
+}
 
 pub async fn get_current_company(
     State(state): State<AppState>,

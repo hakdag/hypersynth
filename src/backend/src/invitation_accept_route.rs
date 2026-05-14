@@ -17,7 +17,7 @@ use crate::user_registration::{
 use crate::types::{
     AcceptInvitationConfirmRequest, AcceptInvitationRegisterRequest, AccountType, ApiErrorBody,
     CompanyRole, CurrentUserBody, Invitation, InvitationAcceptPreviewQuery,
-    InvitationPreviewResponse, InvitationStatus,
+    InvitationPreviewResponse, InvitationStatus, ProjectMembershipRole,
 };
 
 #[derive(sqlx::FromRow)]
@@ -594,6 +594,21 @@ async fn maybe_insert_project_membership(
         return Ok(());
     };
 
+    let invited_role = match CompanyRole::from_db_value(invitation.invited_role.as_str()) {
+        Some(r) => r,
+        None => {
+            warn!(
+                invitation_id = %invitation.id,
+                "invitation invited_role invalid; skipping project membership"
+            );
+            return Ok(());
+        }
+    };
+
+    let Some(pm_role) = ProjectMembershipRole::from_company_role(invited_role) else {
+        return Ok(());
+    };
+
     let ok: Option<(Uuid,)> = sqlx::query_as(
         r#"
         SELECT id
@@ -618,13 +633,14 @@ async fn maybe_insert_project_membership(
 
     sqlx::query(
         r#"
-        INSERT INTO project_memberships (project_id, user_id)
-        VALUES ($1, $2)
+        INSERT INTO project_memberships (project_id, user_id, role)
+        VALUES ($1, $2, $3)
         ON CONFLICT (project_id, user_id) DO NOTHING
         "#,
     )
     .bind(pid)
     .bind(user_id)
+    .bind(pm_role.as_db_value())
     .execute(&mut **tx)
     .await
     .map_err(|_| internal_error())?;

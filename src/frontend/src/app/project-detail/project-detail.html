@@ -218,6 +218,135 @@
             </table>
           </div>
         </section>
+
+        @if (showProjectMembersSection()) {
+          <section class="pd-members" aria-labelledby="pd-members-heading">
+            <div class="pd-features__toolbar">
+              <h2 id="pd-members-heading" class="pd-features__title">
+                <span class="material-symbols-outlined pd-features__title-icon" aria-hidden="true">group</span>
+                Project members
+              </h2>
+              @if (canManageProjectMembers()) {
+                <button type="button" class="pd-features__new-feature" (click)="openAddMemberModal()">
+                  <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true">person_add</span>
+                  Add member
+                </button>
+              }
+            </div>
+            @if (membersLoadError(); as memErr) {
+              <div class="pd-features__banner" role="alert">{{ memErr }}</div>
+            }
+            @if (membersActionError(); as memActErr) {
+              <div class="pd-features__banner" role="alert">{{ memActErr }}</div>
+            }
+            @if (!membersLoadError() && members().length === 0) {
+              <p class="pd-features__empty">No members are assigned to this project yet.</p>
+            }
+            @if (members().length > 0) {
+              <div class="pd-documents__table-wrap">
+                <table class="pd-documents__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Company role</th>
+                      <th scope="col">Project role</th>
+                      @if (canManageProjectMembers()) {
+                        <th scope="col">Actions</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (m of members(); track m.userId) {
+                      <tr>
+                        <td>{{ m.fullname }}</td>
+                        <td>{{ m.email }}</td>
+                        <td>{{ companyRoleLabel(m.companyRole) }}</td>
+                        <td>{{ projectRoleLabel(m.projectRole) }}</td>
+                        @if (canManageProjectMembers()) {
+                          <td>
+                            <button type="button" class="pd-upload-modal__close pd-document-action" (click)="removeProjectMemberRow(m)">
+                              <span class="material-symbols-outlined" aria-hidden="true">person_remove</span>
+                            </button>
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+
+        @if (addMemberModalOpen()) {
+          <div class="pd-modal-backdrop" role="presentation" (click)="closeAddMemberModal()">
+            <section
+              class="pd-upload-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pd-add-member-heading"
+              (click)="$event.stopPropagation()"
+            >
+              <div class="pd-upload-modal__header">
+                <h2 id="pd-add-member-heading" class="pd-upload-modal__title">Add project member</h2>
+                <button
+                  type="button"
+                  class="pd-upload-modal__close"
+                  (click)="closeAddMemberModal()"
+                  [disabled]="addMemberSubmitting()"
+                  aria-label="Close dialog"
+                >
+                  <span class="material-symbols-outlined" aria-hidden="true">close</span>
+                </button>
+              </div>
+              <div class="pd-upload-modal__body">
+                @if (companyUsersLoadError(); as cuErr) {
+                  <div class="pd-upload-modal__error" role="alert">{{ cuErr }}</div>
+                }
+                <label class="pd-file-picker" style="flex-direction: column; align-items: stretch; gap: 0.35rem">
+                  <span>Team member</span>
+                  <select
+                    class="pd-members__select"
+                    [value]="addMemberSelectedUserId()"
+                    (change)="onAddMemberUserSelected($event)"
+                    [disabled]="addMemberSubmitting() || companyUsers().length === 0"
+                  >
+                    <option value="">Select a user…</option>
+                    @for (u of candidateCompanyUsers(); track u.id) {
+                      <option [value]="u.id">{{ u.fullname }} ({{ u.email }})</option>
+                    }
+                  </select>
+                </label>
+                <label class="pd-file-picker" style="flex-direction: column; align-items: stretch; gap: 0.35rem; margin-top: 0.75rem">
+                  <span>Project role</span>
+                  <select
+                    class="pd-members__select"
+                    [value]="addMemberProjectRole()"
+                    (change)="onAddMemberRoleSelected($event)"
+                    [disabled]="addMemberSubmitting()"
+                  >
+                    <option value="project_manager">Project Manager</option>
+                    <option value="contributor">Contributor</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </label>
+              </div>
+              <div class="pd-upload-modal__footer">
+                <button type="button" class="pd-upload-modal__secondary" (click)="closeAddMemberModal()" [disabled]="addMemberSubmitting()">
+                  Cancel
+                </button>
+                <button type="button" class="pd-upload-modal__primary" (click)="submitAddMember()" [disabled]="addMemberSubmitting()">
+                  @if (addMemberSubmitting()) {
+                    Adding…
+                  } @else {
+                    Add
+                  }
+                </button>
+              </div>
+            </section>
+          </div>
+        }
       </div>
 
       <aside class="pd-split__aside" aria-label="AI configuration">
