@@ -19,6 +19,7 @@ export class Shell implements OnInit {
 
   readonly currentUser = this.auth.currentUser;
   readonly hasCompanyAssociation = this.companyAccess.hasCompanyAssociation;
+  readonly canInviteUsers = this.auth.canInviteUsers;
 
   ngOnInit(): void {
     this.bootstrapApi.loadBootstrap();
@@ -39,6 +40,11 @@ export class Shell implements OnInit {
   protected companyNavActive(): boolean {
     const path = this.router.url.split('?')[0];
     return path === '/app/company' || path.startsWith('/app/company/');
+  }
+
+  protected teamInvitationsNavActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return path === '/app/team/invitations' || path.startsWith('/app/team/invitations/');
   }
 
   protected logout(): void {

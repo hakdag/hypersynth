@@ -7,6 +7,8 @@ mod company_route;
 mod configs;
 mod crypto;
 mod document_context_service;
+mod email;
+mod invitation_route;
 mod project_api_key_service;
 mod project_route;
 mod register_route;
@@ -15,6 +17,7 @@ mod tenant_scope_service;
 mod types;
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ai::AnthropicClient;
@@ -26,6 +29,8 @@ use axum::http::HeaderValue;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
+use email::SmtpEmailSender;
+use invitation_route::{cancel_invitation, create_invitation, list_invitations};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
     enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks, get_project,
@@ -76,9 +81,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     load_src_env()?;
     let config = AppConfig::from_env().map_err(|e| format!("configuration error: {}", e))?;
 
+    let AppConfig {
+        port,
+        database_url,
+        cors_origin,
+        session_max_age_secs,
+        document_upload_dir,
+        api_key_encryption_key,
+        anthropic_config,
+        invitation_config,
+        smtp_config,
+    } = config;
+
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&config.database_url)
+        .connect(&database_url)
         .await?;
 
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -88,17 +105,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let anthropic_http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(config.anthropic_config.timeout_secs))
+        .timeout(Duration::from_secs(anthropic_config.timeout_secs))
         .build()?;
     let anthropic = AnthropicClient::new(
         anthropic_http,
-        config.anthropic_config.base_url.clone(),
-        config.anthropic_config.model.clone(),
-        config.anthropic_config.max_tokens,
+        anthropic_config.base_url,
+        anthropic_config.model,
+        anthropic_config.max_tokens,
     );
 
     let cors = CorsLayer::new()
-        .allow_origin(config.cors_origin.parse::<HeaderValue>()?)
+        .allow_origin(cors_origin.parse::<HeaderValue>()?)
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
@@ -110,12 +127,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_headers([CONTENT_TYPE, ACCEPT])
         .allow_credentials(true);
 
+    let smtp_sender =
+        SmtpEmailSender::try_new(&smtp_config).map_err(|e| format!("SMTP setup: {e}"))?;
+    let email_sender: Arc<dyn email::EmailSender + Send + Sync> = Arc::new(smtp_sender);
+
     let state = AppState {
         pool,
-        session_max_age_secs: config.session_max_age_secs,
-        document_upload_dir: config.document_upload_dir,
-        api_key_encryption_key: config.api_key_encryption_key,
+        session_max_age_secs,
+        document_upload_dir,
+        api_key_encryption_key,
         anthropic,
+        email_sender,
+        invitation_config,
     };
 
     let app = Router::new()
@@ -130,6 +153,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route(
+            "/api/v1/invitations",
+            get(list_invitations).post(create_invitation),
+        )
+        .route(
+            "/api/v1/invitations/{invitation_id}/cancel",
+            post(cancel_invitation),
+        )
         .route("/api/v1/projects", get(list_projects).post(create_project))
         .route(
             "/api/v1/projects/{project_id}",
@@ -181,7 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(TraceLayer::new_for_http())
         .layer(cors);
 
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     eprintln!("listening on http://{}", addr);
     axum::serve(listener, app).await?;

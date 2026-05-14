@@ -57,6 +57,16 @@
             <span>Company</span>
           </a>
         }
+        @if (hasCompanyAssociation() && canInviteUsers()) {
+          <a
+            routerLink="/app/team/invitations"
+            class="sidebar-link"
+            [class.sidebar-link-active]="teamInvitationsNavActive()"
+          >
+            <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">group_add</span>
+            <span>Team</span>
+          </a>
+        }
         <a routerLink="/app/account" class="sidebar-link" routerLinkActive="sidebar-link-active">
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">settings</span>
           <span>Settings</span>

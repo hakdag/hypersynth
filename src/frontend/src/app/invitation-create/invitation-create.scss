@@ -1,0 +1,145 @@
+:host {
+  display: block;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #191c1e;
+}
+
+.inv-page {
+  max-width: 640px;
+  padding-bottom: 2rem;
+}
+
+.inv-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: #475569;
+}
+
+.inv-crumb-link {
+  color: #00236f;
+  text-decoration: none;
+}
+
+.inv-crumb-sep {
+  font-size: 18px;
+}
+
+.inv-header {
+  margin-bottom: 1.5rem;
+}
+
+.inv-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #00236f;
+}
+
+.inv-subtitle {
+  margin: 0;
+  color: #64748b;
+}
+
+.inv-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.inv-banner-error {
+  background: #fde8e8;
+  color: #7f1d1d;
+}
+
+.inv-banner-warn {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.inv-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+.inv-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.inv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.inv-label {
+  font-weight: 600;
+  color: #334155;
+}
+
+.inv-req {
+  color: #ba1a1a;
+}
+
+.inv-input,
+.inv-textarea {
+  border: 1px solid #c5c5d3;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+}
+
+.inv-textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.inv-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.inv-hint-error {
+  color: #ba1a1a;
+}
+
+.inv-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.inv-btn {
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.inv-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inv-btn-ghost {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.inv-btn-primary {
+  background: #00236f;
+  color: #fff;
+}

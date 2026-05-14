@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1"
 aes-gcm = "0.10"
 argon2 = "0.5"
 axum = { version = "0.8", features = ["multipart"] }
@@ -11,6 +12,7 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 base64 = "0.22"
 chrono = { version = "0.4.44", features = ["serde"] }
 dotenvy = "0.15"
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
 hex = "0.4.3"
 password-hash = "0.5"
 rand_core = { version = "0.6", features = ["std"] }
