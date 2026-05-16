@@ -18,6 +18,7 @@ export class Shell implements OnInit {
   private readonly router = inject(Router);
 
   readonly currentUser = this.auth.currentUser;
+  readonly isSystemAdmin = this.auth.isSystemAdmin;
   readonly hasCompanyAssociation = this.companyAccess.hasCompanyAssociation;
   readonly canInviteUsers = this.auth.canInviteUsers;
 
@@ -45,6 +46,11 @@ export class Shell implements OnInit {
   protected teamInvitationsNavActive(): boolean {
     const path = this.router.url.split('?')[0];
     return path === '/app/team/invitations' || path.startsWith('/app/team/invitations/');
+  }
+
+  protected adminNavActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return path === '/app/admin' || path.startsWith('/app/admin/');
   }
 
   protected logout(): void {

@@ -15,6 +15,7 @@ export class AuthService {
 
   readonly currentUser = this.user.asReadonly();
 
+  readonly isSystemAdmin = computed(() => this.user()?.accountType === 'system_admin');
   readonly isCompanyUser = computed(() => this.user()?.accountType === 'company');
   readonly isCompanyAdmin = computed(() => this.user()?.role === 'company_admin');
   readonly canManageCompanyProfile = this.isCompanyAdmin;

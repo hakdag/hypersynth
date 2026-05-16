@@ -3,7 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 
-import { AuthApiService } from '../auth-api.service';
+import { AuthApiService, CurrentUser } from '../auth-api.service';
 import { AuthService } from '../auth.service';
 import { BootstrapApiService } from '../bootstrap-api.service';
 
@@ -33,8 +33,10 @@ export class Login implements OnInit {
 
     this.auth.ensureAuthenticated().subscribe((ok) => {
       if (ok) {
-        const target = readReturnTarget(this.route.snapshot.queryParamMap);
-        void this.router.navigateByUrl(target);
+        const user = this.auth.currentUser();
+        if (user) {
+          void this.router.navigateByUrl(postLoginTarget(user, this.route.snapshot.queryParamMap));
+        }
       }
     });
   }
@@ -50,10 +52,9 @@ export class Login implements OnInit {
     this.submitting.set(true);
 
     this.auth.login(email, password).subscribe({
-      next: () => {
+      next: (user) => {
         this.submitting.set(false);
-        const target = readReturnTarget(this.route.snapshot.queryParamMap);
-        void this.router.navigateByUrl(target);
+        void this.router.navigateByUrl(postLoginTarget(user, this.route.snapshot.queryParamMap));
       },
       error: (err: unknown) => {
         this.submitting.set(false);
@@ -75,6 +76,13 @@ export class Login implements OnInit {
     }
     return '';
   }
+}
+
+function postLoginTarget(user: CurrentUser, map: ParamMap): string {
+  if (user.accountType === 'system_admin') {
+    return '/app/admin';
+  }
+  return readReturnTarget(map);
 }
 
 function readReturnTarget(map: ParamMap): string {

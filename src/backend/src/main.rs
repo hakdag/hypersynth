@@ -20,6 +20,7 @@ mod tenant_scope_service;
 mod types;
 mod user_registration;
 
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -99,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         anthropic_config,
         invitation_config,
         smtp_config,
+        system_admin_config,
     } = config;
 
     let pool = PgPoolOptions::new()
@@ -147,6 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         anthropic,
         email_sender,
         invitation_config,
+        system_admin: system_admin_config,
     };
 
     let app = Router::new()
@@ -244,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     eprintln!("listening on http://{}", addr);
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
     Ok(())
 }

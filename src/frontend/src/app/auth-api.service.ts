@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
 
-export type AccountType = 'personal' | 'company';
+export type AccountType = 'personal' | 'company' | 'system_admin';
 
 export type CompanyRole = 'company_admin' | 'project_manager' | 'contributor' | 'viewer';
 

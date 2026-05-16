@@ -12,6 +12,8 @@ import { FeatureCreate } from './feature-create/feature-create';
 import { FeatureDetail } from './feature-detail/feature-detail';
 import { FeatureView } from './feature-view/feature-view';
 import { Login } from './login/login';
+import { SystemAdminDashboard } from './system-admin-dashboard/system-admin-dashboard';
+import { systemAdminGuard } from './system-admin.guard';
 import { NotFound } from './not-found/not-found';
 import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
@@ -34,6 +36,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'projects' },
+      {
+        path: 'admin',
+        component: SystemAdminDashboard,
+        canActivate: [systemAdminGuard],
+      },
       { path: 'projects', component: ProjectList },
       { path: 'projects/new', component: ProjectCreate },
       { path: 'projects/:projectId/features/new', component: FeatureCreate },

@@ -11,34 +11,45 @@
     </div>
 
     <nav class="sidebar-nav" aria-label="Primary">
-      <a
-        routerLink="/app/projects"
-        class="sidebar-link"
-        [class.sidebar-link-active]="dashboardNavActive()"
-      >
-        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">grid_view</span>
-        <span>Dashboard</span>
-      </a>
-      <a
-        routerLink="/app/projects"
-        class="sidebar-link"
-        [class.sidebar-link-active]="projectsNavActive()"
-      >
-        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">folder_open</span>
-        <span>Projects</span>
-      </a>
-      <span class="sidebar-link sidebar-link-disabled">
-        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">task_alt</span>
-        <span>Tasks</span>
-      </span>
-      <span class="sidebar-link sidebar-link-disabled">
-        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">calendar_today</span>
-        <span>Timeline</span>
-      </span>
-      <span class="sidebar-link sidebar-link-disabled">
-        <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">analytics</span>
-        <span>Reports</span>
-      </span>
+      @if (isSystemAdmin()) {
+        <a
+          routerLink="/app/admin"
+          class="sidebar-link"
+          [class.sidebar-link-active]="adminNavActive()"
+        >
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">admin_panel_settings</span>
+          <span>Admin Dashboard</span>
+        </a>
+      } @else {
+        <a
+          routerLink="/app/projects"
+          class="sidebar-link"
+          [class.sidebar-link-active]="dashboardNavActive()"
+        >
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">grid_view</span>
+          <span>Dashboard</span>
+        </a>
+        <a
+          routerLink="/app/projects"
+          class="sidebar-link"
+          [class.sidebar-link-active]="projectsNavActive()"
+        >
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">folder_open</span>
+          <span>Projects</span>
+        </a>
+        <span class="sidebar-link sidebar-link-disabled">
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">task_alt</span>
+          <span>Tasks</span>
+        </span>
+        <span class="sidebar-link sidebar-link-disabled">
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">calendar_today</span>
+          <span>Timeline</span>
+        </span>
+        <span class="sidebar-link sidebar-link-disabled">
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">analytics</span>
+          <span>Reports</span>
+        </span>
+      }
     </nav>
 
     <div class="sidebar-dock">
@@ -47,7 +58,7 @@
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">contact_support</span>
           <span>Support</span>
         </span>
-        @if (hasCompanyAssociation()) {
+        @if (!isSystemAdmin() && hasCompanyAssociation()) {
           <a
             routerLink="/app/company"
             class="sidebar-link"
@@ -57,7 +68,7 @@
             <span>Company</span>
           </a>
         }
-        @if (hasCompanyAssociation() && canInviteUsers()) {
+        @if (!isSystemAdmin() && hasCompanyAssociation() && canInviteUsers()) {
           <a
             routerLink="/app/team/invitations"
             class="sidebar-link"
@@ -67,10 +78,12 @@
             <span>Team</span>
           </a>
         }
-        <a routerLink="/app/account" class="sidebar-link" routerLinkActive="sidebar-link-active">
-          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">settings</span>
-          <span>Settings</span>
-        </a>
+        @if (!isSystemAdmin()) {
+          <a routerLink="/app/account" class="sidebar-link" routerLinkActive="sidebar-link-active">
+            <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">settings</span>
+            <span>Settings</span>
+          </a>
+        }
       </div>
 
       <div class="sidebar-session">

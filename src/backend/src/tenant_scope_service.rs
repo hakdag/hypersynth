@@ -13,6 +13,9 @@ impl TenantScopeService {
     ) -> Result<TenantScope, (StatusCode, Json<ApiErrorBody>)> {
         match user.account_type {
             AccountType::Personal => Ok(TenantScope::Personal { user_id: user.id }),
+            AccountType::SystemAdmin => Err(authorization::forbidden(
+                "This action is not available to system administrators.",
+            )),
             AccountType::Company => {
                 let company_id = user.company_id.ok_or_else(|| {
                     authorization::forbidden("Company membership is required for this action.")

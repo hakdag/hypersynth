@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 use crate::ai::AnthropicClient;
-use crate::configs::InvitationConfig;
+use crate::configs::{InvitationConfig, SystemAdminConfig};
 use crate::email::EmailSender;
 
 #[derive(Clone)]
@@ -13,4 +13,5 @@ pub struct AppState {
     pub anthropic: AnthropicClient,
     pub email_sender: std::sync::Arc<dyn EmailSender + Send + Sync>,
     pub invitation_config: InvitationConfig,
+    pub system_admin: SystemAdminConfig,
 }

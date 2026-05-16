@@ -1,7 +1,10 @@
+use std::net::SocketAddr;
+
 use argon2::password_hash::{PasswordHash, PasswordVerifier};
 use argon2::Argon2;
+use axum::extract::ConnectInfo;
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -14,12 +17,14 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::types::{
-    AccountType, ApiErrorBody, CompanyRole, CurrentUserBody, LoginRequest, SessionUser,
+    AccountType, ApiErrorBody, CompanyRole, CurrentUserBody, LoginRequest, SessionPrincipal,
+    SessionUser,
 };
 use crate::user_registration::email_contains_at_and_dot;
 
 const SESSION_COOKIE: &str = "hypersynth_session";
 const GENERIC_AUTH_FAILURE: &str = "Invalid email or password.";
+const SYSTEM_ADMIN_DISPLAY_NAME: &str = "System Admin";
 
 pub(crate) fn has_session_cookie(jar: &CookieJar) -> bool {
     jar.get(SESSION_COOKIE).is_some()
@@ -42,8 +47,23 @@ struct SessionUserRow {
     company_id: Option<Uuid>,
 }
 
+#[derive(sqlx::FromRow)]
+struct SessionResolveRow {
+    is_system_admin: bool,
+    system_admin_email: Option<String>,
+    id: Option<Uuid>,
+    fullname: Option<String>,
+    email: Option<String>,
+    avatar_url: Option<String>,
+    account_type: Option<String>,
+    role: Option<String>,
+    company_id: Option<Uuid>,
+}
+
 pub async fn login(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiErrorBody>)> {
@@ -58,6 +78,30 @@ pub async fn login(
     }
     if !email_contains_at_and_dot(email) {
         return Err(bad_request("Enter a valid email address."));
+    }
+
+    let normalized_email = email.to_lowercase();
+
+    if state.system_admin.enabled && normalized_email == state.system_admin.email {
+        let ip = client_ip(&peer, &headers);
+        let ua = user_agent(&headers);
+
+        if !verify_password_hash(state.system_admin.password_hash.as_str(), password) {
+            // Temporary until SF-24 audit logging persists these events.
+            log_system_admin_attempt(&normalized_email, &ip, &ua, "failure");
+            return Err(unauthorized_auth());
+        }
+
+        log_system_admin_attempt(&normalized_email, &ip, &ua, "success");
+
+        let (jar, body) = establish_session_for_system_admin(
+            &state.pool,
+            state.session_max_age_secs,
+            jar,
+            &normalized_email,
+        )
+        .await?;
+        return Ok((jar, Json(body)));
     }
 
     let row = sqlx::query_as::<_, UserAuthRow>(
@@ -126,28 +170,24 @@ pub async fn establish_session_for_user(
     let token_hash = hash_session_token(&raw);
     let expires_at = Utc::now() + ChronoDuration::seconds(session_max_age_secs);
 
-    sqlx::query(r#"INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1, $2, $3)"#)
-        .bind(row.id)
-        .bind(&token_hash)
-        .bind(expires_at)
-        .execute(pool)
-        .await
-        .map_err(|_| internal_error())?;
-
-    let token_cookie = hex::encode(raw);
-    let cookie = Cookie::build((SESSION_COOKIE, token_cookie))
-        .path("/")
-        .http_only(true)
-        .same_site(SameSite::Lax)
-        .max_age(CookieDuration::seconds(session_max_age_secs))
-        .build();
+    sqlx::query(
+        r#"
+        INSERT INTO sessions (user_id, token_hash, expires_at, is_system_admin)
+        VALUES ($1, $2, $3, false)
+        "#,
+    )
+    .bind(row.id)
+    .bind(&token_hash)
+    .bind(expires_at)
+    .execute(pool)
+    .await
+    .map_err(|_| internal_error())?;
 
     let account_type = AccountType::from_db_value(row.account_type.as_str())
         .ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
-    let jar = jar.add(cookie);
-    let body = CurrentUserBody {
+    let user = SessionUser {
         id: row.id,
         fullname: row.fullname,
         email: row.email,
@@ -156,7 +196,48 @@ pub async fn establish_session_for_user(
         role,
         company_id: row.company_id,
     };
-    Ok((jar, body))
+
+    let jar = jar.add(session_cookie(&raw, session_max_age_secs));
+    Ok((jar, principal_to_body(SessionPrincipal::User(user))))
+}
+
+async fn establish_session_for_system_admin(
+    pool: &PgPool,
+    session_max_age_secs: i64,
+    jar: CookieJar,
+    email: &str,
+) -> Result<(CookieJar, CurrentUserBody), (StatusCode, Json<ApiErrorBody>)> {
+    let mut raw = [0u8; 32];
+    OsRng.fill_bytes(&mut raw);
+    let token_hash = hash_session_token(&raw);
+    let expires_at = Utc::now() + ChronoDuration::seconds(session_max_age_secs);
+
+    sqlx::query(
+        r#"
+        INSERT INTO sessions (
+            user_id,
+            token_hash,
+            expires_at,
+            is_system_admin,
+            system_admin_email
+        )
+        VALUES (NULL, $1, $2, true, $3)
+        "#,
+    )
+    .bind(&token_hash)
+    .bind(expires_at)
+    .bind(email)
+    .execute(pool)
+    .await
+    .map_err(|_| internal_error())?;
+
+    let jar = jar.add(session_cookie(&raw, session_max_age_secs));
+    Ok((
+        jar,
+        principal_to_body(SessionPrincipal::SystemAdmin {
+            email: email.to_string(),
+        }),
+    ))
 }
 
 pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
@@ -184,8 +265,8 @@ pub async fn current_user(
     State(state): State<AppState>,
     jar: CookieJar,
 ) -> Result<Json<CurrentUserBody>, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_user(&state.pool, &jar).await? {
-        Some(u) => Ok(Json(session_user_to_body(u))),
+    match resolve_current_principal(&state.pool, &jar).await? {
+        Some(principal) => Ok(Json(principal_to_body(principal))),
         None => Err(unauthenticated()),
     }
 }
@@ -194,16 +275,17 @@ pub(crate) async fn require_authenticated_user(
     pool: &PgPool,
     jar: &CookieJar,
 ) -> Result<SessionUser, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_user(pool, jar).await? {
-        Some(u) => Ok(u),
+    match resolve_current_principal(pool, jar).await? {
+        Some(SessionPrincipal::User(user)) => Ok(user),
+        Some(SessionPrincipal::SystemAdmin { .. }) => Err(admin_forbidden()),
         None => Err(unauthenticated()),
     }
 }
 
-async fn resolve_current_user(
+async fn resolve_current_principal(
     pool: &PgPool,
     jar: &CookieJar,
-) -> Result<Option<SessionUser>, (StatusCode, Json<ApiErrorBody>)> {
+) -> Result<Option<SessionPrincipal>, (StatusCode, Json<ApiErrorBody>)> {
     let Some(cookie) = jar.get(SESSION_COOKIE) else {
         return Ok(None);
     };
@@ -215,9 +297,11 @@ async fn resolve_current_user(
     };
     let token_hash = hash_session_token(&raw);
 
-    let row = sqlx::query_as::<_, SessionUserRow>(
+    let row = sqlx::query_as::<_, SessionResolveRow>(
         r#"
         SELECT
+            s.is_system_admin,
+            s.system_admin_email,
             u.id,
             u.fullname,
             u.email,
@@ -226,7 +310,7 @@ async fn resolve_current_user(
             u.role,
             cu.company_id
         FROM sessions s
-        INNER JOIN users u ON u.id = s.user_id
+        LEFT JOIN users u ON u.id = s.user_id
         LEFT JOIN company_users cu ON cu.user_id = u.id
         WHERE s.token_hash = $1 AND s.expires_at > now()
         "#,
@@ -240,31 +324,65 @@ async fn resolve_current_user(
         return Ok(None);
     };
 
-    let account_type = AccountType::from_db_value(row.account_type.as_str())
+    if row.is_system_admin {
+        let Some(email) = row.system_admin_email else {
+            return Err(internal_error());
+        };
+        return Ok(Some(SessionPrincipal::SystemAdmin { email }));
+    }
+
+    let id = row.id.ok_or_else(internal_error)?;
+    let fullname = row.fullname.ok_or_else(internal_error)?;
+    let email = row.email.ok_or_else(internal_error)?;
+    let account_type = row
+        .account_type
+        .as_deref()
+        .and_then(AccountType::from_db_value)
         .ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
-    Ok(Some(SessionUser {
-        id: row.id,
-        fullname: row.fullname,
-        email: row.email,
+    Ok(Some(SessionPrincipal::User(SessionUser {
+        id,
+        fullname,
+        email,
         avatar_url: row.avatar_url,
         account_type,
         role,
         company_id: row.company_id,
-    }))
+    })))
 }
 
-fn session_user_to_body(user: SessionUser) -> CurrentUserBody {
-    CurrentUserBody {
-        id: user.id,
-        fullname: user.fullname,
-        email: user.email,
-        avatar_url: user.avatar_url,
-        account_type: user.account_type,
-        role: user.role,
-        company_id: user.company_id,
+fn principal_to_body(principal: SessionPrincipal) -> CurrentUserBody {
+    match principal {
+        SessionPrincipal::User(user) => CurrentUserBody {
+            id: user.id,
+            fullname: user.fullname,
+            email: user.email,
+            avatar_url: user.avatar_url,
+            account_type: user.account_type,
+            role: user.role,
+            company_id: user.company_id,
+        },
+        SessionPrincipal::SystemAdmin { email } => CurrentUserBody {
+            id: Uuid::nil(),
+            fullname: SYSTEM_ADMIN_DISPLAY_NAME.into(),
+            email,
+            avatar_url: None,
+            account_type: AccountType::SystemAdmin,
+            role: None,
+            company_id: None,
+        },
     }
+}
+
+fn session_cookie(raw: &[u8; 32], session_max_age_secs: i64) -> Cookie<'static> {
+    let token_cookie = hex::encode(raw);
+    Cookie::build((SESSION_COOKIE, token_cookie))
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::seconds(session_max_age_secs))
+        .build()
 }
 
 fn decode_role(
@@ -292,6 +410,48 @@ fn verify_password_hash(hash: &str, password: &str) -> bool {
         .is_ok()
 }
 
+fn client_ip(peer: &SocketAddr, headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| peer.ip().to_string())
+}
+
+fn user_agent(headers: &HeaderMap) -> String {
+    headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// Temporary until SF-24 audit logging persists System Admin login attempts.
+fn log_system_admin_attempt(email: &str, ip: &str, ua: &str, outcome: &str) {
+    if outcome == "success" {
+        tracing::info!(
+            target: "system_admin_auth",
+            email = %email,
+            ip = %ip,
+            ua = %ua,
+            outcome = %outcome,
+            "system admin login attempt"
+        );
+    } else {
+        tracing::warn!(
+            target: "system_admin_auth",
+            email = %email,
+            ip = %ip,
+            ua = %ua,
+            outcome = %outcome,
+            "system admin login attempt"
+        );
+    }
+}
+
 fn unauthorized_auth() -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::UNAUTHORIZED,
@@ -307,6 +467,16 @@ fn unauthenticated() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::UNAUTHORIZED,
         Json(ApiErrorBody {
             message: "You need to sign in to continue.".into(),
+            ..Default::default()
+        }),
+    )
+}
+
+fn admin_forbidden() -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ApiErrorBody {
+            message: "This action is not available to system administrators.".into(),
             ..Default::default()
         }),
     )
