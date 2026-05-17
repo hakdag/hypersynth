@@ -11,6 +11,10 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   if (ok) {
     return true;
   }
+  if (auth.isDisabledRedirectInFlight()) {
+    auth.setDisabledRedirectInFlight(false);
+    return false;
+  }
   await router.navigate(['/login'], { queryParams: { returnUrl: state.url } });
   return false;
 };

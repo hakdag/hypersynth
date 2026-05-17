@@ -5,7 +5,7 @@ use argon2::Argon2;
 use axum::extract::ConnectInfo;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{Duration as ChronoDuration, Utc};
@@ -17,8 +17,8 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::types::{
-    AccountType, ApiErrorBody, CompanyRole, CurrentUserBody, LoginRequest, SessionPrincipal,
-    SessionUser,
+    AccountType, ApiErrorBody, CompanyRole, CompanyStatus, CurrentUserBody, LoginRequest,
+    SessionPrincipal, SessionUser, ERROR_CODE_COMPANY_DISABLED,
 };
 use crate::user_registration::email_contains_at_and_dot;
 
@@ -34,6 +34,7 @@ pub(crate) fn has_session_cookie(jar: &CookieJar) -> bool {
 struct UserAuthRow {
     id: Uuid,
     password_hash: String,
+    account_type: String,
 }
 
 #[derive(sqlx::FromRow)]
@@ -58,6 +59,7 @@ struct SessionResolveRow {
     account_type: Option<String>,
     role: Option<String>,
     company_id: Option<Uuid>,
+    company_status: Option<String>,
 }
 
 pub async fn login(
@@ -108,7 +110,8 @@ pub async fn login(
         r#"
         SELECT
             u.id,
-            u.password_hash
+            u.password_hash,
+            u.account_type
         FROM users u
         WHERE u.email = lower(trim($1))
         "#,
@@ -125,6 +128,10 @@ pub async fn login(
 
     if !verify_password_hash(user.password_hash.as_str(), password) {
         return Err(unauthorized_auth());
+    }
+
+    if user.account_type == "company" && user_company_is_disabled(&state.pool, user.id).await? {
+        return Err(company_disabled_error());
     }
 
     let (jar, body) = establish_session_for_user(
@@ -264,10 +271,14 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> impl IntoR
 pub async fn current_user(
     State(state): State<AppState>,
     jar: CookieJar,
-) -> Result<Json<CurrentUserBody>, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_principal(&state.pool, &jar).await? {
-        Some(principal) => Ok(Json(principal_to_body(principal))),
-        None => Err(unauthenticated()),
+) -> Result<Response, (StatusCode, Json<ApiErrorBody>)> {
+    match resolve_current_principal(&state.pool, &jar).await {
+        Ok(Some(principal)) => Ok(Json(principal_to_body(principal)).into_response()),
+        Ok(None) => Err(unauthenticated()),
+        Err(err) if is_company_disabled_error(&err) => {
+            Ok((clear_session_jar(jar), err).into_response())
+        }
+        Err(err) => Err(err),
     }
 }
 
@@ -278,6 +289,17 @@ pub(crate) async fn require_authenticated_user(
     match resolve_current_principal(pool, jar).await? {
         Some(SessionPrincipal::User(user)) => Ok(user),
         Some(SessionPrincipal::SystemAdmin { .. }) => Err(admin_forbidden()),
+        None => Err(unauthenticated()),
+    }
+}
+
+pub(crate) async fn require_system_admin(
+    pool: &PgPool,
+    jar: &CookieJar,
+) -> Result<String, (StatusCode, Json<ApiErrorBody>)> {
+    match resolve_current_principal(pool, jar).await? {
+        Some(SessionPrincipal::SystemAdmin { email }) => Ok(email),
+        Some(SessionPrincipal::User(_)) => Err(non_admin_forbidden()),
         None => Err(unauthenticated()),
     }
 }
@@ -308,10 +330,12 @@ async fn resolve_current_principal(
             u.avatar_url,
             u.account_type,
             u.role,
-            cu.company_id
+            cu.company_id,
+            c.status AS company_status
         FROM sessions s
         LEFT JOIN users u ON u.id = s.user_id
         LEFT JOIN company_users cu ON cu.user_id = u.id
+        LEFT JOIN companies c ON c.id = cu.company_id
         WHERE s.token_hash = $1 AND s.expires_at > now()
         "#,
     )
@@ -341,6 +365,13 @@ async fn resolve_current_principal(
         .ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
+    if account_type == AccountType::Company
+        && row.company_status.as_deref() == Some(CompanyStatus::Disabled.as_db_value())
+    {
+        revoke_session_by_token_hash(pool, &token_hash).await?;
+        return Err(company_disabled_error());
+    }
+
     Ok(Some(SessionPrincipal::User(SessionUser {
         id,
         fullname,
@@ -350,6 +381,60 @@ async fn resolve_current_principal(
         role,
         company_id: row.company_id,
     })))
+}
+
+async fn user_company_is_disabled(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<bool, (StatusCode, Json<ApiErrorBody>)> {
+    let status: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT c.status
+        FROM company_users cu
+        INNER JOIN companies c ON c.id = cu.company_id
+        WHERE cu.user_id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| internal_error())?;
+
+    Ok(status.as_deref() == Some(CompanyStatus::Disabled.as_db_value()))
+}
+
+async fn revoke_session_by_token_hash(
+    pool: &PgPool,
+    token_hash: &str,
+) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
+    sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
+        .bind(token_hash)
+        .execute(pool)
+        .await
+        .map_err(|_| internal_error())?;
+    Ok(())
+}
+
+fn clear_session_jar(jar: CookieJar) -> CookieJar {
+    let expired = Cookie::build((SESSION_COOKIE, ""))
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::seconds(0))
+        .build();
+    jar.add(expired)
+}
+
+fn is_company_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
+    err.0 == StatusCode::FORBIDDEN
+        && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
+}
+
+fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ApiErrorBody::company_disabled()),
+    )
 }
 
 fn principal_to_body(principal: SessionPrincipal) -> CurrentUserBody {
@@ -477,6 +562,16 @@ fn admin_forbidden() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::FORBIDDEN,
         Json(ApiErrorBody {
             message: "This action is not available to system administrators.".into(),
+            ..Default::default()
+        }),
+    )
+}
+
+fn non_admin_forbidden() -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ApiErrorBody {
+            message: "You do not have permission to access this resource.".into(),
             ..Default::default()
         }),
     )

@@ -39,6 +39,14 @@ export class AuthApiService {
     return this.http.get<CurrentUser>(url);
   }
 
+  static isCompanyDisabled(err: unknown): boolean {
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      const body = err.error as { code?: string } | null;
+      return body?.code === 'company_disabled';
+    }
+    return false;
+  }
+
   static loginErrorMessage(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
       const body = err.error as { message?: string } | null;

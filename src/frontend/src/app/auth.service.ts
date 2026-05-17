@@ -12,6 +12,7 @@ export class AuthService {
   private readonly companyAccess = inject(CompanyAccessService);
 
   private readonly user = signal<CurrentUser | null>(null);
+  private readonly disabledRedirectInFlight = signal(false);
 
   readonly currentUser = this.user.asReadonly();
 
@@ -51,9 +52,21 @@ export class AuthService {
   logout(): Observable<void> {
     return this.authApi.logout().pipe(
       tap(() => {
-        this.user.set(null);
-        this.companyAccess.clearAssociationCache();
+        this.clearSession();
       }),
     );
+  }
+
+  clearSession(): void {
+    this.user.set(null);
+    this.companyAccess.clearAssociationCache();
+  }
+
+  setDisabledRedirectInFlight(value: boolean): void {
+    this.disabledRedirectInFlight.set(value);
+  }
+
+  isDisabledRedirectInFlight(): boolean {
+    return this.disabledRedirectInFlight();
   }
 }

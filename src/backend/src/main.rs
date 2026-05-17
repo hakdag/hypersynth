@@ -1,3 +1,4 @@
+mod admin_company_route;
 mod ai;
 mod app_state;
 mod auth_route;
@@ -31,6 +32,9 @@ use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
+use admin_company_route::{
+    get_admin_company, list_admin_companies, set_admin_company_status,
+};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
@@ -165,6 +169,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route("/api/v1/admin/companies", get(list_admin_companies))
+        .route(
+            "/api/v1/admin/companies/{company_id}",
+            get(get_admin_company),
+        )
+        .route(
+            "/api/v1/admin/companies/{company_id}/status",
+            post(set_admin_company_status),
+        )
         .route(
             "/api/v1/invitations",
             get(list_invitations).post(create_invitation),

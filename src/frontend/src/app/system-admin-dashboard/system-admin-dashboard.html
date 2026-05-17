@@ -1,8 +1,18 @@
-<section class="surface">
-  <h1>System Admin</h1>
-  <p>
-    Platform administration tools (companies, users, audit logs, and health) will appear here in
-    upcoming releases.
-  </p>
-  <div class="empty-chip">Placeholder dashboard (SF-18).</div>
-</section>
+<div class="sad-shell">
+  <nav class="sad-nav" aria-label="Administration">
+    <a
+      routerLink="/app/admin/companies"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Companies
+    </a>
+    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">Users</span>
+    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">AI usage</span>
+    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">Audit logs</span>
+  </nav>
+  <div class="sad-content">
+    <router-outlet />
+  </div>
+</div>

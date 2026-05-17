@@ -1,15 +1,47 @@
-.surface {
-  max-width: 36rem;
-  margin: 0;
+.sad-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 100%;
 }
 
-h1 {
-  margin-top: 0;
+.sad-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.empty-chip {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  border-radius: 0.55rem;
-  border: 1px dashed var(--outline);
+.sad-nav-link {
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #475569;
+  text-decoration: none;
+
+  &:hover:not(.sad-nav-disabled) {
+    background: #f1f5f9;
+    color: #00236f;
+  }
+}
+
+.sad-nav-active {
+  background: #00236f;
+  color: #fff;
+
+  &:hover {
+    background: #1e3a8a;
+    color: #fff;
+  }
+}
+
+.sad-nav-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sad-content {
+  flex: 1;
 }

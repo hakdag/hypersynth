@@ -58,6 +58,11 @@ export class Login implements OnInit {
       },
       error: (err: unknown) => {
         this.submitting.set(false);
+        if (AuthApiService.isCompanyDisabled(err)) {
+          this.auth.clearSession();
+          void this.router.navigateByUrl('/company-disabled');
+          return;
+        }
         this.serverError.set(AuthApiService.loginErrorMessage(err));
       },
     });
@@ -80,7 +85,7 @@ export class Login implements OnInit {
 
 function postLoginTarget(user: CurrentUser, map: ParamMap): string {
   if (user.accountType === 'system_admin') {
-    return '/app/admin';
+    return '/app/admin/companies';
   }
   return readReturnTarget(map);
 }
