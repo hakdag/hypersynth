@@ -1,0 +1,73 @@
+<div class="il-page">
+  <header class="il-header">
+    <div>
+      <h1 class="il-title">Team invitations</h1>
+      <p class="il-subtitle">Invitations you created for this company.</p>
+    </div>
+    <a routerLink="/app/team/invitations/new" class="il-btn il-btn-primary">Invite member</a>
+  </header>
+
+  @if (actionError(); as ae) {
+    <div class="il-banner il-banner-error" role="alert">{{ ae }}</div>
+  }
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="il-muted">Loading…</p>
+    }
+    @case ('error') {
+      <div class="il-banner il-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="il-btn il-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (invitations().length === 0) {
+        <div class="il-empty">
+          <p>No invitations yet.</p>
+          <a routerLink="/app/team/invitations/new" class="il-btn il-btn-primary">Invite member</a>
+        </div>
+      } @else {
+        <div class="il-table-wrap">
+          <table class="il-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Expires</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (inv of invitations(); track inv.id) {
+                <tr>
+                  <td>{{ inv.invitedEmail }}</td>
+                  <td>{{ roleLabel(inv.invitedRole) }}</td>
+                  <td>{{ inv.projectId ? 'Yes' : '—' }}</td>
+                  <td>
+                    <span class="il-badge" [class.il-badge-pending]="inv.status === 'pending'">
+                      {{ statusLabel(inv.status) }}
+                    </span>
+                  </td>
+                  <td>{{ inv.expiresAt | date: 'medium' }}</td>
+                  <td>
+                    @if (inv.status === 'pending') {
+                      <button
+                        type="button"
+                        class="il-btn il-btn-ghost il-btn-sm"
+                        [disabled]="cancellingId() === inv.id"
+                        (click)="cancel(inv)"
+                      >
+                        {{ cancellingId() === inv.id ? 'Cancelling…' : 'Cancel' }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</div>

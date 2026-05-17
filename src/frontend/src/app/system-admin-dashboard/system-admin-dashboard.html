@@ -1,0 +1,25 @@
+<div class="sad-shell">
+  <nav class="sad-nav" aria-label="Administration">
+    <a
+      routerLink="/app/admin/companies"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Companies
+    </a>
+    <a
+      routerLink="/app/admin/users"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Users
+    </a>
+    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">AI usage</span>
+    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">Audit logs</span>
+  </nav>
+  <div class="sad-content">
+    <router-outlet />
+  </div>
+</div>

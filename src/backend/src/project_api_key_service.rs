@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::crypto::ApiKeyCipher;
 use crate::runtime_decrypt_error::RuntimeDecryptError;
-use crate::types::ApiKeyAuditEvent;
+use crate::types::{ApiKeyAuditEvent, TenantScope};
 
 /// Service responsible for recording AI API key lifecycle events and
 /// decrypting stored ciphertext for the server-side AI execution path.
@@ -56,17 +56,31 @@ impl ProjectApiKeyService {
     pub async fn decrypt_for_runtime(
         state: &AppState,
         project_id: Uuid,
-        user_id: Uuid,
+        scope: TenantScope,
     ) -> Result<Option<String>, RuntimeDecryptError> {
         let row: Option<(Option<Vec<u8>>,)> = sqlx::query_as(
             r#"
             SELECT encrypted_api_key
             FROM projects
-            WHERE id = $1 AND user_id = $2
+            WHERE id = $1
+              AND (
+                ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+                OR
+                ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                    $4::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = projects.id AND pm.user_id = $5
+                    )
+                ))
+              )
             "#,
         )
         .bind(project_id)
-        .bind(user_id)
+        .bind(scope.company_id_or_null())
+        .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .fetch_optional(&state.pool)
         .await?;
 
@@ -80,7 +94,10 @@ impl ProjectApiKeyService {
         Self::record_audit(
             &state.pool,
             project_id,
-            user_id,
+            match scope {
+                TenantScope::Personal { user_id } => user_id,
+                TenantScope::Company { user_id, .. } => user_id,
+            },
             ApiKeyAuditEvent::RuntimeUse,
         )
         .await?;

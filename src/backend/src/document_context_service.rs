@@ -6,7 +6,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::types::{DocumentContentKind, DocumentContextError, DocumentContextItem};
+use crate::types::{DocumentContentKind, DocumentContextError, DocumentContextItem, TenantScope};
 
 pub struct DocumentContextService;
 
@@ -14,7 +14,7 @@ impl DocumentContextService {
     pub async fn load_for_project(
         pool: &PgPool,
         project_id: Uuid,
-        user_id: Uuid,
+        scope: TenantScope,
         document_ids: &[Uuid],
     ) -> Result<Vec<DocumentContextItem>, DocumentContextError> {
         let ordered = Self::dedupe_preserve_order(document_ids);
@@ -27,11 +27,26 @@ impl DocumentContextService {
             SELECT d.id, d.file_path, d.metadata
             FROM project_documents d
             INNER JOIN projects p ON p.id = d.project_id
-            WHERE d.project_id = $1 AND p.user_id = $2 AND d.id = ANY($3)
+            WHERE d.project_id = $1
+              AND (
+                ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+                OR
+                ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                    $4::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $5
+                    )
+                ))
+              )
+              AND d.id = ANY($6)
             "#,
         )
         .bind(project_id)
-        .bind(user_id)
+        .bind(scope.company_id_or_null())
+        .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .bind(&ordered)
         .fetch_all(pool)
         .await

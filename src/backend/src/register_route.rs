@@ -1,15 +1,13 @@
-use argon2::password_hash::{PasswordHasher, SaltString};
-use argon2::Argon2;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use password_hash::rand_core::OsRng;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::types::{ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
-
-const MIN_PASSWORD_LEN: usize = 8;
+use crate::types::{AccountType, ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
+use crate::user_registration::{
+    email_contains_at_and_dot, hash_password_argon2, password_policy_error,
+};
 
 pub async fn register_user(
     State(state): State<AppState>,
@@ -31,106 +29,72 @@ pub async fn register_user(
         return Err(bad_request("Enter a valid email address."));
     }
 
-    if password.len() < MIN_PASSWORD_LEN {
-        return Err(bad_request(format!(
-            "Password must be at least {} characters.",
-            MIN_PASSWORD_LEN
-        )));
+    if let Some(msg) = password_policy_error(password) {
+        return Err(bad_request(msg));
     }
 
-    if !password_has_letter_and_digit(password) {
+    let hash_str = hash_password_argon2(password).map_err(|_| internal_error())?;
+    let account_type = payload.account_type.as_db_value();
+
+    if payload.account_type == AccountType::Company {
         return Err(bad_request(
-            "Password must include at least one letter and one number.",
+            "Company registration is not supported on this endpoint. Use /api/v1/companies/register.",
         ));
     }
 
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| internal_error())?;
+    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
 
-    let hash_str = password_hash.to_string();
-
-    let insert_result = sqlx::query_scalar::<_, Uuid>(
+    let user_id = match sqlx::query_scalar::<_, Uuid>(
         r#"
-        INSERT INTO users (fullname, email, password_hash)
-        VALUES ($1, lower(trim($2)), $3)
+        INSERT INTO users (fullname, email, password_hash, account_type)
+        VALUES ($1, lower(trim($2)), $3, $4)
         RETURNING id
         "#,
     )
     .bind(fullname)
     .bind(email)
     .bind(&hash_str)
-    .fetch_one(&state.pool)
-    .await;
-
-    match insert_result {
-        Ok(id) => Ok((
-            StatusCode::CREATED,
-            Json(RegisterSuccessResponse {
-                id,
-                message: "Your account has been created.".into(),
-            }),
-        )),
+    .bind(account_type)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(id) => id,
         Err(e) => {
             if let Some(db) = e.as_database_error() {
                 if db.code().as_deref() == Some("23505") {
                     return Err((
                         StatusCode::CONFLICT,
-                        Json(ApiErrorBody {
-                            message: "An account with this email already exists.".into(),
-                        }),
+                        Json(ApiErrorBody::msg(
+                            "An account with this email already exists.",
+                        )),
                     ));
                 }
             }
-            Err(internal_error())
+            return Err(internal_error());
         }
-    }
-}
+    };
 
-fn email_contains_at_and_dot(email: &str) -> bool {
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let domain = parts[1];
-    domain.contains('.')
-        && !parts[0].is_empty()
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-}
+    tx.commit().await.map_err(|_| internal_error())?;
 
-fn password_has_letter_and_digit(password: &str) -> bool {
-    let mut letter = false;
-    let mut digit = false;
-    for ch in password.chars() {
-        if ch.is_alphabetic() {
-            letter = true;
-        } else if ch.is_ascii_digit() {
-            digit = true;
-        }
-        if letter && digit {
-            return true;
-        }
-    }
-    false
+    Ok((
+        StatusCode::CREATED,
+        Json(RegisterSuccessResponse {
+            id: user_id,
+            message: "Your account has been created.".into(),
+        }),
+    ))
 }
 
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::BAD_REQUEST,
-        Json(ApiErrorBody {
-            message: message.into(),
-        }),
+        Json(ApiErrorBody::msg(message)),
     )
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ApiErrorBody {
-            message: "Something went wrong. Please try again.".into(),
-        }),
+        Json(ApiErrorBody::msg("Something went wrong. Please try again.")),
     )
 }

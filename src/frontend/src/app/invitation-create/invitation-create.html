@@ -1,0 +1,72 @@
+<div class="inv-page">
+  <nav class="inv-breadcrumbs" aria-label="Breadcrumb">
+    <a routerLink="/app/team/invitations" class="inv-crumb-link">Team invitations</a>
+    <span class="material-symbols-outlined inv-crumb-sep" aria-hidden="true">chevron_right</span>
+    <span class="inv-crumb-current">Invite member</span>
+  </nav>
+
+  <header class="inv-header">
+    <h1 class="inv-title">Invite team member</h1>
+    <p class="inv-subtitle">Send an email invitation with a role and optional project assignment.</p>
+  </header>
+
+  @if (serverError(); as err) {
+    <div class="inv-banner inv-banner-error" role="alert">{{ err }}</div>
+  }
+  @if (projectsLoadError(); as pe) {
+    <div class="inv-banner inv-banner-warn" role="status">{{ pe }}</div>
+  }
+
+  <div class="inv-card">
+    <form class="inv-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="inv-field">
+        <label class="inv-label" for="inv-email">
+          Email <span class="inv-req" aria-hidden="true">*</span>
+        </label>
+        <input
+          id="inv-email"
+          class="inv-input"
+          type="email"
+          autocomplete="email"
+          formControlName="invitedEmail"
+          [attr.aria-invalid]="form.controls.invitedEmail.invalid && form.controls.invitedEmail.touched"
+        />
+        @if (emailError(); as ee) {
+          <p class="inv-hint inv-hint-error">{{ ee }}</p>
+        }
+      </div>
+
+      <div class="inv-field">
+        <label class="inv-label" for="inv-role">Role <span class="inv-req" aria-hidden="true">*</span></label>
+        <select id="inv-role" class="inv-input" formControlName="invitedRole">
+          @for (opt of roleOptions(); track opt.value) {
+            <option [ngValue]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+        <p class="inv-hint">Project managers can only invite contributors or viewers.</p>
+      </div>
+
+      <div class="inv-field">
+        <label class="inv-label" for="inv-project">Project (optional)</label>
+        <select id="inv-project" class="inv-input" formControlName="projectId">
+          <option value="">— None —</option>
+          @for (p of projects(); track p.id) {
+            <option [value]="p.id">{{ p.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="inv-field">
+        <label class="inv-label" for="inv-message">Message (optional)</label>
+        <textarea id="inv-message" class="inv-textarea" rows="3" formControlName="message"></textarea>
+      </div>
+
+      <div class="inv-actions">
+        <button type="button" class="inv-btn inv-btn-ghost" (click)="cancel()">Cancel</button>
+        <button type="submit" class="inv-btn inv-btn-primary" [disabled]="submitting() || form.invalid">
+          {{ submitting() ? 'Sending…' : 'Send invitation' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,101 @@
+<div class="acd-page">
+  <a routerLink="/app/admin/companies" class="acd-back">
+    <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+    Back to companies
+  </a>
+
+  @if (actionError(); as ae) {
+    <div class="acd-banner acd-banner-error" role="alert">{{ ae }}</div>
+  }
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="acd-muted">Loading company…</p>
+    }
+    @case ('error') {
+      <div class="acd-banner acd-banner-error" role="alert">{{ loadError() }}</div>
+    }
+    @case ('ok') {
+      @if (company(); as c) {
+        <header class="acd-header">
+          <div>
+            <h1 class="acd-title">{{ c.name }}</h1>
+            <p class="acd-subtitle">{{ c.companyEmail }}</p>
+          </div>
+          <div class="acd-actions">
+            <span class="acd-status-pill">{{ statusLabel(c.status) }}</span>
+            @if (canDisable()) {
+              <button
+                type="button"
+                class="acd-btn acd-btn-danger"
+                [disabled]="statusUpdating()"
+                (click)="setStatus('disabled')"
+              >
+                Disable company
+              </button>
+            }
+            @if (canActivate()) {
+              <button
+                type="button"
+                class="acd-btn acd-btn-primary"
+                [disabled]="statusUpdating()"
+                (click)="setStatus('active')"
+              >
+                Activate company
+              </button>
+            }
+          </div>
+        </header>
+
+        <section class="acd-section">
+          <h2 class="acd-section-title">Summary</h2>
+          <dl class="acd-stats">
+            <div>
+              <dt>Users</dt>
+              <dd>{{ c.userCount }}</dd>
+            </div>
+            <div>
+              <dt>Projects</dt>
+              <dd>{{ c.projectCount }}</dd>
+            </div>
+            <div>
+              <dt>Documents</dt>
+              <dd>{{ c.documentCount }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="acd-section">
+          <h2 class="acd-section-title">Profile</h2>
+          <dl class="acd-grid">
+            <div><dt>Legal name</dt><dd>{{ display(c.legalName) }}</dd></div>
+            <div><dt>Country</dt><dd>{{ display(c.country) }}</dd></div>
+            <div><dt>Timezone</dt><dd>{{ display(c.timezone) }}</dd></div>
+            <div><dt>Website</dt><dd>{{ display(c.website) }}</dd></div>
+            <div><dt>Industry</dt><dd>{{ display(c.industry) }}</dd></div>
+            <div><dt>Company size</dt><dd>{{ display(c.companySize) }}</dd></div>
+            <div><dt>Phone</dt><dd>{{ display(c.phone) }}</dd></div>
+            <div><dt>Billing email</dt><dd>{{ display(c.billingEmail) }}</dd></div>
+            <div class="acd-span-2"><dt>Address</dt><dd>{{ display(c.address) }}</dd></div>
+            <div><dt>Tax / VAT</dt><dd>{{ display(c.taxVatNumber) }}</dd></div>
+            <div><dt>Created</dt><dd>{{ c.createdAt | date: 'medium' }}</dd></div>
+            <div><dt>Updated</dt><dd>{{ c.updatedAt | date: 'medium' }}</dd></div>
+          </dl>
+        </section>
+
+        <section class="acd-section">
+          <h2 class="acd-section-title">AI usage</h2>
+          @if (c.aiUsage) {
+            <dl class="acd-grid">
+              <div><dt>Total requests</dt><dd>{{ c.aiUsage.totalRequests }}</dd></div>
+              <div><dt>Total tokens</dt><dd>{{ c.aiUsage.totalTokens }}</dd></div>
+              <div><dt>Estimated cost</dt><dd>{{ c.aiUsage.estimatedCost }}</dd></div>
+            </dl>
+          } @else {
+            <p class="acd-empty">AI usage tracking is not available yet.</p>
+          }
+        </section>
+      }
+    }
+  }
+</div>

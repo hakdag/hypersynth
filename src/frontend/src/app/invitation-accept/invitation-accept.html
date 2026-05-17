@@ -1,0 +1,133 @@
+<main class="invite-main">
+  <div class="invite-column">
+    <div class="brand-block">
+      <div class="brand-icon-wrap" aria-hidden="true">
+        <span class="material-symbols-outlined brand-icon">mail</span>
+      </div>
+      <h1 class="brand-title">{{ bootstrapApi.appName() }}</h1>
+      <p class="brand-tagline">Team invitation</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        @if (phase() === 'missing_token') {
+          <h2 class="card-heading">Invalid link</h2>
+          <p class="card-sub">This invitation link is missing required information.</p>
+          <a routerLink="/register" class="btn-secondary">Go to registration</a>
+        } @else if (phase() === 'loading_preview') {
+          <h2 class="card-heading">Checking invitation…</h2>
+          <p class="card-sub">Please wait.</p>
+        } @else if (phase() === 'preview_error') {
+          <h2 class="card-heading">Invitation unavailable</h2>
+          <div class="alert alert-error" role="alert">{{ previewError() }}</div>
+          <a routerLink="/login" class="btn-secondary">Sign in</a>
+        } @else if (preview(); as p) {
+          @if (phase() === 'login_required') {
+            <h2 class="card-heading">Sign in to accept</h2>
+            <p class="card-sub">
+              You’ve been invited to <strong>{{ p.companyName }}</strong> as
+              <strong>{{ roleLabel(p.invitedRole) }}</strong
+              >. Sign in with <strong>{{ p.invitedEmail }}</strong> to continue.
+            </p>
+            <a
+              class="btn-primary"
+              [routerLink]="['/login']"
+              [queryParams]="{ returnTo: loginReturnTo() }"
+              >Sign in</a
+            >
+          } @else if (phase() === 'wrong_account') {
+            <h2 class="card-heading">Wrong account</h2>
+            <p class="card-sub">
+              This invitation is for <strong>{{ p.invitedEmail }}</strong>. You are signed in as
+              <strong>{{ auth.currentUser()?.email }}</strong
+              >.
+            </p>
+            <button type="button" class="btn-primary" (click)="logoutAndSignIn()">
+              Sign out and continue
+            </button>
+          } @else if (phase() === 'register') {
+            <h2 class="card-heading">Create your account</h2>
+            <p class="card-sub">
+              Join <strong>{{ p.companyName }}</strong> as
+              <strong>{{ roleLabel(p.invitedRole) }}</strong
+              >.
+              @if (p.projectName) {
+                <span>Project: <strong>{{ p.projectName }}</strong>.</span>
+              }
+            </p>
+
+            @if (serverError(); as err) {
+              <div class="alert alert-error" role="alert">{{ err }}</div>
+            }
+
+            <form class="form-stack" (ngSubmit)="submitRegister()" [formGroup]="registerForm">
+              <label class="field">
+                <span class="field-label">Email</span>
+                <input class="field-input" type="email" [value]="p.invitedEmail" disabled />
+              </label>
+              <label class="field">
+                <span class="field-label">Full name</span>
+                <input class="field-input" type="text" formControlName="fullname" autocomplete="name" />
+                @if (registerFieldError('fullname')) {
+                  <span class="field-error">{{ registerFieldError('fullname') }}</span>
+                }
+              </label>
+              <label class="field">
+                <span class="field-label">Username</span>
+                <input class="field-input" type="text" formControlName="username" autocomplete="username" />
+                @if (registerFieldError('username')) {
+                  <span class="field-error">{{ registerFieldError('username') }}</span>
+                }
+              </label>
+              <label class="field">
+                <span class="field-label">Password</span>
+                <input class="field-input" type="password" formControlName="password" autocomplete="new-password" />
+                @if (registerFieldError('password')) {
+                  <span class="field-error">{{ registerFieldError('password') }}</span>
+                }
+              </label>
+              <label class="field">
+                <span class="field-label">Confirm password</span>
+                <input
+                  class="field-input"
+                  type="password"
+                  formControlName="passwordConfirmation"
+                  autocomplete="new-password"
+                />
+                @if (registerFieldError('passwordConfirmation')) {
+                  <span class="field-error">{{ registerFieldError('passwordConfirmation') }}</span>
+                }
+              </label>
+              @if (registerPasswordMismatchError()) {
+                <span class="field-error">{{ registerPasswordMismatchError() }}</span>
+              }
+              <button
+                class="btn-primary"
+                type="submit"
+                [disabled]="submitting() || registerForm.invalid"
+              >
+                {{ submitting() ? 'Creating account…' : 'Create account & join' }}
+              </button>
+            </form>
+          } @else if (phase() === 'confirm') {
+            <h2 class="card-heading">Accept invitation</h2>
+            <p class="card-sub">
+              Join <strong>{{ p.companyName }}</strong> as
+              <strong>{{ roleLabel(p.invitedRole) }}</strong
+              >.
+              @if (p.projectName) {
+                <span>Project: <strong>{{ p.projectName }}</strong>.</span>
+              }
+            </p>
+            @if (serverError(); as err) {
+              <div class="alert alert-error" role="alert">{{ err }}</div>
+            }
+            <button type="button" class="btn-primary" [disabled]="submitting()" (click)="confirmAccept()">
+              {{ submitting() ? 'Joining…' : 'Confirm & join' }}
+            </button>
+          }
+        }
+      </div>
+    </div>
+  </div>
+</main>

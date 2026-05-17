@@ -16,16 +16,21 @@ use crate::auth_route;
 use crate::crypto::ApiKeyCipher;
 use crate::document_context_service::DocumentContextService;
 use crate::project_api_key_service::ProjectApiKeyService;
+use crate::tenant_scope_service::TenantScopeService;
 use crate::types::{
     AcceptGeneratedTasksRequest, ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange,
     CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
     EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
-    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
-    ProjectResponse, TaskDetailResponse, TaskResponse, UpdateFeatureRequest, UpdateProjectRequest,
-    UpdateTaskRequest,
+    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse, 
+    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, UpdateFeatureRequest,
+    UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
+
+fn scope_bindings(scope: TenantScope) -> (Option<Uuid>, Option<Uuid>) {
+    (scope.company_id_or_null(), scope.owner_user_id_or_null())
+}
 
 pub async fn list_projects(
     State(state): State<AppState>,
@@ -45,16 +50,29 @@ pub async fn list_projects(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let rows = sqlx::query_as::<_, ProjectResponse>(
         r#"
-        SELECT id, user_id, name, requirements, status, created_at
+        SELECT id, owner_user_id, company_id, name, requirements, status, created_at
         FROM projects
-        WHERE user_id = $1
+        WHERE
+            ($2::uuid IS NOT NULL AND owner_user_id = $2 AND company_id IS NULL)
+            OR
+            ($1::uuid IS NOT NULL AND company_id = $1 AND (
+                $3::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $4
+                )
+            ))
         ORDER BY created_at DESC
         "#,
     )
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -90,23 +108,39 @@ pub async fn get_project(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, ProjectDetailResponse>(
         r#"
         SELECT
             id,
-            user_id,
+            owner_user_id,
+            company_id,
             name,
             requirements,
             status,
             created_at,
             (encrypted_api_key IS NOT NULL) AS has_ai_api_key
         FROM projects
-        WHERE id = $1 AND user_id = $2
+        WHERE id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
+          )
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -166,6 +200,8 @@ pub async fn create_project(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
+    let (scope_company_id, scope_owner_user_id) = scope_bindings(scope);
 
     let name = payload.name.trim();
     if name.is_empty() {
@@ -206,11 +242,21 @@ pub async fn create_project(
 
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
-        INSERT INTO projects (user_id, name, requirements, status, encrypted_api_key)
-        VALUES ($1, $2, $3, 'Pending', $4)
-        RETURNING id, user_id, name, requirements, status, created_at
+        INSERT INTO projects (
+            owner_user_id,
+            company_id,
+            created_by_user_id,
+            name,
+            requirements,
+            status,
+            encrypted_api_key
+        )
+        VALUES ($1, $2, $3, $4, $5, 'Pending', $6)
+        RETURNING id, owner_user_id, company_id, name, requirements, status, created_at
         "#,
     )
+    .bind(scope_owner_user_id)
+    .bind(scope_company_id)
     .bind(user.id)
     .bind(name)
     .bind(requirements.as_ref())
@@ -232,6 +278,29 @@ pub async fn create_project(
         .await
         .map_err(|e| {
             warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: audit insert failed");
+            internal_error()
+        })?;
+    }
+
+    if scope_company_id.is_some() && !scope.is_company_admin() {
+        sqlx::query(
+            r#"
+            INSERT INTO project_memberships (project_id, user_id, role)
+            VALUES ($1, $2, 'project_manager')
+            ON CONFLICT (project_id, user_id) DO NOTHING
+            "#,
+        )
+        .bind(row.id)
+        .bind(user.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                user_id = %user.id,
+                project_id = %row.id,
+                "create_project: membership insert failed"
+            );
             internal_error()
         })?;
     }
@@ -280,6 +349,7 @@ pub async fn update_project(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let name = payload.name.trim();
     if name.is_empty() {
@@ -345,8 +415,19 @@ pub async fn update_project(
                 WHEN $5::bytea IS NOT NULL THEN $5::bytea
                 ELSE encrypted_api_key
             END
-        WHERE id = $6 AND user_id = $7
-        RETURNING id, user_id, name, requirements, status, created_at
+        WHERE id = $6
+          AND (
+            ($8::uuid IS NOT NULL AND owner_user_id = $8 AND company_id IS NULL)
+            OR
+            ($7::uuid IS NOT NULL AND company_id = $7 AND (
+                $9::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $10
+                )
+            ))
+          )
+        RETURNING id, owner_user_id, company_id, name, requirements, status, created_at
         "#,
     )
     .bind(name)
@@ -355,7 +436,10 @@ pub async fn update_project(
     .bind(clear_flag)
     .bind(new_ciphertext)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| {
@@ -428,6 +512,9 @@ pub async fn create_feature(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
+    let (scope_company_id, scope_owner_user_id, scope_is_admin, scope_user_id) =
+        scope.project_access_binds();
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -450,11 +537,25 @@ pub async fn create_feature(
         r#"
         SELECT id
         FROM projects
-        WHERE id = $1 AND user_id = $2
+        WHERE id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
+          )
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope_company_id)
+    .bind(scope_owner_user_id)
+    .bind(scope_is_admin)
+    .bind(scope_user_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -523,16 +624,31 @@ pub async fn enhance_project_requirements(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let project_row = sqlx::query_as::<_, (String, Option<String>)>(
         r#"
         SELECT name, requirements
         FROM projects
-        WHERE id = $1 AND user_id = $2
+        WHERE id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
+          )
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -560,7 +676,7 @@ pub async fn enhance_project_requirements(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| bad_request("Project requirements are required before AI enhancement."))?;
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -576,7 +692,7 @@ pub async fn enhance_project_requirements(
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
         project_id,
-        user.id,
+        scope,
         &payload.document_context.document_ids,
     )
     .await
@@ -609,7 +725,8 @@ pub async fn enhance_project_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -651,18 +768,34 @@ pub async fn enhance_feature_requirements(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
         r#"
         SELECT p.name, p.requirements, f.title, f.requirements
         FROM features f
         INNER JOIN projects p ON p.id = f.project_id
-        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        WHERE f.id = $1
+          AND f.project_id = $2
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         "#,
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -699,7 +832,7 @@ pub async fn enhance_feature_requirements(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -715,7 +848,7 @@ pub async fn enhance_feature_requirements(
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
         project_id,
-        user.id,
+        scope,
         &payload.document_context.document_ids,
     )
     .await
@@ -751,7 +884,8 @@ pub async fn enhance_feature_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -798,18 +932,34 @@ pub async fn generate_feature_tasks(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
         r#"
         SELECT p.name, p.requirements, f.title, f.requirements
         FROM features f
         INNER JOIN projects p ON p.id = f.project_id
-        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        WHERE f.id = $1
+          AND f.project_id = $2
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         "#,
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -846,7 +996,7 @@ pub async fn generate_feature_tasks(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, user.id)
+    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -862,7 +1012,7 @@ pub async fn generate_feature_tasks(
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
         project_id,
-        user.id,
+        scope,
         &payload.document_context.document_ids,
     )
     .await
@@ -897,7 +1047,8 @@ pub async fn generate_feature_tasks(
                 status,
                 Json(ApiErrorBody {
                     message: "Could not generate tasks right now. Please try again.".into(),
-                }),
+            ..Default::default()
+        }),
             )
         })?;
 
@@ -952,6 +1103,7 @@ pub async fn accept_generated_tasks(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     if payload.tasks.is_empty() {
         warn!(
@@ -1026,10 +1178,22 @@ pub async fn accept_generated_tasks(
                     assignee_user_id,
                     creator_user_id
                 )
-                SELECT f.id, $4, $5, 'Pending', 'AI', 'Standard', NULL, NULL
+                SELECT f.id, $7, $8, 'Pending', 'AI', 'Standard', NULL, NULL
                 FROM features f
                 INNER JOIN projects p ON p.id = f.project_id
-                WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+                WHERE f.id = $1
+                  AND f.project_id = $2
+                  AND (
+                    ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                    OR
+                    ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                        $5::boolean
+                        OR EXISTS (
+                            SELECT 1 FROM project_memberships pm
+                            WHERE pm.project_id = p.id AND pm.user_id = $6
+                        )
+                    ))
+                  )
                 RETURNING
                     id,
                     feature_id,
@@ -1063,7 +1227,10 @@ pub async fn accept_generated_tasks(
         )
         .bind(feature_id)
         .bind(project_id)
-        .bind(user.id)
+        .bind(scope.company_id_or_null())
+        .bind(scope.owner_user_id_or_null())
+        .bind(scope.is_company_admin())
+        .bind(scope.session_user_id())
         .bind(title)
         .bind(description_for_db.as_ref())
         .fetch_optional(&mut *tx)
@@ -1134,18 +1301,33 @@ pub async fn list_project_features(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let rows = sqlx::query_as::<_, FeatureResponse>(
         r#"
         SELECT f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
         FROM features f
         INNER JOIN projects p ON p.id = f.project_id
-        WHERE f.project_id = $1 AND p.user_id = $2
+        WHERE f.project_id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $5
+                )
+            ))
+          )
         ORDER BY f.created_at DESC
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1182,18 +1364,33 @@ pub async fn list_project_documents(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let rows = sqlx::query_as::<_, ProjectDocumentResponse>(
         r#"
         SELECT d.id, d.project_id, d.file_path, d.metadata, d.created_at
         FROM project_documents d
         INNER JOIN projects p ON p.id = d.project_id
-        WHERE d.project_id = $1 AND p.user_id = $2
+        WHERE d.project_id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND p.owner_user_id = $3 AND p.company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND p.company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $5
+                )
+            ))
+          )
         ORDER BY d.created_at DESC
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1230,18 +1427,34 @@ pub async fn download_project_document(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, ProjectDocumentResponse>(
         r#"
         SELECT d.id, d.project_id, d.file_path, d.metadata, d.created_at
         FROM project_documents d
         INNER JOIN projects p ON p.id = d.project_id
-        WHERE d.id = $1 AND d.project_id = $2 AND p.user_id = $3
+        WHERE d.id = $1
+          AND d.project_id = $2
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         "#,
     )
     .bind(document_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1338,17 +1551,32 @@ pub async fn upload_project_documents(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     // this part will be changed when we introduce company-scoped documents
     let ok: Option<(Uuid,)> = sqlx::query_as(
         r#"
         SELECT id
         FROM projects
-        WHERE id = $1 AND user_id = $2
+        WHERE id = $1
+          AND (
+            ($3::uuid IS NOT NULL AND owner_user_id = $3 AND company_id IS NULL)
+            OR
+            ($2::uuid IS NOT NULL AND company_id = $2 AND (
+                $4::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = projects.id AND pm.user_id = $5
+                )
+            ))
+          )
         "#,
     )
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1367,9 +1595,16 @@ pub async fn upload_project_documents(
 
     // this part will be changed when we introduce company-scoped documents
     let upload_root = FsPath::new(&state.document_upload_dir);
-    let project_dir = upload_root
-        .join(user.id.to_string())
-        .join(project_id.to_string());
+    let project_dir = match scope {
+        TenantScope::Personal { user_id } => upload_root
+            .join("personal")
+            .join(user_id.to_string())
+            .join(project_id.to_string()),
+        TenantScope::Company { company_id, .. } => upload_root
+            .join("company")
+            .join(company_id.to_string())
+            .join(project_id.to_string()),
+    };
 
     tokio::fs::create_dir_all(&project_dir).await.map_err(|e| {
         warn!(
@@ -1510,18 +1745,34 @@ pub async fn get_project_feature(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, FeatureResponse>(
         r#"
         SELECT f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
         FROM features f
         INNER JOIN projects p ON p.id = f.project_id
-        WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+        WHERE f.id = $1
+          AND f.project_id = $2
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         "#,
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1573,6 +1824,7 @@ pub async fn list_feature_tasks(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let rows = sqlx::query_as::<_, TaskResponse>(
         r#"
@@ -1595,13 +1847,28 @@ pub async fn list_feature_tasks(
         INNER JOIN projects p ON p.id = f.project_id
         LEFT JOIN users au ON au.id = t.assignee_user_id
         LEFT JOIN users cu ON cu.id = t.creator_user_id
-        WHERE t.feature_id = $1 AND f.project_id = $2 AND p.user_id = $3
+        WHERE t.feature_id = $1
+          AND f.project_id = $2
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         ORDER BY t.created_at DESC
         "#,
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_all(&state.pool)
     .await
     .map_err(|e| {
@@ -1651,6 +1918,7 @@ pub async fn get_project_task(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let row = sqlx::query_as::<_, TaskDetailResponse>(
         r#"
@@ -1676,13 +1944,29 @@ pub async fn get_project_task(
         INNER JOIN projects p ON p.id = f.project_id
         LEFT JOIN users au ON au.id = t.assignee_user_id
         LEFT JOIN users cu ON cu.id = t.creator_user_id
-        WHERE t.id = $1 AND t.feature_id = $2 AND f.project_id = $3 AND p.user_id = $4
+        WHERE t.id = $1
+          AND t.feature_id = $2
+          AND f.project_id = $3
+          AND (
+            ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            OR
+            ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                $6::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $7
+                )
+            ))
+          )
         "#,
     )
     .bind(task_id)
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -1746,6 +2030,7 @@ pub async fn create_task(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -1818,10 +2103,22 @@ pub async fn create_task(
                 assignee_user_id,
                 creator_user_id
             )
-            SELECT f.id, $4, $5, 'Pending', 'User', $6, $7, $8
+            SELECT f.id, $7, $8, 'Pending', 'User', $9, $10, $11
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
-            WHERE f.id = $1 AND f.project_id = $2 AND p.user_id = $3
+            WHERE f.id = $1
+              AND f.project_id = $2
+              AND (
+                ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+                OR
+                ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                    $5::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $6
+                    ))
+                )
+              )
             RETURNING
                 id,
                 feature_id,
@@ -1855,7 +2152,10 @@ pub async fn create_task(
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(description.as_ref())
     .bind(priority_val)
@@ -1922,6 +2222,7 @@ pub async fn update_project_feature(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -1955,20 +2256,33 @@ pub async fn update_project_feature(
     let row = sqlx::query_as::<_, FeatureResponse>(
         r#"
         UPDATE features f
-        SET title = $4,
-            requirements = $5,
-            status = $6
+        SET title = $7,
+            requirements = $8,
+            status = $9
         FROM projects p
         WHERE f.id = $1
           AND f.project_id = $2
           AND p.id = f.project_id
-          AND p.user_id = $3
+          AND (
+            ($4::uuid IS NOT NULL AND p.owner_user_id = $4 AND p.company_id IS NULL)
+            OR
+            ($3::uuid IS NOT NULL AND p.company_id = $3 AND (
+                $5::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $6
+                )
+            ))
+          )
         RETURNING f.id, f.project_id, f.title, f.requirements, f.status, f.created_at
         "#,
     )
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(requirements.as_ref())
     .bind(status_trimmed)
@@ -2032,6 +2346,7 @@ pub async fn update_project_task(
             );
             (status, json)
         })?;
+    let scope = TenantScopeService::from_session(&user)?;
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -2110,18 +2425,28 @@ pub async fn update_project_task(
         r#"
         WITH updated AS (
             UPDATE tasks t
-            SET title = $5,
-                description = $6,
-                status = $7,
-                priority = $8,
-                assignee_user_id = $9
+            SET title = $8,
+                description = $9,
+                status = $10,
+                priority = $11,
+                assignee_user_id = $12
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
             WHERE t.id = $1
               AND t.feature_id = $2
               AND f.id = $2
               AND f.project_id = $3
-              AND p.user_id = $4
+              AND (
+                ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+                OR
+                ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                    $6::boolean
+                    OR EXISTS (
+                        SELECT 1 FROM project_memberships pm
+                        WHERE pm.project_id = p.id AND pm.user_id = $7
+                    ))
+                )
+              )
             RETURNING t.id
         )
         SELECT
@@ -2152,7 +2477,10 @@ pub async fn update_project_task(
     .bind(task_id)
     .bind(feature_id)
     .bind(project_id)
-    .bind(user.id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
     .bind(title)
     .bind(description.as_ref())
     .bind(status_trimmed)
@@ -2254,6 +2582,7 @@ fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::NOT_FOUND,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2263,6 +2592,7 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2272,6 +2602,7 @@ fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErro
         StatusCode::UNPROCESSABLE_ENTITY,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
         }),
     )
 }
@@ -2295,6 +2626,7 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ApiErrorBody {
             message: "Something went wrong. Please try again.".into(),
+            ..Default::default()
         }),
     )
 }

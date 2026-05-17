@@ -1,0 +1,140 @@
+:host {
+  display: block;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #191c1e;
+}
+
+.il-page {
+  max-width: 960px;
+}
+
+.il-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.il-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #00236f;
+}
+
+.il-subtitle {
+  margin: 0;
+  color: #64748b;
+}
+
+.il-muted {
+  color: #64748b;
+}
+
+.il-empty {
+  padding: 2rem;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+
+.il-empty p {
+  margin: 0 0 1rem;
+  color: #475569;
+}
+
+.il-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.il-banner-error {
+  background: #fde8e8;
+  color: #7f1d1d;
+}
+
+.il-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.il-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.il-table th,
+.il-table td {
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.il-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.il-table tr:last-child td {
+  border-bottom: none;
+}
+
+.il-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.il-badge-pending {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.il-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+}
+
+.il-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.il-btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 13px;
+}
+
+.il-btn-primary {
+  background: #00236f;
+  color: #fff;
+}
+
+.il-btn-ghost {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
