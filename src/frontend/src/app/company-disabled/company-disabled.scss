@@ -1,0 +1,66 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  font-family: Inter, system-ui, sans-serif;
+  color: #191c1e;
+  background-color: #f7f9fb;
+  background-image:
+    radial-gradient(at 0% 0%, hsla(220, 100%, 95%, 0.3) 0, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(220, 100%, 80%, 0.1) 0, transparent 50%);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.cd-main {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.cd-card {
+  max-width: 28rem;
+  width: 100%;
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 24px rgba(0, 35, 111, 0.06);
+}
+
+.cd-icon {
+  font-size: 3rem;
+  color: #ba1a1a;
+  margin-bottom: 1rem;
+}
+
+.cd-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #00236f;
+}
+
+.cd-message {
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+  color: #444651;
+}
+
+.cd-link {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  color: #fff;
+  background: #00236f;
+  border-radius: 0.375rem;
+  text-decoration: none;
+
+  &:hover {
+    background: #1e3a8a;
+  }
+}

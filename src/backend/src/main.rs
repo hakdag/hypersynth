@@ -1,3 +1,5 @@
+mod admin_company_route;
+mod admin_user_route;
 mod ai;
 mod app_state;
 mod auth_route;
@@ -20,6 +22,7 @@ mod tenant_scope_service;
 mod types;
 mod user_registration;
 
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +33,12 @@ use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
+use admin_company_route::{
+    get_admin_company, list_admin_companies, set_admin_company_status,
+};
+use admin_user_route::{
+    get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
+};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use configs::AppConfig;
@@ -99,6 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         anthropic_config,
         invitation_config,
         smtp_config,
+        system_admin_config,
     } = config;
 
     let pool = PgPoolOptions::new()
@@ -147,6 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         anthropic,
         email_sender,
         invitation_config,
+        system_admin: system_admin_config,
     };
 
     let app = Router::new()
@@ -162,6 +173,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route("/api/v1/admin/companies", get(list_admin_companies))
+        .route(
+            "/api/v1/admin/companies/{company_id}",
+            get(get_admin_company),
+        )
+        .route(
+            "/api/v1/admin/companies/{company_id}/status",
+            post(set_admin_company_status),
+        )
+        .route("/api/v1/admin/users", get(list_admin_users))
+        .route("/api/v1/admin/users/{user_id}", get(get_admin_user))
+        .route(
+            "/api/v1/admin/users/{user_id}/status",
+            post(set_admin_user_status),
+        )
+        .route(
+            "/api/v1/admin/users/{user_id}/reset-access",
+            post(reset_admin_user_access),
+        )
         .route(
             "/api/v1/invitations",
             get(list_invitations).post(create_invitation),
@@ -244,7 +274,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     eprintln!("listening on http://{}", addr);
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
     Ok(())
 }

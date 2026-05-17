@@ -1,0 +1,68 @@
+<div class="ac-page">
+  <header class="ac-header">
+    <div>
+      <h1 class="ac-title">Companies</h1>
+      <p class="ac-subtitle">Search and manage registered companies on the platform.</p>
+    </div>
+    <div class="ac-search-wrap">
+      <span class="material-symbols-outlined ac-search-icon" aria-hidden="true">search</span>
+      <input
+        class="ac-search"
+        type="search"
+        [formControl]="searchControl"
+        placeholder="Search by name or email…"
+        aria-label="Search companies"
+      />
+    </div>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="ac-muted">Loading companies…</p>
+    }
+    @case ('error') {
+      <div class="ac-banner ac-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="ac-btn ac-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (companies().length === 0) {
+        <div class="ac-empty">
+          <p>No companies match your search.</p>
+        </div>
+      } @else {
+        <div class="ac-table-wrap">
+          <table class="ac-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Users</th>
+                <th>Projects</th>
+                <th>Documents</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of companies(); track c.id) {
+                <tr>
+                  <td>
+                    <a [routerLink]="['/app/admin/companies', c.id]" class="ac-link">{{ c.name }}</a>
+                  </td>
+                  <td>{{ c.companyEmail }}</td>
+                  <td>
+                    <span [class]="statusClass(c.status)">{{ statusLabel(c.status) }}</span>
+                  </td>
+                  <td>{{ c.userCount }}</td>
+                  <td>{{ c.projectCount }}</td>
+                  <td>{{ c.documentCount }}</td>
+                  <td>{{ c.createdAt | date: 'mediumDate' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</div>

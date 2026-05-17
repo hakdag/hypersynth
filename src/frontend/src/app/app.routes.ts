@@ -11,7 +11,14 @@ import { inviteUsersGuard } from './invite-users.guard';
 import { FeatureCreate } from './feature-create/feature-create';
 import { FeatureDetail } from './feature-detail/feature-detail';
 import { FeatureView } from './feature-view/feature-view';
+import { AdminCompaniesList } from './admin-companies-list/admin-companies-list';
+import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail';
+import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
+import { AdminUsersList } from './admin-users-list/admin-users-list';
+import { CompanyDisabled } from './company-disabled/company-disabled';
 import { Login } from './login/login';
+import { SystemAdminDashboard } from './system-admin-dashboard/system-admin-dashboard';
+import { systemAdminGuard } from './system-admin.guard';
 import { NotFound } from './not-found/not-found';
 import { ProjectCreate } from './project-create/project-create';
 import { ProjectDetail } from './project-detail/project-detail';
@@ -27,6 +34,7 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'register' },
   { path: 'register', component: Register },
   { path: 'login', component: Login },
+  { path: 'company-disabled', component: CompanyDisabled },
   { path: 'invitations/accept', component: InvitationAccept },
   {
     path: 'app',
@@ -34,6 +42,18 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'projects' },
+      {
+        path: 'admin',
+        component: SystemAdminDashboard,
+        canActivate: [systemAdminGuard],
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'companies' },
+          { path: 'companies', component: AdminCompaniesList },
+          { path: 'companies/:companyId', component: AdminCompanyDetail },
+          { path: 'users', component: AdminUsersList },
+          { path: 'users/:userId', component: AdminUserDetail },
+        ],
+      },
       { path: 'projects', component: ProjectList },
       { path: 'projects/new', component: ProjectCreate },
       { path: 'projects/:projectId/features/new', component: FeatureCreate },

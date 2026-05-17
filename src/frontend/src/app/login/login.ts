@@ -3,7 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 
-import { AuthApiService } from '../auth-api.service';
+import { AuthApiService, CurrentUser } from '../auth-api.service';
 import { AuthService } from '../auth.service';
 import { BootstrapApiService } from '../bootstrap-api.service';
 
@@ -22,6 +22,7 @@ export class Login implements OnInit {
 
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
+  protected readonly userDisabledNotice = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -31,10 +32,16 @@ export class Login implements OnInit {
   ngOnInit(): void {
     this.bootstrapApi.loadBootstrap();
 
+    if (this.route.snapshot.queryParamMap.get('reason') === 'user_disabled') {
+      this.userDisabledNotice.set(true);
+    }
+
     this.auth.ensureAuthenticated().subscribe((ok) => {
       if (ok) {
-        const target = readReturnTarget(this.route.snapshot.queryParamMap);
-        void this.router.navigateByUrl(target);
+        const user = this.auth.currentUser();
+        if (user) {
+          void this.router.navigateByUrl(postLoginTarget(user, this.route.snapshot.queryParamMap));
+        }
       }
     });
   }
@@ -50,13 +57,23 @@ export class Login implements OnInit {
     this.submitting.set(true);
 
     this.auth.login(email, password).subscribe({
-      next: () => {
+      next: (user) => {
         this.submitting.set(false);
-        const target = readReturnTarget(this.route.snapshot.queryParamMap);
-        void this.router.navigateByUrl(target);
+        void this.router.navigateByUrl(postLoginTarget(user, this.route.snapshot.queryParamMap));
       },
       error: (err: unknown) => {
         this.submitting.set(false);
+        if (AuthApiService.isCompanyDisabled(err)) {
+          this.auth.clearSession();
+          void this.router.navigateByUrl('/company-disabled');
+          return;
+        }
+        if (AuthApiService.isUserDisabled(err)) {
+          this.auth.clearSession();
+          this.userDisabledNotice.set(true);
+          this.serverError.set(null);
+          return;
+        }
         this.serverError.set(AuthApiService.loginErrorMessage(err));
       },
     });
@@ -75,6 +92,13 @@ export class Login implements OnInit {
     }
     return '';
   }
+}
+
+function postLoginTarget(user: CurrentUser, map: ParamMap): string {
+  if (user.accountType === 'system_admin') {
+    return '/app/admin/companies';
+  }
+  return readReturnTarget(map);
 }
 
 function readReturnTarget(map: ParamMap): string {

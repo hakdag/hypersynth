@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
 
-export type AccountType = 'personal' | 'company';
+export type AccountType = 'personal' | 'company' | 'system_admin';
 
 export type CompanyRole = 'company_admin' | 'project_manager' | 'contributor' | 'viewer';
 
@@ -37,6 +37,22 @@ export class AuthApiService {
   me(): Observable<CurrentUser> {
     const url = `${environment.apiBaseUrl}/api/v1/me`;
     return this.http.get<CurrentUser>(url);
+  }
+
+  static isCompanyDisabled(err: unknown): boolean {
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      const body = err.error as { code?: string } | null;
+      return body?.code === 'company_disabled';
+    }
+    return false;
+  }
+
+  static isUserDisabled(err: unknown): boolean {
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      const body = err.error as { code?: string } | null;
+      return body?.code === 'user_disabled';
+    }
+    return false;
   }
 
   static loginErrorMessage(err: unknown): string {

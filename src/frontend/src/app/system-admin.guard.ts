@@ -4,17 +4,20 @@ import { firstValueFrom } from 'rxjs';
 
 import { AuthService } from './auth.service';
 
-export const authGuard: CanActivateFn = async (_route, state) => {
+export const systemAdminGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   const router = inject(Router);
+
   const ok = await firstValueFrom(auth.ensureAuthenticated());
-  if (ok) {
-    return true;
-  }
-  if (auth.isDisabledRedirectInFlight()) {
-    auth.setDisabledRedirectInFlight(false);
+  if (!ok) {
+    await router.navigate(['/login']);
     return false;
   }
-  await router.navigate(['/login'], { queryParams: { returnUrl: state.url } });
+
+  if (auth.isSystemAdmin()) {
+    return true;
+  }
+
+  await router.navigate(['/app/projects']);
   return false;
 };

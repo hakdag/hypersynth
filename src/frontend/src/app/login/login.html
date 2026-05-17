@@ -11,6 +11,11 @@
     <div class="card">
       <div class="card-body">
         <form class="form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          @if (userDisabledNotice()) {
+            <div class="alert alert-error" role="alert">
+              Your account has been disabled. Please contact support.
+            </div>
+          }
           @if (serverError(); as err) {
             <div class="alert alert-error" role="alert">{{ err }}</div>
           }
