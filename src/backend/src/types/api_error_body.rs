@@ -3,6 +3,7 @@ use serde::Serialize;
 use super::invitation_status::InvitationStatus;
 
 pub const ERROR_CODE_COMPANY_DISABLED: &str = "company_disabled";
+pub const ERROR_CODE_USER_DISABLED: &str = "user_disabled";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +29,14 @@ impl ApiErrorBody {
             message: "Your company account has been disabled. Please contact your administrator."
                 .into(),
             code: Some(ERROR_CODE_COMPANY_DISABLED.into()),
+            invitation_status: None,
+        }
+    }
+
+    pub fn user_disabled() -> Self {
+        Self {
+            message: "Your account has been disabled. Please contact support.".into(),
+            code: Some(ERROR_CODE_USER_DISABLED.into()),
             invitation_status: None,
         }
     }

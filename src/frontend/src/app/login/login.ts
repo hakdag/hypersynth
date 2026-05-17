@@ -22,6 +22,7 @@ export class Login implements OnInit {
 
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
+  protected readonly userDisabledNotice = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -30,6 +31,10 @@ export class Login implements OnInit {
 
   ngOnInit(): void {
     this.bootstrapApi.loadBootstrap();
+
+    if (this.route.snapshot.queryParamMap.get('reason') === 'user_disabled') {
+      this.userDisabledNotice.set(true);
+    }
 
     this.auth.ensureAuthenticated().subscribe((ok) => {
       if (ok) {
@@ -61,6 +66,12 @@ export class Login implements OnInit {
         if (AuthApiService.isCompanyDisabled(err)) {
           this.auth.clearSession();
           void this.router.navigateByUrl('/company-disabled');
+          return;
+        }
+        if (AuthApiService.isUserDisabled(err)) {
+          this.auth.clearSession();
+          this.userDisabledNotice.set(true);
+          this.serverError.set(null);
           return;
         }
         this.serverError.set(AuthApiService.loginErrorMessage(err));

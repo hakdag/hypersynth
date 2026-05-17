@@ -1,0 +1,86 @@
+<div class="aud-page">
+  <a routerLink="/app/admin/users" class="aud-back">
+    <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+    Back to users
+  </a>
+
+  @if (actionError(); as ae) {
+    <div class="aud-banner aud-banner-error" role="alert">{{ ae }}</div>
+  }
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="aud-muted">Loading user…</p>
+    }
+    @case ('error') {
+      <div class="aud-banner aud-banner-error" role="alert">{{ loadError() }}</div>
+    }
+    @case ('ok') {
+      @if (user(); as u) {
+        <header class="aud-header">
+          <div>
+            <h1 class="aud-title">{{ u.fullName }}</h1>
+            <p class="aud-subtitle">{{ u.email }}</p>
+          </div>
+          <div class="aud-actions">
+            <span class="aud-status-pill">{{ statusLabel(u.status) }}</span>
+            @if (canDisable()) {
+              <button
+                type="button"
+                class="aud-btn aud-btn-danger"
+                [disabled]="statusUpdating()"
+                (click)="setStatus('disabled')"
+              >
+                Disable user
+              </button>
+            }
+            @if (canActivate()) {
+              <button
+                type="button"
+                class="aud-btn aud-btn-primary"
+                [disabled]="statusUpdating()"
+                (click)="setStatus('active')"
+              >
+                Activate user
+              </button>
+            }
+            <button
+              type="button"
+              class="aud-btn aud-btn-ghost"
+              [disabled]="resetUpdating()"
+              (click)="resetAccess()"
+            >
+              Reset access
+            </button>
+          </div>
+        </header>
+
+        <section class="aud-section">
+          <h2 class="aud-section-title">Account</h2>
+          <dl class="aud-grid">
+            <div><dt>Account type</dt><dd>{{ accountTypeLabel(u.accountType) }}</dd></div>
+            <div><dt>Role</dt><dd>{{ roleLabel(u.role) }}</dd></div>
+            <div><dt>Username</dt><dd>{{ display(u.username) }}</dd></div>
+            <div><dt>Display name</dt><dd>{{ display(u.displayName) }}</dd></div>
+            <div><dt>Timezone</dt><dd>{{ display(u.timezone) }}</dd></div>
+            <div>
+              <dt>Company</dt>
+              <dd>
+                @if (u.companyId && u.companyName) {
+                  <a [routerLink]="['/app/admin/companies', u.companyId]" class="aud-link">{{
+                    u.companyName
+                  }}</a>
+                } @else {
+                  —
+                }
+              </dd>
+            </div>
+            <div><dt>Active sessions</dt><dd>{{ u.activeSessionCount }}</dd></div>
+            <div><dt>Created</dt><dd>{{ u.createdAt | date: 'medium' }}</dd></div>
+            <div><dt>Updated</dt><dd>{{ u.updatedAt | date: 'medium' }}</dd></div>
+          </dl>
+        </section>
+      }
+    }
+  }
+</div>

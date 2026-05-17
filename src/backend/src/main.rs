@@ -1,4 +1,5 @@
 mod admin_company_route;
+mod admin_user_route;
 mod ai;
 mod app_state;
 mod auth_route;
@@ -34,6 +35,9 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
 use admin_company_route::{
     get_admin_company, list_admin_companies, set_admin_company_status,
+};
+use admin_user_route::{
+    get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
 };
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -177,6 +181,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/admin/companies/{company_id}/status",
             post(set_admin_company_status),
+        )
+        .route("/api/v1/admin/users", get(list_admin_users))
+        .route("/api/v1/admin/users/{user_id}", get(get_admin_user))
+        .route(
+            "/api/v1/admin/users/{user_id}/status",
+            post(set_admin_user_status),
+        )
+        .route(
+            "/api/v1/admin/users/{user_id}/reset-access",
+            post(reset_admin_user_access),
         )
         .route(
             "/api/v1/invitations",

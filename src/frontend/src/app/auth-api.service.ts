@@ -47,6 +47,14 @@ export class AuthApiService {
     return false;
   }
 
+  static isUserDisabled(err: unknown): boolean {
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      const body = err.error as { code?: string } | null;
+      return body?.code === 'user_disabled';
+    }
+    return false;
+  }
+
   static loginErrorMessage(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
       const body = err.error as { message?: string } | null;

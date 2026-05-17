@@ -13,6 +13,8 @@ import { FeatureDetail } from './feature-detail/feature-detail';
 import { FeatureView } from './feature-view/feature-view';
 import { AdminCompaniesList } from './admin-companies-list/admin-companies-list';
 import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail';
+import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
+import { AdminUsersList } from './admin-users-list/admin-users-list';
 import { CompanyDisabled } from './company-disabled/company-disabled';
 import { Login } from './login/login';
 import { SystemAdminDashboard } from './system-admin-dashboard/system-admin-dashboard';
@@ -48,6 +50,8 @@ export const routes: Routes = [
           { path: '', pathMatch: 'full', redirectTo: 'companies' },
           { path: 'companies', component: AdminCompaniesList },
           { path: 'companies/:companyId', component: AdminCompanyDetail },
+          { path: 'users', component: AdminUsersList },
+          { path: 'users/:userId', component: AdminUserDetail },
         ],
       },
       { path: 'projects', component: ProjectList },

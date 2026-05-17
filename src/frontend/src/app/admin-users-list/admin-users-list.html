@@ -1,0 +1,89 @@
+<div class="au-page">
+  <header class="au-header">
+    <div>
+      <h1 class="au-title">Users</h1>
+      <p class="au-subtitle">Search and manage user accounts across the platform.</p>
+    </div>
+    <div class="au-filters">
+      <div class="au-search-wrap">
+        <span class="material-symbols-outlined au-search-icon" aria-hidden="true">search</span>
+        <input
+          class="au-search"
+          type="search"
+          [formControl]="searchControl"
+          placeholder="Search by email, name, username, company…"
+          aria-label="Search users"
+        />
+      </div>
+      <select class="au-select" [formControl]="accountTypeControl" aria-label="Filter by account type">
+        <option value="">All account types</option>
+        <option value="personal">Personal</option>
+        <option value="company">Company</option>
+      </select>
+      <select class="au-select" [formControl]="statusControl" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="disabled">Disabled</option>
+        <option value="pending_invitation">Pending invitation</option>
+      </select>
+    </div>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="au-muted">Loading users…</p>
+    }
+    @case ('error') {
+      <div class="au-banner au-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="au-btn au-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (users().length === 0) {
+        <div class="au-empty">
+          <p>No users match your search.</p>
+        </div>
+      } @else {
+        <div class="au-table-wrap">
+          <table class="au-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Account type</th>
+                <th>Role</th>
+                <th>Company</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (u of users(); track u.id) {
+                <tr>
+                  <td>
+                    <a [routerLink]="['/app/admin/users', u.id]" class="au-link">{{ u.fullName }}</a>
+                  </td>
+                  <td>{{ u.email }}</td>
+                  <td>{{ accountTypeLabel(u.accountType) }}</td>
+                  <td>{{ roleLabel(u.role) }}</td>
+                  <td>
+                    @if (u.companyId && u.companyName) {
+                      <a [routerLink]="['/app/admin/companies', u.companyId]" class="au-link">{{
+                        u.companyName
+                      }}</a>
+                    } @else {
+                      —
+                    }
+                  </td>
+                  <td>
+                    <span [class]="statusClass(u.status)">{{ statusLabel(u.status) }}</span>
+                  </td>
+                  <td>{{ u.createdAt | date: 'mediumDate' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</div>

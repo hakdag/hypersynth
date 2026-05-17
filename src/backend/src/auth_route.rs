@@ -18,7 +18,8 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::types::{
     AccountType, ApiErrorBody, CompanyRole, CompanyStatus, CurrentUserBody, LoginRequest,
-    SessionPrincipal, SessionUser, ERROR_CODE_COMPANY_DISABLED,
+    SessionPrincipal, SessionUser, UserStatus, ERROR_CODE_COMPANY_DISABLED,
+    ERROR_CODE_USER_DISABLED,
 };
 use crate::user_registration::email_contains_at_and_dot;
 
@@ -35,6 +36,7 @@ struct UserAuthRow {
     id: Uuid,
     password_hash: String,
     account_type: String,
+    status: String,
 }
 
 #[derive(sqlx::FromRow)]
@@ -60,6 +62,7 @@ struct SessionResolveRow {
     role: Option<String>,
     company_id: Option<Uuid>,
     company_status: Option<String>,
+    user_status: Option<String>,
 }
 
 pub async fn login(
@@ -111,7 +114,8 @@ pub async fn login(
         SELECT
             u.id,
             u.password_hash,
-            u.account_type
+            u.account_type,
+            u.status
         FROM users u
         WHERE u.email = lower(trim($1))
         "#,
@@ -127,6 +131,10 @@ pub async fn login(
     };
 
     if !verify_password_hash(user.password_hash.as_str(), password) {
+        return Err(unauthorized_auth());
+    }
+
+    if user.status == UserStatus::Disabled.as_db_value() {
         return Err(unauthorized_auth());
     }
 
@@ -275,7 +283,7 @@ pub async fn current_user(
     match resolve_current_principal(&state.pool, &jar).await {
         Ok(Some(principal)) => Ok(Json(principal_to_body(principal)).into_response()),
         Ok(None) => Err(unauthenticated()),
-        Err(err) if is_company_disabled_error(&err) => {
+        Err(err) if is_company_disabled_error(&err) || is_user_disabled_error(&err) => {
             Ok((clear_session_jar(jar), err).into_response())
         }
         Err(err) => Err(err),
@@ -331,7 +339,8 @@ async fn resolve_current_principal(
             u.account_type,
             u.role,
             cu.company_id,
-            c.status AS company_status
+            c.status AS company_status,
+            u.status AS user_status
         FROM sessions s
         LEFT JOIN users u ON u.id = s.user_id
         LEFT JOIN company_users cu ON cu.user_id = u.id
@@ -370,6 +379,11 @@ async fn resolve_current_principal(
     {
         revoke_session_by_token_hash(pool, &token_hash).await?;
         return Err(company_disabled_error());
+    }
+
+    if row.user_status.as_deref() == Some(UserStatus::Disabled.as_db_value()) {
+        revoke_session_by_token_hash(pool, &token_hash).await?;
+        return Err(user_disabled_error());
     }
 
     Ok(Some(SessionPrincipal::User(SessionUser {
@@ -430,10 +444,22 @@ fn is_company_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
         && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
 }
 
+fn is_user_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
+    err.0 == StatusCode::FORBIDDEN
+        && err.1.code.as_deref() == Some(ERROR_CODE_USER_DISABLED)
+}
+
 fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
     (
         StatusCode::FORBIDDEN,
         Json(ApiErrorBody::company_disabled()),
+    )
+}
+
+fn user_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ApiErrorBody::user_disabled()),
     )
 }
 
