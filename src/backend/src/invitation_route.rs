@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::invitation_token_service::hash_invitation_token;
 use crate::authorization;
 use crate::email::InvitationEmail;
+use crate::invitation_token_service::hash_invitation_token;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::types::{
     ApiErrorBody, CompanyRole, CreateInvitationRequest, Invitation, InvitationResponse,
@@ -32,14 +32,18 @@ fn invited_role_allowed_for_inviter(inviter: CompanyRole, invited: CompanyRole) 
     match inviter {
         CompanyRole::CompanyAdmin => true,
         // Project Managers cannot grant company-level admin or PM roles (FRD matrix: no "manage users").
-        CompanyRole::ProjectManager => matches!(invited, CompanyRole::Contributor | CompanyRole::Viewer),
+        CompanyRole::ProjectManager => {
+            matches!(invited, CompanyRole::Contributor | CompanyRole::Viewer)
+        }
         CompanyRole::Contributor | CompanyRole::Viewer => false,
     }
 }
 
-fn invitation_to_response(inv: Invitation) -> Result<InvitationResponse, (StatusCode, Json<ApiErrorBody>)> {
-    let invited_role = CompanyRole::from_db_value(inv.invited_role.as_str())
-        .ok_or_else(internal_error)?;
+fn invitation_to_response(
+    inv: Invitation,
+) -> Result<InvitationResponse, (StatusCode, Json<ApiErrorBody>)> {
+    let invited_role =
+        CompanyRole::from_db_value(inv.invited_role.as_str()).ok_or_else(internal_error)?;
     let status = InvitationStatus::from_db_value(inv.status.as_str()).ok_or_else(internal_error)?;
     Ok(InvitationResponse {
         id: inv.id,
@@ -108,20 +112,18 @@ pub async fn create_invitation(
                 StatusCode::NOT_FOUND,
                 Json(ApiErrorBody {
                     message: "Project not found.".into(),
-            ..Default::default()
-        }),
+                    ..Default::default()
+                }),
             ));
         }
     }
 
-    let company_name: String = sqlx::query_scalar(
-        "SELECT name FROM companies WHERE id = $1",
-    )
-    .bind(company_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| internal_error())?
-    .ok_or_else(internal_error)?;
+    let company_name: String = sqlx::query_scalar("SELECT name FROM companies WHERE id = $1")
+        .bind(company_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| internal_error())?
+        .ok_or_else(internal_error)?;
 
     let project_name: Option<String> = if let Some(pid) = payload.project_id {
         sqlx::query_scalar("SELECT name FROM projects WHERE id = $1 AND company_id = $2")
@@ -139,8 +141,7 @@ pub async fn create_invitation(
     let token_hex = hex::encode(raw);
     let token_hash = hash_invitation_token(&raw);
 
-    let expires_at =
-        Utc::now() + ChronoDuration::hours(state.invitation_config.expires_in_hours);
+    let expires_at = Utc::now() + ChronoDuration::hours(state.invitation_config.expires_in_hours);
     let accept_url = format!(
         "{}/invitations/accept?id={token_hex}",
         state.invitation_config.app_base_url
@@ -194,8 +195,8 @@ pub async fn create_invitation(
                         Json(ApiErrorBody {
                             message: "An invitation is already pending for this email address."
                                 .into(),
-            ..Default::default()
-        }),
+                            ..Default::default()
+                        }),
                     ));
                 }
             }

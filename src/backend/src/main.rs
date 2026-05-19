@@ -1,6 +1,7 @@
 mod admin_company_route;
 mod admin_user_route;
 mod ai;
+mod ai_provider_route;
 mod app_state;
 mod auth_route;
 mod authorization;
@@ -13,6 +14,8 @@ mod email;
 mod invitation_accept_route;
 mod invitation_route;
 mod invitation_token_service;
+mod project_ai_settings_route;
+mod project_ai_settings_service;
 mod project_api_key_service;
 mod project_membership_route;
 mod project_route;
@@ -27,36 +30,38 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ai::AnthropicClient;
+use admin_company_route::{get_admin_company, list_admin_companies, set_admin_company_status};
+use admin_user_route::{
+    get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
+};
+use ai::{AiProviderRegistry, AnthropicProvider, OpenAiProvider};
+use ai_provider_route::{list_provider_models, list_supported_providers};
 use app_state::AppState;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
-use admin_company_route::{
-    get_admin_company, list_admin_companies, set_admin_company_status,
-};
-use admin_user_route::{
-    get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
-};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use company_registration_route::register_company;
+use company_route::{get_current_company, list_company_users, update_current_company};
 use configs::AppConfig;
 use email::SmtpEmailSender;
 use invitation_accept_route::{
     accept_invitation_confirm, accept_invitation_register, preview_invitation,
 };
 use invitation_route::{cancel_invitation, create_invitation, list_invitations};
+use project_ai_settings_route::{
+    get_project_ai_settings, list_project_ai_provider_models, update_project_ai_settings,
+};
 use project_membership_route::{add_project_member, list_project_members, remove_project_member};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
-    enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks, get_project,
-    get_project_feature, get_project_task, list_feature_tasks, list_project_documents,
+    enhance_feature_requirements, enhance_project_requirements, generate_feature_tasks,
+    get_project, get_project_feature, get_project_task, list_feature_tasks, list_project_documents,
     list_project_features, list_projects, update_project, update_project_feature,
     update_project_task, upload_project_documents,
 };
-use company_registration_route::register_company;
-use company_route::{get_current_company, list_company_users, update_current_company};
 use register_route::register_user;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -106,6 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         document_upload_dir,
         api_key_encryption_key,
         anthropic_config,
+        openai_config,
         invitation_config,
         smtp_config,
         system_admin_config,
@@ -125,12 +131,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let anthropic_http = reqwest::Client::builder()
         .timeout(Duration::from_secs(anthropic_config.timeout_secs))
         .build()?;
-    let anthropic = AnthropicClient::new(
+    let anthropic = AnthropicProvider::new(
         anthropic_http,
         anthropic_config.base_url,
         anthropic_config.model,
         anthropic_config.max_tokens,
     );
+    let openai_http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(openai_config.timeout_secs))
+        .build()?;
+    let openai = OpenAiProvider::new(
+        openai_http,
+        openai_config.base_url,
+        openai_config.default_model,
+        openai_config.max_tokens,
+    );
+    let ai_providers = AiProviderRegistry::new(anthropic, openai);
 
     let cors = CorsLayer::new()
         .allow_origin(cors_origin.parse::<HeaderValue>()?)
@@ -154,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_max_age_secs,
         document_upload_dir,
         api_key_encryption_key,
-        anthropic,
+        ai_providers,
         email_sender,
         invitation_config,
         system_admin: system_admin_config,
@@ -173,6 +189,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/login", post(auth_route::login))
         .route("/api/v1/logout", post(auth_route::logout))
         .route("/api/v1/me", get(auth_route::current_user))
+        .route("/api/v1/ai/providers", get(list_supported_providers))
+        .route(
+            "/api/v1/ai/providers/{provider_id}/models",
+            post(list_provider_models),
+        )
         .route("/api/v1/admin/companies", get(list_admin_companies))
         .route(
             "/api/v1/admin/companies/{company_id}",
@@ -230,6 +251,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(enhance_project_requirements),
         )
         .route(
+            "/api/v1/projects/{project_id}/ai-settings",
+            get(get_project_ai_settings).put(update_project_ai_settings),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/ai-settings/provider-models",
+            post(list_project_ai_provider_models),
+        )
+        .route(
             "/api/v1/projects/{project_id}/features",
             get(list_project_features).post(create_feature),
         )
@@ -274,7 +303,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     eprintln!("listening on http://{}", addr);
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

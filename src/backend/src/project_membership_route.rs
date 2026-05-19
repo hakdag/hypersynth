@@ -170,9 +170,7 @@ pub async fn list_project_members(
 
     let mut out = Vec::with_capacity(rows.len());
     for (id, fullname, email, role_raw, project_role_raw, created_at) in rows {
-        let company_role = role_raw
-            .as_deref()
-            .and_then(CompanyRole::from_db_value);
+        let company_role = role_raw.as_deref().and_then(CompanyRole::from_db_value);
         let project_role = ProjectMembershipRole::from_db_value(project_role_raw.as_str())
             .ok_or_else(internal_error)?;
         out.push(ProjectMemberResponse {
@@ -261,9 +259,7 @@ pub async fn add_project_member(
     .ok_or_else(not_found_project)?;
 
     let (id, fullname, email, role_raw, project_role_raw, created_at) = row;
-    let company_role = role_raw
-        .as_deref()
-        .and_then(CompanyRole::from_db_value);
+    let company_role = role_raw.as_deref().and_then(CompanyRole::from_db_value);
     let project_role = ProjectMembershipRole::from_db_value(project_role_raw.as_str())
         .ok_or_else(internal_error)?;
 

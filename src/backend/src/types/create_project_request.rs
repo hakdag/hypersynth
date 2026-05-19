@@ -5,5 +5,4 @@ use serde::Deserialize;
 pub struct CreateProjectRequest {
     pub name: String,
     pub requirements: Option<String>,
-    pub ai_api_key: Option<String>,
 }

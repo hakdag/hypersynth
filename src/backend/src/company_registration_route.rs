@@ -4,9 +4,7 @@ use axum::Json;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::types::{
-    ApiErrorBody, CompanyRegistrationRequest, CompanyRegistrationResponse,
-};
+use crate::types::{ApiErrorBody, CompanyRegistrationRequest, CompanyRegistrationResponse};
 use crate::user_registration::{
     email_contains_at_and_dot, hash_password_argon2, password_policy_error, username_is_valid,
     USERNAME_VALIDATION_MESSAGE,
@@ -171,7 +169,8 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message,
+        Json(ApiErrorBody {
+            message,
             ..Default::default()
         }),
     )

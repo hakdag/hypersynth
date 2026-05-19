@@ -142,13 +142,8 @@ pub async fn login(
         return Err(company_disabled_error());
     }
 
-    let (jar, body) = establish_session_for_user(
-        &state.pool,
-        state.session_max_age_secs,
-        jar,
-        user.id,
-    )
-    .await?;
+    let (jar, body) =
+        establish_session_for_user(&state.pool, state.session_max_age_secs, jar, user.id).await?;
     Ok((jar, Json(body)))
 }
 
@@ -198,8 +193,8 @@ pub async fn establish_session_for_user(
     .await
     .map_err(|_| internal_error())?;
 
-    let account_type = AccountType::from_db_value(row.account_type.as_str())
-        .ok_or_else(internal_error)?;
+    let account_type =
+        AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
     let user = SessionUser {
@@ -440,13 +435,11 @@ fn clear_session_jar(jar: CookieJar) -> CookieJar {
 }
 
 fn is_company_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
-    err.0 == StatusCode::FORBIDDEN
-        && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
+    err.0 == StatusCode::FORBIDDEN && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
 }
 
 fn is_user_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
-    err.0 == StatusCode::FORBIDDEN
-        && err.1.code.as_deref() == Some(ERROR_CODE_USER_DISABLED)
+    err.0 == StatusCode::FORBIDDEN && err.1.code.as_deref() == Some(ERROR_CODE_USER_DISABLED)
 }
 
 fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
@@ -457,10 +450,7 @@ fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
 }
 
 fn user_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::FORBIDDEN,
-        Json(ApiErrorBody::user_disabled()),
-    )
+    (StatusCode::FORBIDDEN, Json(ApiErrorBody::user_disabled()))
 }
 
 fn principal_to_body(principal: SessionPrincipal) -> CurrentUserBody {

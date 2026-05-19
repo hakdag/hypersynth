@@ -46,9 +46,7 @@ impl SmtpConfig {
             "1" | "true" | "yes" => true,
             "0" | "false" | "no" => false,
             _ => {
-                return Err(
-                    "SMTP_STARTTLS must be true or false (default: true if unset)".into(),
-                );
+                return Err("SMTP_STARTTLS must be true or false (default: true if unset)".into());
             }
         };
 

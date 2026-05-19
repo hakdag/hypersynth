@@ -20,17 +20,11 @@ export class ProjectCreate {
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly showSuccess = signal(false);
-  protected readonly apiKeyVisible = signal(false);
 
   protected readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(512)]],
     requirements: [''],
-    aiApiKey: [''],
   });
-
-  protected toggleApiKeyVisible(): void {
-    this.apiKeyVisible.update((v) => !v);
-  }
 
   protected submit(): void {
     this.serverError.set(null);
@@ -39,14 +33,13 @@ export class ProjectCreate {
       return;
     }
 
-    const { name, requirements, aiApiKey } = this.form.getRawValue();
+    const { name, requirements } = this.form.getRawValue();
     this.submitting.set(true);
 
     this.projectApi
       .createProject({
         name: name.trim(),
         requirements: requirements.trim().length > 0 ? requirements : undefined,
-        aiApiKey: aiApiKey.trim().length > 0 ? aiApiKey : undefined,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
