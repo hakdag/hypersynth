@@ -14,6 +14,8 @@ mod email;
 mod invitation_accept_route;
 mod invitation_route;
 mod invitation_token_service;
+mod project_ai_settings_route;
+mod project_ai_settings_service;
 mod project_api_key_service;
 mod project_membership_route;
 mod project_route;
@@ -49,6 +51,9 @@ use invitation_accept_route::{
     accept_invitation_confirm, accept_invitation_register, preview_invitation,
 };
 use invitation_route::{cancel_invitation, create_invitation, list_invitations};
+use project_ai_settings_route::{
+    get_project_ai_settings, list_project_ai_provider_models, update_project_ai_settings,
+};
 use project_membership_route::{add_project_member, list_project_members, remove_project_member};
 use project_route::{
     accept_generated_tasks, create_feature, create_project, create_task, download_project_document,
@@ -244,6 +249,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}/ai/enhance-requirements",
             post(enhance_project_requirements),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/ai-settings",
+            get(get_project_ai_settings).put(update_project_ai_settings),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/ai-settings/provider-models",
+            post(list_project_ai_provider_models),
         )
         .route(
             "/api/v1/projects/{project_id}/features",

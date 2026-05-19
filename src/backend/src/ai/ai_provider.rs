@@ -12,6 +12,7 @@ pub trait AiProvider: Send + Sync {
     async fn enhance_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
@@ -20,6 +21,7 @@ pub trait AiProvider: Send + Sync {
     async fn enhance_feature_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
@@ -30,6 +32,7 @@ pub trait AiProvider: Send + Sync {
     async fn generate_tasks(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,

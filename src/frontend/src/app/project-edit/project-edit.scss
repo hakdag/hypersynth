@@ -105,6 +105,12 @@
   color: var(--pc-on-surface-variant);
 }
 
+.pe-banner-success {
+  border: 1px solid rgb(52 211 153 / 0.55);
+  background: rgb(236 253 245 / 0.95);
+  color: #047857;
+}
+
 .pc-hint-tight {
   margin-bottom: 0.35rem;
 }
@@ -144,6 +150,18 @@
 
 .pc-card-form {
   box-shadow: var(--pc-soft-shadow);
+}
+
+.pe-ai-card {
+  margin-top: 1.5rem;
+}
+
+.pe-card-title {
+  margin: 0 0 0.25rem;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pc-primary);
 }
 
 .pc-form {
@@ -307,6 +325,11 @@
   justify-content: flex-end;
   gap: 1rem;
   margin-top: 1rem;
+}
+
+.pe-ai-actions {
+  justify-content: flex-start;
+  margin-top: 0;
 }
 
 .pc-btn {
@@ -586,6 +609,27 @@
 .pc-key-field-muted {
   opacity: 0.55;
   pointer-events: none;
+}
+
+.pe-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--pc-slate-200);
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+
+.pe-model-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--pc-slate-700);
+  word-break: break-word;
 }
 
 .pe-enhance-compare {

@@ -15,4 +15,6 @@ pub struct ProjectDetailResponse {
     pub created_at: DateTime<Utc>,
     #[sqlx(rename = "has_ai_api_key")]
     pub has_ai_api_key: bool,
+    #[sqlx(rename = "can_manage_ai_settings")]
+    pub can_manage_ai_settings: bool,
 }

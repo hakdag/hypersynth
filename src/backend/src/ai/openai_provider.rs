@@ -14,16 +14,14 @@ use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, Task
 pub struct OpenAiProvider {
     http: Client,
     base_url: String,
-    default_model: String,
     max_tokens: u32,
 }
 
 impl OpenAiProvider {
-    pub fn new(http: Client, base_url: String, default_model: String, max_tokens: u32) -> Self {
+    pub fn new(http: Client, base_url: String, _default_model: String, max_tokens: u32) -> Self {
         Self {
             http,
             base_url,
-            default_model,
             max_tokens,
         }
     }
@@ -31,10 +29,10 @@ impl OpenAiProvider {
     async fn complete_enhancement(
         &self,
         api_key: &str,
+        selected_model: &str,
         system: &str,
         user_content: Vec<Value>,
     ) -> Result<String, AiError> {
-        let selected_model = self.resolve_model(api_key).await?;
         let url = format!(
             "{}/v1/chat/completions",
             self.base_url.trim_end_matches('/')
@@ -72,25 +70,6 @@ impl OpenAiProvider {
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
         extract_chat_completion_text(&payload)
     }
-
-    async fn resolve_model(&self, api_key: &str) -> Result<String, AiError> {
-        let model_ids = self.fetch_model_ids(api_key).await?;
-        if model_ids.iter().any(|id| id == &self.default_model) {
-            return Ok(self.default_model.to_owned());
-        }
-
-        let best_mini = model_ids
-            .iter()
-            .filter(|id| id.starts_with("gpt-4o-mini"))
-            .max_by_key(|id| parse_gpt_4o_mini_rank(id.as_str()));
-
-        if let Some(model_id) = best_mini {
-            return Ok(model_id.to_owned());
-        }
-
-        Err(AiError::Empty)
-    }
-
     async fn fetch_model_ids(&self, api_key: &str) -> Result<Vec<String>, AiError> {
         let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
         let response = self
@@ -139,18 +118,21 @@ impl AiProvider for OpenAiProvider {
     async fn enhance_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
     ) -> Result<String, AiError> {
         let system = build_project_enhancement_system_prompt();
         let user = build_project_enhancement_user_content(project_name, requirements, documents);
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
     async fn enhance_feature_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
@@ -165,12 +147,14 @@ impl AiProvider for OpenAiProvider {
             feature_requirements,
             documents,
         );
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
     async fn generate_tasks(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
@@ -186,7 +170,6 @@ impl AiProvider for OpenAiProvider {
             feedback_history,
             document_context_items,
         );
-        let selected_model = self.resolve_model(api_key).await?;
         let url = format!(
             "{}/v1/chat/completions",
             self.base_url.trim_end_matches('/')
@@ -292,27 +275,6 @@ fn extract_chat_completion_text(payload: &Value) -> Result<String, AiError> {
         .ok_or(AiError::Empty)?;
 
     Ok(text.to_string())
-}
-
-fn parse_gpt_4o_mini_rank(model_id: &str) -> (u32, u32, u32) {
-    let Some(snapshot) = model_id.strip_prefix("gpt-4o-mini-") else {
-        return (0, 0, 0);
-    };
-    let mut parts = snapshot.split('-');
-    let year = parts
-        .next()
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0);
-    let month = parts
-        .next()
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0);
-    let day = parts
-        .next()
-        .and_then(|value| value.parse::<u32>().ok())
-        .unwrap_or(0);
-
-    (year, month, day)
 }
 
 fn strip_markdown_code_fence(s: &str) -> &str {

@@ -13,18 +13,17 @@ use tracing::{info, warn};
 use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::crypto::ApiKeyCipher;
 use crate::document_context_service::DocumentContextService;
-use crate::project_api_key_service::ProjectApiKeyService;
+use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::types::{
-    AcceptGeneratedTasksRequest, ApiErrorBody, ApiKeyAuditEvent, ApiKeyChange,
-    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
+    AcceptGeneratedTasksRequest, ApiErrorBody, CompanyRole, CreateFeatureRequest,
+    CreateProjectRequest, CreateTaskRequest, DocumentContextError,
     EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
-    ProjectResponse, ProviderId, TaskDetailResponse, TaskResponse, TenantScope,
-    UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
+    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, UpdateFeatureRequest,
+    UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -109,6 +108,14 @@ pub async fn get_project(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    let can_manage_ai_settings = matches!(
+        scope,
+        TenantScope::Personal { .. }
+            | TenantScope::Company {
+                role: CompanyRole::CompanyAdmin | CompanyRole::ProjectManager,
+                ..
+            }
+    );
 
     let row = sqlx::query_as::<_, ProjectDetailResponse>(
         r#"
@@ -120,7 +127,10 @@ pub async fn get_project(
             requirements,
             status,
             created_at,
-            (encrypted_api_key IS NOT NULL) AS has_ai_api_key
+            EXISTS (
+                SELECT 1 FROM project_ai_settings s WHERE s.project_id = projects.id
+            ) AS has_ai_api_key,
+            $6::boolean AS can_manage_ai_settings
         FROM projects
         WHERE id = $1
           AND (
@@ -141,6 +151,7 @@ pub async fn get_project(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
+    .bind(can_manage_ai_settings)
     .fetch_optional(&state.pool)
     .await
     .map_err(|e| {
@@ -177,16 +188,9 @@ pub async fn create_project(
         .requirements
         .as_ref()
         .is_some_and(|s| !s.trim().is_empty());
-    let has_ai_key = payload
-        .ai_api_key
-        .as_ref()
-        .is_some_and(|s| !s.trim().is_empty());
     info!(
         has_cookie,
-        name_len,
-        has_requirements,
-        has_ai_key,
-        "api: POST /api/v1/projects (body summarized; API key not logged)"
+        name_len, has_requirements, "api: POST /api/v1/projects"
     );
 
     let user = auth_route::require_authenticated_user(&state.pool, &jar)
@@ -216,25 +220,6 @@ pub async fn create_project(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
-    let ai_key_plaintext = payload
-        .ai_api_key
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
-    let encrypted_api_key = match ai_key_plaintext.as_deref() {
-        Some(plaintext) => {
-            let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
-            let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
-                warn!(error = %e, user_id = %user.id, "create_project: encryption failed");
-                internal_error()
-            })?;
-            Some(ciphertext)
-        }
-        None => None,
-    };
-
     let mut tx = state.pool.begin().await.map_err(|e| {
         warn!(error = %e, user_id = %user.id, "create_project: begin tx failed");
         internal_error()
@@ -248,10 +233,9 @@ pub async fn create_project(
             created_by_user_id,
             name,
             requirements,
-            status,
-            encrypted_api_key
+            status
         )
-        VALUES ($1, $2, $3, $4, $5, 'Pending', $6)
+        VALUES ($1, $2, $3, $4, $5, 'Pending')
         RETURNING id, owner_user_id, company_id, name, requirements, status, created_at
         "#,
     )
@@ -260,27 +244,12 @@ pub async fn create_project(
     .bind(user.id)
     .bind(name)
     .bind(requirements.as_ref())
-    .bind(encrypted_api_key.as_deref())
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, "create_project: insert failed");
         internal_error()
     })?;
-
-    if encrypted_api_key.is_some() {
-        ProjectApiKeyService::record_audit(
-            &mut *tx,
-            row.id,
-            user.id,
-            ApiKeyAuditEvent::Created,
-        )
-        .await
-        .map_err(|e| {
-            warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: audit insert failed");
-            internal_error()
-        })?;
-    }
 
     if scope_company_id.is_some() && !scope.is_company_admin() {
         sqlx::query(
@@ -314,7 +283,6 @@ pub async fn create_project(
         project_id = %row.id,
         user_id = %user.id,
         project_status = %row.status,
-        ai_key_audited = encrypted_api_key.is_some(),
         "api: POST /api/v1/projects -> 201 CREATED"
     );
 
@@ -333,9 +301,7 @@ pub async fn update_project(
         has_cookie,
         %project_id,
         name_len,
-        clear_ai_api_key = payload.clear_ai_api_key,
-        has_new_ai_key = payload.ai_api_key.as_ref().is_some_and(|s| !s.trim().is_empty()),
-        "api: PATCH /api/v1/projects/:id (body summarized; API key not logged)"
+        "api: PATCH /api/v1/projects/:id"
     );
 
     let user = auth_route::require_authenticated_user(&state.pool, &jar)
@@ -372,36 +338,10 @@ pub async fn update_project(
         Some(requirements_trimmed.to_string())
     };
 
-    let new_key_plaintext = payload
-        .ai_api_key
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
-    let key_action = if payload.clear_ai_api_key {
-        ApiKeyChange::Clear
-    } else if let Some(plaintext) = new_key_plaintext.as_deref() {
-        let cipher = ApiKeyCipher::new(&state.api_key_encryption_key);
-        let ciphertext = cipher.encrypt(plaintext).map_err(|e| {
-            warn!(error = %e, user_id = %user.id, %project_id, "update_project: encryption failed");
-            internal_error()
-        })?;
-        ApiKeyChange::Replace(ciphertext)
-    } else {
-        ApiKeyChange::Leave
-    };
-
     let mut tx = state.pool.begin().await.map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "update_project: begin tx failed");
         internal_error()
     })?;
-
-    let new_ciphertext: Option<&[u8]> = match &key_action {
-        ApiKeyChange::Replace(bytes) => Some(bytes.as_slice()),
-        ApiKeyChange::Clear | ApiKeyChange::Leave => None,
-    };
-    let clear_flag = matches!(key_action, ApiKeyChange::Clear);
 
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
@@ -409,21 +349,16 @@ pub async fn update_project(
         SET
             name = $1,
             requirements = $2,
-            status = $3,
-            encrypted_api_key = CASE
-                WHEN $4::boolean THEN NULL
-                WHEN $5::bytea IS NOT NULL THEN $5::bytea
-                ELSE encrypted_api_key
-            END
-        WHERE id = $6
+            status = $3
+        WHERE id = $4
           AND (
-            ($8::uuid IS NOT NULL AND owner_user_id = $8 AND company_id IS NULL)
+            ($6::uuid IS NOT NULL AND owner_user_id = $6 AND company_id IS NULL)
             OR
-            ($7::uuid IS NOT NULL AND company_id = $7 AND (
-                $9::boolean
+            ($5::uuid IS NOT NULL AND company_id = $5 AND (
+                $7::boolean
                 OR EXISTS (
                     SELECT 1 FROM project_memberships pm
-                    WHERE pm.project_id = projects.id AND pm.user_id = $10
+                    WHERE pm.project_id = projects.id AND pm.user_id = $8
                 )
             ))
           )
@@ -433,8 +368,6 @@ pub async fn update_project(
     .bind(name)
     .bind(requirements_for_db.as_ref())
     .bind(status)
-    .bind(clear_flag)
-    .bind(new_ciphertext)
     .bind(project_id)
     .bind(scope.company_id_or_null())
     .bind(scope.owner_user_id_or_null())
@@ -456,20 +389,6 @@ pub async fn update_project(
         return Err(not_found("Project not found."));
     };
 
-    let audit_event = match &key_action {
-        ApiKeyChange::Clear => Some(ApiKeyAuditEvent::Cleared),
-        ApiKeyChange::Replace(_) => Some(ApiKeyAuditEvent::Replaced),
-        ApiKeyChange::Leave => None,
-    };
-    if let Some(event) = audit_event {
-        ProjectApiKeyService::record_audit(&mut *tx, row.id, user.id, event)
-            .await
-            .map_err(|e| {
-                warn!(error = %e, user_id = %user.id, %project_id, "update_project: audit insert failed");
-                internal_error()
-            })?;
-    }
-
     tx.commit().await.map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "update_project: commit failed");
         internal_error()
@@ -479,7 +398,6 @@ pub async fn update_project(
         user_id = %user.id,
         project_id = %row.id,
         project_status = %row.status,
-        ai_key_audited = audit_event.is_some(),
         "api: PATCH /api/v1/projects/:id -> 200 OK"
     );
 
@@ -676,18 +594,18 @@ pub async fn enhance_project_requirements(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| bad_request("Project requirements are required before AI enhancement."))?;
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
                 error = %e,
                 user_id = %user.id,
                 %project_id,
-                "enhance_project_requirements: decrypt_for_runtime failed"
+                "enhance_project_requirements: load_for_runtime failed"
             );
             internal_error()
         })?
-        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+        .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
@@ -698,11 +616,16 @@ pub async fn enhance_project_requirements(
     .await
     .map_err(map_document_context_error)?;
 
-    let provider = ProviderId::Anthropic;
     let enhanced_requirements = state
         .ai_providers
-        .get(provider)
-        .enhance_requirements(&api_key, &project_name, requirements, &document_context)
+        .get(ai_settings.provider)
+        .enhance_requirements(
+            &ai_settings.api_key,
+            &ai_settings.selected_model,
+            &project_name,
+            requirements,
+            &document_context,
+        )
         .await
         .map_err(|e| {
             let status = match e {
@@ -829,18 +752,18 @@ pub async fn enhance_feature_requirements(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
                 error = %e,
                 user_id = %user.id,
                 %project_id,
-                "enhance_feature_requirements: decrypt_for_runtime failed"
+                "enhance_feature_requirements: load_for_runtime failed"
             );
             internal_error()
         })?
-        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+        .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
@@ -851,12 +774,12 @@ pub async fn enhance_feature_requirements(
     .await
     .map_err(map_document_context_error)?;
 
-    let provider = ProviderId::Anthropic;
     let enhanced_requirements = state
         .ai_providers
-        .get(provider)
+        .get(ai_settings.provider)
         .enhance_feature_requirements(
-            &api_key,
+            &ai_settings.api_key,
+            &ai_settings.selected_model,
             &project_name,
             project_requirements_for_prompt,
             &feature_title,
@@ -997,18 +920,18 @@ pub async fn generate_feature_tasks(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let api_key = ProjectApiKeyService::decrypt_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
                 error = %e,
                 user_id = %user.id,
                 %project_id,
-                "generate_feature_tasks: decrypt_for_runtime failed"
+                "generate_feature_tasks: load_for_runtime failed"
             );
             internal_error()
         })?
-        .ok_or_else(|| bad_request("Configure an AI API key for this project first."))?;
+        .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
         &state.pool,
@@ -1019,12 +942,12 @@ pub async fn generate_feature_tasks(
     .await
     .map_err(map_document_context_error)?;
 
-    let provider = ProviderId::Anthropic;
     let tasks = state
         .ai_providers
-        .get(provider)
+        .get(ai_settings.provider)
         .generate_tasks(
-            &api_key,
+            &ai_settings.api_key,
+            &ai_settings.selected_model,
             &project_name,
             project_requirements_for_prompt,
             &feature_title,

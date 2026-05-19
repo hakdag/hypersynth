@@ -59,32 +59,6 @@
             </div>
           </div>
 
-          <div class="pc-field">
-            <label class="pc-label" for="project-api-key">
-              AI API Key <span class="pc-opt">(Optional)</span>
-            </label>
-            <div class="pc-input-wrap">
-              <input
-                id="project-api-key"
-                class="pc-input pc-input-key"
-                [type]="apiKeyVisible() ? 'text' : 'password'"
-                autocomplete="off"
-                placeholder="sk-••••••••••••••••••••••••"
-                formControlName="aiApiKey"
-              />
-              <button
-                type="button"
-                class="pc-key-toggle material-symbols-outlined"
-                (click)="toggleApiKeyVisible()"
-                [attr.aria-pressed]="apiKeyVisible()"
-                [attr.aria-label]="apiKeyVisible() ? 'Hide API key' : 'Show API key'"
-              >
-                {{ apiKeyVisible() ? 'visibility' : 'visibility_off' }}
-              </button>
-            </div>
-            <p class="pc-hint">Provide your own key for enhanced project analysis and automation features.</p>
-          </div>
-
           <div class="pc-field pc-field-status">
             <span class="pc-label">Initial Status</span>
             <div class="pc-status-badge">

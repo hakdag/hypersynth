@@ -14,16 +14,14 @@ use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, Task
 pub struct AnthropicProvider {
     http: Client,
     base_url: String,
-    model: String,
     max_tokens: u32,
 }
 
 impl AnthropicProvider {
-    pub fn new(http: Client, base_url: String, model: String, max_tokens: u32) -> Self {
+    pub fn new(http: Client, base_url: String, _model: String, max_tokens: u32) -> Self {
         Self {
             http,
             base_url,
-            model,
             max_tokens,
         }
     }
@@ -31,10 +29,10 @@ impl AnthropicProvider {
     async fn complete_enhancement(
         &self,
         api_key: &str,
+        selected_model: &str,
         system: &str,
         user_content: Vec<Value>,
     ) -> Result<String, AiError> {
-        let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let body = json!({
             "model": selected_model,
@@ -102,24 +100,6 @@ impl AnthropicProvider {
 
         Ok(model_ids)
     }
-
-    async fn resolve_haiku_model(&self, api_key: &str) -> Result<String, AiError> {
-        let model_ids = self.fetch_model_ids(api_key).await?;
-        let best_haiku = model_ids
-            .iter()
-            .filter(|id| id.starts_with("claude-haiku-"))
-            .max_by_key(|id| parse_model_rank(id.as_str()));
-
-        if let Some(model_id) = best_haiku {
-            return Ok(model_id.to_owned());
-        }
-
-        if self.model.starts_with("claude-haiku-") {
-            return Ok(self.model.to_owned());
-        }
-
-        Err(AiError::Empty)
-    }
 }
 
 #[async_trait]
@@ -135,18 +115,21 @@ impl AiProvider for AnthropicProvider {
     async fn enhance_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
     ) -> Result<String, AiError> {
         let system = build_project_enhancement_system_prompt();
         let user = build_project_enhancement_user_content(project_name, requirements, documents);
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
     async fn enhance_feature_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
@@ -161,12 +144,14 @@ impl AiProvider for AnthropicProvider {
             feature_requirements,
             documents,
         );
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
     async fn generate_tasks(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
@@ -182,7 +167,6 @@ impl AiProvider for AnthropicProvider {
             feedback_history,
             document_context_items,
         );
-        let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let mut messages: Vec<Value> = Vec::with_capacity(message_pairs.len());
         for (role, content) in message_pairs {
@@ -244,26 +228,6 @@ fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
         return Err(AiError::Empty);
     }
     Ok(trimmed)
-}
-
-fn parse_model_rank(model_id: &str) -> (u32, u32, u32) {
-    let version = model_id.strip_prefix("claude-haiku-").unwrap_or("");
-    let mut parts = version.split('-');
-
-    let major = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-    let minor = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-    let snapshot = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-
-    (major, minor, snapshot)
 }
 
 fn strip_markdown_code_fence(s: &str) -> &str {
