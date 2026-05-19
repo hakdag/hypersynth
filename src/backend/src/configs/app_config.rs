@@ -3,7 +3,9 @@ use std::env;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 
-use crate::configs::{AnthropicConfig, InvitationConfig, SmtpConfig, SystemAdminConfig};
+use crate::configs::{
+    AnthropicConfig, InvitationConfig, OpenAiConfig, SmtpConfig, SystemAdminConfig,
+};
 
 const API_KEY_ENCRYPTION_KEY_LEN: usize = 32;
 
@@ -16,6 +18,7 @@ pub struct AppConfig {
     pub document_upload_dir: String,
     pub api_key_encryption_key: [u8; API_KEY_ENCRYPTION_KEY_LEN],
     pub anthropic_config: AnthropicConfig,
+    pub openai_config: OpenAiConfig,
     pub invitation_config: InvitationConfig,
     pub smtp_config: SmtpConfig,
     pub system_admin_config: SystemAdminConfig,
@@ -49,6 +52,7 @@ impl AppConfig {
 
         let api_key_encryption_key = parse_api_key_encryption_key()?;
         let anthropic_config = AnthropicConfig::from_env()?;
+        let openai_config = OpenAiConfig::from_env()?;
         let invitation_config = InvitationConfig::from_env()?;
         let smtp_config = SmtpConfig::from_env()?;
         let system_admin_config = SystemAdminConfig::from_env()?;
@@ -61,6 +65,7 @@ impl AppConfig {
             document_upload_dir,
             api_key_encryption_key,
             anthropic_config,
+            openai_config,
             invitation_config,
             smtp_config,
             system_admin_config,

@@ -56,10 +56,7 @@ Propose tasks as a JSON array only. Example shape: \
     for turn in feedback_history {
         let assistant_payload = json!(turn.proposed_tasks);
         let assistant_text = assistant_payload.to_string();
-        messages.push((
-            "assistant".to_string(),
-            Value::String(assistant_text),
-        ));
+        messages.push(("assistant".to_string(), Value::String(assistant_text)));
         messages.push((
             "user".to_string(),
             Value::String(turn.feedback.trim().to_string()),

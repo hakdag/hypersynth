@@ -22,9 +22,9 @@ use crate::types::{
     CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
     EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
-    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse, 
-    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, UpdateFeatureRequest,
-    UpdateProjectRequest, UpdateTaskRequest,
+    GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
+    ProjectResponse, ProviderId, TaskDetailResponse, TaskResponse, TenantScope,
+    UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -698,14 +698,11 @@ pub async fn enhance_project_requirements(
     .await
     .map_err(map_document_context_error)?;
 
+    let provider = ProviderId::Anthropic;
     let enhanced_requirements = state
-        .anthropic
-        .enhance_requirements(
-            &api_key,
-            &project_name,
-            requirements,
-            &document_context,
-        )
+        .ai_providers
+        .get(provider)
+        .enhance_requirements(&api_key, &project_name, requirements, &document_context)
         .await
         .map_err(|e| {
             let status = match e {
@@ -725,8 +722,8 @@ pub async fn enhance_project_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-            ..Default::default()
-        }),
+                    ..Default::default()
+                }),
             )
         })?;
 
@@ -854,8 +851,10 @@ pub async fn enhance_feature_requirements(
     .await
     .map_err(map_document_context_error)?;
 
+    let provider = ProviderId::Anthropic;
     let enhanced_requirements = state
-        .anthropic
+        .ai_providers
+        .get(provider)
         .enhance_feature_requirements(
             &api_key,
             &project_name,
@@ -884,8 +883,8 @@ pub async fn enhance_feature_requirements(
                     message:
                         "Could not generate enhanced requirements right now. Please try again."
                             .into(),
-            ..Default::default()
-        }),
+                    ..Default::default()
+                }),
             )
         })?;
 
@@ -989,7 +988,9 @@ pub async fn generate_feature_tasks(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| bad_request("Feature requirements are required before AI task generation."))?;
+        .ok_or_else(|| {
+            bad_request("Feature requirements are required before AI task generation.")
+        })?;
 
     let project_requirements_for_prompt = project_requirements_opt
         .as_deref()
@@ -1018,8 +1019,10 @@ pub async fn generate_feature_tasks(
     .await
     .map_err(map_document_context_error)?;
 
+    let provider = ProviderId::Anthropic;
     let tasks = state
-        .anthropic
+        .ai_providers
+        .get(provider)
         .generate_tasks(
             &api_key,
             &project_name,
@@ -1047,8 +1050,8 @@ pub async fn generate_feature_tasks(
                 status,
                 Json(ApiErrorBody {
                     message: "Could not generate tasks right now. Please try again.".into(),
-            ..Default::default()
-        }),
+                    ..Default::default()
+                }),
             )
         })?;
 
@@ -1155,10 +1158,7 @@ pub async fn accept_generated_tasks(
 
     for candidate in payload.tasks {
         let title = candidate.title.trim();
-        let description = candidate
-            .description
-            .trim()
-            .to_string();
+        let description = candidate.description.trim().to_string();
         let description_for_db = if description.is_empty() {
             None
         } else {
@@ -2607,9 +2607,7 @@ fn unprocessable_entity(message: impl Into<String>) -> (StatusCode, Json<ApiErro
     )
 }
 
-fn map_document_context_error(
-    err: DocumentContextError,
-) -> (StatusCode, Json<ApiErrorBody>) {
+fn map_document_context_error(err: DocumentContextError) -> (StatusCode, Json<ApiErrorBody>) {
     match err {
         DocumentContextError::NotFoundOrForbidden => not_found("Could not resolve selected documents."),
         DocumentContextError::ContentUnavailable => unprocessable_entity(

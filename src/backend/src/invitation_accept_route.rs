@@ -11,13 +11,13 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::invitation_token_service::{decode_invitation_token_hex, hash_invitation_token};
-use crate::user_registration::{
-    hash_password_argon2, password_policy_error, username_is_valid, USERNAME_VALIDATION_MESSAGE,
-};
 use crate::types::{
     AcceptInvitationConfirmRequest, AcceptInvitationRegisterRequest, AccountType, ApiErrorBody,
     CompanyRole, CurrentUserBody, Invitation, InvitationAcceptPreviewQuery,
     InvitationPreviewResponse, InvitationStatus, ProjectMembershipRole,
+};
+use crate::user_registration::{
+    hash_password_argon2, password_policy_error, username_is_valid, USERNAME_VALIDATION_MESSAGE,
 };
 
 #[derive(sqlx::FromRow)]
@@ -71,8 +71,8 @@ pub async fn preview_invitation(
         return Err(not_found_invitation());
     };
 
-    let status = InvitationStatus::from_db_value(row.status.as_str())
-        .ok_or_else(|| internal_error())?;
+    let status =
+        InvitationStatus::from_db_value(row.status.as_str()).ok_or_else(|| internal_error())?;
 
     if status == InvitationStatus::Pending && row.expires_at < Utc::now() {
         let _ = sqlx::query(
@@ -95,22 +95,18 @@ pub async fn preview_invitation(
     }
 
     if status != InvitationStatus::Pending {
-        return Err(gone_invitation(
-            invitation_inactive_message(status),
-            status,
-        ));
+        return Err(gone_invitation(invitation_inactive_message(status), status));
     }
 
     let invited_role =
         CompanyRole::from_db_value(row.invited_role.as_str()).ok_or_else(internal_error)?;
 
-    let existing_user_present: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
-    )
-    .bind(&row.invited_email)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|_| internal_error())?;
+    let existing_user_present: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&row.invited_email)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|_| internal_error())?;
 
     Ok(Json(InvitationPreviewResponse {
         company_name: row.company_name,
@@ -209,11 +205,12 @@ pub async fn accept_invitation_register(
         return Err(gone_invitation(invitation_inactive_message(st), st));
     }
 
-    let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
-        .bind(&invitation.invited_email)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|_| internal_error())?;
+    let user_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&invitation.invited_email)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| internal_error())?;
 
     if user_exists {
         tx.rollback().await.ok();
@@ -349,14 +346,13 @@ pub async fn accept_invitation_confirm(
         return Err(gone_invitation(invitation_inactive_message(st), st));
     }
 
-    let existing_company_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT company_id FROM company_users WHERE user_id = $1",
-    )
-    .bind(user.id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| internal_error())?
-    .flatten();
+    let existing_company_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT company_id FROM company_users WHERE user_id = $1")
+            .bind(user.id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| internal_error())?
+            .flatten();
 
     if let Some(cid) = existing_company_id {
         if cid != invitation.company_id {
@@ -455,7 +451,8 @@ async fn load_current_user_body(
     .map_err(|_| internal_error())?
     .ok_or_else(internal_error)?;
 
-    let account_type = AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
+    let account_type =
+        AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
     Ok(CurrentUserBody {
@@ -668,10 +665,7 @@ fn gone_invitation(
 }
 
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ApiErrorBody::msg(message)),
-    )
+    (StatusCode::BAD_REQUEST, Json(ApiErrorBody::msg(message)))
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {

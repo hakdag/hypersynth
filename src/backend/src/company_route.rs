@@ -7,7 +7,10 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization;
-use crate::types::{AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse, UpdateCompanyRequest};
+use crate::types::{
+    AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse,
+    UpdateCompanyRequest,
+};
 use crate::user_registration::email_contains_at_and_dot;
 
 pub async fn list_company_users(
@@ -40,9 +43,7 @@ pub async fn list_company_users(
 
     let mut out = Vec::with_capacity(rows.len());
     for (id, fullname, email, role_raw) in rows {
-        let role = role_raw
-            .as_deref()
-            .and_then(CompanyRole::from_db_value);
+        let role = role_raw.as_deref().and_then(CompanyRole::from_db_value);
         out.push(CompanyUserResponse {
             id,
             fullname,
@@ -238,7 +239,8 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message,
+        Json(ApiErrorBody {
+            message,
             ..Default::default()
         }),
     )

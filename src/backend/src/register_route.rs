@@ -86,10 +86,7 @@ pub async fn register_user(
 }
 
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ApiErrorBody::msg(message)),
-    )
+    (StatusCode::BAD_REQUEST, Json(ApiErrorBody::msg(message)))
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use axum::http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -7,18 +8,17 @@ use crate::ai::build_feature_requirements_user_content;
 use crate::ai::build_generate_tasks_messages;
 use crate::ai::build_project_enhancement_system_prompt;
 use crate::ai::build_project_enhancement_user_content;
-use crate::ai::AiError;
-use crate::types::{DocumentContextItem, GeneratedTaskCandidate, TaskGenerationTurn};
+use crate::ai::{AiError, AiProvider};
+use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, TaskGenerationTurn};
 
-#[derive(Clone)]
-pub struct AnthropicClient {
+pub struct AnthropicProvider {
     http: Client,
     base_url: String,
     model: String,
     max_tokens: u32,
 }
 
-impl AnthropicClient {
+impl AnthropicProvider {
     pub fn new(http: Client, base_url: String, model: String, max_tokens: u32) -> Self {
         Self {
             http,
@@ -28,7 +28,111 @@ impl AnthropicClient {
         }
     }
 
-    pub async fn enhance_requirements(
+    async fn complete_enhancement(
+        &self,
+        api_key: &str,
+        system: &str,
+        user_content: Vec<Value>,
+    ) -> Result<String, AiError> {
+        let selected_model = self.resolve_haiku_model(api_key).await?;
+        let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
+        let body = json!({
+            "model": selected_model,
+            "max_tokens": self.max_tokens,
+            "system": system,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_content
+                }
+            ]
+        });
+
+        let response = self
+            .http
+            .post(url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| AiError::Network)?;
+
+        if !response.status().is_success() {
+            return Err(AiError::Provider(
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            ));
+        }
+
+        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
+        extract_assistant_text(&payload)
+    }
+
+    async fn fetch_model_ids(&self, api_key: &str) -> Result<Vec<String>, AiError> {
+        let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
+        let response = self
+            .http
+            .get(url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .await
+            .map_err(|_| AiError::Network)?;
+
+        if !response.status().is_success() {
+            return Err(AiError::Provider(
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            ));
+        }
+
+        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
+        let Some(models) = payload.get("data").and_then(|data| data.as_array()) else {
+            return Err(AiError::Decode);
+        };
+
+        let model_ids: Vec<String> = models
+            .iter()
+            .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
+            .map(str::to_owned)
+            .collect();
+
+        if model_ids.is_empty() {
+            return Err(AiError::Empty);
+        }
+
+        Ok(model_ids)
+    }
+
+    async fn resolve_haiku_model(&self, api_key: &str) -> Result<String, AiError> {
+        let model_ids = self.fetch_model_ids(api_key).await?;
+        let best_haiku = model_ids
+            .iter()
+            .filter(|id| id.starts_with("claude-haiku-"))
+            .max_by_key(|id| parse_model_rank(id.as_str()));
+
+        if let Some(model_id) = best_haiku {
+            return Ok(model_id.to_owned());
+        }
+
+        if self.model.starts_with("claude-haiku-") {
+            return Ok(self.model.to_owned());
+        }
+
+        Err(AiError::Empty)
+    }
+}
+
+#[async_trait]
+impl AiProvider for AnthropicProvider {
+    fn id(&self) -> ProviderId {
+        ProviderId::Anthropic
+    }
+
+    async fn list_models(&self, api_key: &str) -> Result<Vec<String>, AiError> {
+        self.fetch_model_ids(api_key).await
+    }
+
+    async fn enhance_requirements(
         &self,
         api_key: &str,
         project_name: &str,
@@ -40,7 +144,7 @@ impl AnthropicClient {
         self.complete_enhancement(api_key, &system, user).await
     }
 
-    pub async fn enhance_feature_requirements(
+    async fn enhance_feature_requirements(
         &self,
         api_key: &str,
         project_name: &str,
@@ -60,7 +164,7 @@ impl AnthropicClient {
         self.complete_enhancement(api_key, &system, user).await
     }
 
-    pub async fn generate_tasks(
+    async fn generate_tasks(
         &self,
         api_key: &str,
         project_name: &str,
@@ -115,85 +219,6 @@ impl AnthropicClient {
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
         let text = extract_assistant_text(&payload)?;
         parse_generated_tasks(&text)
-    }
-
-    async fn complete_enhancement(
-        &self,
-        api_key: &str,
-        system: &str,
-        user_content: Vec<Value>,
-    ) -> Result<String, AiError> {
-        let selected_model = self.resolve_haiku_model(api_key).await?;
-        let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
-        let body = json!({
-            "model": selected_model,
-            "max_tokens": self.max_tokens,
-            "system": system,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": user_content
-                }
-            ]
-        });
-
-        let response = self
-            .http
-            .post(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|_| AiError::Network)?;
-
-        if !response.status().is_success() {
-            return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
-            ));
-        }
-
-        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        extract_assistant_text(&payload)
-    }
-
-    async fn resolve_haiku_model(&self, api_key: &str) -> Result<String, AiError> {
-        let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
-        let response = self
-            .http
-            .get(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .send()
-            .await
-            .map_err(|_| AiError::Network)?;
-
-        if !response.status().is_success() {
-            return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
-            ));
-        }
-
-        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let Some(models) = payload.get("data").and_then(|data| data.as_array()) else {
-            return Err(AiError::Decode);
-        };
-
-        let best_haiku = models
-            .iter()
-            .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
-            .filter(|id| id.starts_with("claude-haiku-"))
-            .max_by_key(|id| parse_model_rank(id));
-
-        if let Some(model_id) = best_haiku {
-            return Ok(model_id.to_string());
-        }
-
-        if self.model.starts_with("claude-haiku-") {
-            return Ok(self.model.clone());
-        }
-
-        Err(AiError::Empty)
     }
 }
 

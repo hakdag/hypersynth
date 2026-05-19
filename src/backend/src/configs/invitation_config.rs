@@ -18,8 +18,7 @@ impl InvitationConfig {
         }
 
         let app_base_url = env::var("APP_BASE_URL").map_err(|_| {
-            "APP_BASE_URL is required (e.g. http://localhost:4200 — no trailing slash)"
-                .to_string()
+            "APP_BASE_URL is required (e.g. http://localhost:4200 — no trailing slash)".to_string()
         })?;
 
         let trimmed = app_base_url.trim();
