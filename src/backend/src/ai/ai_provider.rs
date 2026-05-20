@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 
 use crate::ai::AiError;
-use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, TaskGenerationTurn};
+use crate::types::{
+    AiCompletion, DocumentContextItem, GeneratedTaskCandidate, ProviderId, TaskGenerationTurn,
+};
 
 #[async_trait]
 pub trait AiProvider: Send + Sync {
@@ -16,7 +18,7 @@ pub trait AiProvider: Send + Sync {
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError>;
+    ) -> Result<AiCompletion<String>, AiError>;
 
     async fn enhance_feature_requirements(
         &self,
@@ -27,7 +29,7 @@ pub trait AiProvider: Send + Sync {
         feature_title: &str,
         feature_requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError>;
+    ) -> Result<AiCompletion<String>, AiError>;
 
     async fn generate_tasks(
         &self,
@@ -39,5 +41,5 @@ pub trait AiProvider: Send + Sync {
         feature_requirements: &str,
         feedback_history: &[TaskGenerationTurn],
         document_context_items: &[DocumentContextItem],
-    ) -> Result<Vec<GeneratedTaskCandidate>, AiError>;
+    ) -> Result<AiCompletion<Vec<GeneratedTaskCandidate>>, AiError>;
 }

@@ -9,7 +9,10 @@ use crate::ai::build_generate_tasks_messages;
 use crate::ai::build_project_enhancement_system_prompt;
 use crate::ai::build_project_enhancement_user_content;
 use crate::ai::{AiError, AiProvider};
-use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, TaskGenerationTurn};
+use crate::types::{
+    AiCompletion, AiTokenUsage, DocumentContextItem, GeneratedTaskCandidate, ProviderId,
+    TaskGenerationTurn,
+};
 
 pub struct AnthropicProvider {
     http: Client,
@@ -32,7 +35,7 @@ impl AnthropicProvider {
         selected_model: &str,
         system: &str,
         user_content: Vec<Value>,
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let body = json!({
             "model": selected_model,
@@ -63,7 +66,7 @@ impl AnthropicProvider {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        extract_assistant_text(&payload)
+        extract_assistant_completion(&payload)
     }
 
     async fn fetch_model_ids(&self, api_key: &str) -> Result<Vec<String>, AiError> {
@@ -119,7 +122,7 @@ impl AiProvider for AnthropicProvider {
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_project_enhancement_system_prompt();
         let user = build_project_enhancement_user_content(project_name, requirements, documents);
         self.complete_enhancement(api_key, selected_model, &system, user)
@@ -135,7 +138,7 @@ impl AiProvider for AnthropicProvider {
         feature_title: &str,
         feature_requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_feature_requirements_system_prompt();
         let user = build_feature_requirements_user_content(
             project_name,
@@ -158,7 +161,7 @@ impl AiProvider for AnthropicProvider {
         feature_requirements: &str,
         feedback_history: &[TaskGenerationTurn],
         document_context_items: &[DocumentContextItem],
-    ) -> Result<Vec<GeneratedTaskCandidate>, AiError> {
+    ) -> Result<AiCompletion<Vec<GeneratedTaskCandidate>>, AiError> {
         let (system, message_pairs) = build_generate_tasks_messages(
             project_name,
             project_requirements,
@@ -201,12 +204,16 @@ impl AiProvider for AnthropicProvider {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let text = extract_assistant_text(&payload)?;
-        parse_generated_tasks(&text)
+        let completion = extract_assistant_completion(&payload)?;
+        let tasks = parse_generated_tasks(&completion.value)?;
+        Ok(AiCompletion {
+            value: tasks,
+            usage: completion.usage,
+        })
     }
 }
 
-fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
+fn extract_assistant_completion(payload: &Value) -> Result<AiCompletion<String>, AiError> {
     let content = payload
         .get("content")
         .and_then(|c| c.as_array())
@@ -227,7 +234,26 @@ fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
     if trimmed.is_empty() {
         return Err(AiError::Empty);
     }
-    Ok(trimmed)
+    Ok(AiCompletion {
+        value: trimmed,
+        usage: parse_anthropic_usage(payload),
+    })
+}
+
+fn parse_anthropic_usage(payload: &Value) -> AiTokenUsage {
+    let usage = payload.get("usage");
+    let input_tokens = usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output_tokens = usage
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    AiTokenUsage {
+        input_tokens: u32::try_from(input_tokens).unwrap_or(u32::MAX),
+        output_tokens: u32::try_from(output_tokens).unwrap_or(u32::MAX),
+    }
 }
 
 fn strip_markdown_code_fence(s: &str) -> &str {

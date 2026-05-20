@@ -9,7 +9,10 @@ use crate::ai::build_generate_tasks_messages;
 use crate::ai::build_project_enhancement_system_prompt;
 use crate::ai::build_project_enhancement_user_content;
 use crate::ai::{AiError, AiProvider};
-use crate::types::{DocumentContextItem, GeneratedTaskCandidate, ProviderId, TaskGenerationTurn};
+use crate::types::{
+    AiCompletion, AiTokenUsage, DocumentContextItem, GeneratedTaskCandidate, ProviderId,
+    TaskGenerationTurn,
+};
 
 pub struct OpenAiProvider {
     http: Client,
@@ -32,7 +35,7 @@ impl OpenAiProvider {
         selected_model: &str,
         system: &str,
         user_content: Vec<Value>,
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let url = format!(
             "{}/v1/chat/completions",
             self.base_url.trim_end_matches('/')
@@ -68,7 +71,7 @@ impl OpenAiProvider {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        extract_chat_completion_text(&payload)
+        extract_chat_completion(&payload)
     }
     async fn fetch_model_ids(&self, api_key: &str) -> Result<Vec<String>, AiError> {
         let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
@@ -122,7 +125,7 @@ impl AiProvider for OpenAiProvider {
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_project_enhancement_system_prompt();
         let user = build_project_enhancement_user_content(project_name, requirements, documents);
         self.complete_enhancement(api_key, selected_model, &system, user)
@@ -138,7 +141,7 @@ impl AiProvider for OpenAiProvider {
         feature_title: &str,
         feature_requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_feature_requirements_system_prompt();
         let user = build_feature_requirements_user_content(
             project_name,
@@ -161,7 +164,7 @@ impl AiProvider for OpenAiProvider {
         feature_requirements: &str,
         feedback_history: &[TaskGenerationTurn],
         document_context_items: &[DocumentContextItem],
-    ) -> Result<Vec<GeneratedTaskCandidate>, AiError> {
+    ) -> Result<AiCompletion<Vec<GeneratedTaskCandidate>>, AiError> {
         let (system, message_pairs) = build_generate_tasks_messages(
             project_name,
             project_requirements,
@@ -207,8 +210,12 @@ impl AiProvider for OpenAiProvider {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let text = extract_chat_completion_text(&payload)?;
-        parse_generated_tasks(&text)
+        let completion = extract_chat_completion(&payload)?;
+        let tasks = parse_generated_tasks(&completion.value)?;
+        Ok(AiCompletion {
+            value: tasks,
+            usage: completion.usage,
+        })
     }
 }
 
@@ -262,7 +269,7 @@ fn convert_openai_content_block(block: Value) -> Result<Value, AiError> {
     }
 }
 
-fn extract_chat_completion_text(payload: &Value) -> Result<String, AiError> {
+fn extract_chat_completion(payload: &Value) -> Result<AiCompletion<String>, AiError> {
     let text = payload
         .get("choices")
         .and_then(|choices| choices.as_array())
@@ -274,7 +281,26 @@ fn extract_chat_completion_text(payload: &Value) -> Result<String, AiError> {
         .filter(|content| !content.is_empty())
         .ok_or(AiError::Empty)?;
 
-    Ok(text.to_string())
+    Ok(AiCompletion {
+        value: text.to_string(),
+        usage: parse_openai_usage(payload),
+    })
+}
+
+fn parse_openai_usage(payload: &Value) -> AiTokenUsage {
+    let usage = payload.get("usage");
+    let input_tokens = usage
+        .and_then(|u| u.get("prompt_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output_tokens = usage
+        .and_then(|u| u.get("completion_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    AiTokenUsage {
+        input_tokens: u32::try_from(input_tokens).unwrap_or(u32::MAX),
+        output_tokens: u32::try_from(output_tokens).unwrap_or(u32::MAX),
+    }
 }
 
 fn strip_markdown_code_fence(s: &str) -> &str {

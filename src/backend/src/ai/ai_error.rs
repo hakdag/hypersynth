@@ -21,3 +21,14 @@ impl fmt::Display for AiError {
 }
 
 impl std::error::Error for AiError {}
+
+impl AiError {
+    pub fn code(&self) -> String {
+        match self {
+            AiError::Network => "network".into(),
+            AiError::Provider(status) => format!("provider_{}", status.as_u16()),
+            AiError::Decode => "decode".into(),
+            AiError::Empty => "empty".into(),
+        }
+    }
+}

@@ -2,6 +2,7 @@ mod admin_company_route;
 mod admin_user_route;
 mod ai;
 mod ai_provider_route;
+mod ai_usage_service;
 mod app_state;
 mod auth_route;
 mod authorization;
