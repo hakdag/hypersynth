@@ -6,6 +6,9 @@ use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::ai_usage_query_helpers::{
+    internal_error, pagination_limit, pagination_offset, resolve_range, DEFAULT_RANGE_DAYS,
+};
 use crate::app_state::AppState;
 use crate::auth_route::require_system_admin;
 use crate::types::{
@@ -14,10 +17,6 @@ use crate::types::{
     AdminAiUsageFailureQuery, AdminAiUsageFailureRow, AdminAiUsageHighUsageSort,
     AdminAiUsageRangeQuery, AdminAiUsageSummary, AdminAiUsageTotals, ApiErrorBody,
 };
-
-const DEFAULT_RANGE_DAYS: i64 = 30;
-const DEFAULT_LIST_LIMIT: i64 = 50;
-const MAX_LIST_LIMIT: i64 = 200;
 
 pub async fn admin_ai_usage_summary(
     State(state): State<AppState>,
@@ -278,37 +277,3 @@ async fn fetch_totals(
     })
 }
 
-fn resolve_range(
-    from: Option<DateTime<Utc>>,
-    to: Option<DateTime<Utc>>,
-) -> Result<(DateTime<Utc>, DateTime<Utc>), (StatusCode, Json<ApiErrorBody>)> {
-    let to = to.unwrap_or_else(Utc::now);
-    let from = from.unwrap_or_else(|| to - Duration::days(DEFAULT_RANGE_DAYS));
-
-    if from >= to {
-        return Err(bad_request("'from' must be before 'to'."));
-    }
-
-    Ok((from, to))
-}
-
-fn pagination_limit(limit: Option<i64>) -> i64 {
-    limit
-        .unwrap_or(DEFAULT_LIST_LIMIT)
-        .clamp(1, MAX_LIST_LIMIT)
-}
-
-fn pagination_offset(offset: Option<i64>) -> i64 {
-    offset.unwrap_or(0).max(0)
-}
-
-fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
-    (StatusCode::BAD_REQUEST, Json(ApiErrorBody::msg(message)))
-}
-
-fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ApiErrorBody::msg("Something went wrong. Please try again.")),
-    )
-}

@@ -3,18 +3,23 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
+import {
+  AiUsageByProviderModelRow,
+  AiUsageByUserRow,
+  AiUsageDateRange,
+  AiUsageFailureRow,
+  AiUsageListOptions,
+  AiUsageSort,
+  AiUsageTotals,
+} from './ai-usage-types';
 
-export type AdminAiUsageSort = 'tokens' | 'cost';
-
-export interface AdminAiUsageTotals {
-  requestCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  successCount: number;
-  failureCount: number;
-}
+export type AdminAiUsageSort = AiUsageSort;
+export type AdminAiUsageTotals = AiUsageTotals;
+export type AdminAiUsageByUserRow = AiUsageByUserRow;
+export type AdminAiUsageByProviderModelRow = AiUsageByProviderModelRow;
+export type AdminAiUsageFailureRow = AiUsageFailureRow;
+export type AdminAiUsageDateRange = AiUsageDateRange;
+export type AdminAiUsageListOptions = AiUsageListOptions;
 
 export interface AdminAiUsageByCompanyRow {
   companyId: string | null;
@@ -26,56 +31,6 @@ export interface AdminAiUsageByCompanyRow {
   estimatedCost: number;
   successCount: number;
   failureCount: number;
-}
-
-export interface AdminAiUsageByUserRow {
-  userId: string;
-  userEmail: string;
-  userFullName: string;
-  companyId: string | null;
-  companyName: string | null;
-  requestCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  successCount: number;
-  failureCount: number;
-}
-
-export interface AdminAiUsageByProviderModelRow {
-  provider: string;
-  model: string;
-  requestCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  successCount: number;
-  failureCount: number;
-}
-
-export interface AdminAiUsageFailureRow {
-  id: string;
-  companyId: string | null;
-  companyName: string | null;
-  userId: string;
-  userEmail: string;
-  provider: string;
-  model: string;
-  operationType: string;
-  errorCode: string | null;
-  createdAt: string;
-}
-
-export interface AdminAiUsageDateRange {
-  from?: string;
-  to?: string;
-}
-
-export interface AdminAiUsageListOptions extends AdminAiUsageDateRange {
-  limit?: number;
-  offset?: number;
 }
 
 @Injectable({

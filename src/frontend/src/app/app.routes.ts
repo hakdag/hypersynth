@@ -2,7 +2,9 @@ import { Routes } from '@angular/router';
 
 import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
+import { companyAdminGuard } from './company-admin.guard';
 import { companyGuard } from './company.guard';
+import { CompanyAiUsage } from './company-ai-usage/company-ai-usage';
 import { CompanyProfile } from './company-profile/company-profile';
 import { InvitationAccept } from './invitation-accept/invitation-accept';
 import { InvitationCreate } from './invitation-create/invitation-create';
@@ -70,6 +72,11 @@ export const routes: Routes = [
       { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'company', component: CompanyProfile, canActivate: [companyGuard] },
+      {
+        path: 'company/ai-usage',
+        component: CompanyAiUsage,
+        canActivate: [companyGuard, companyAdminGuard],
+      },
       {
         path: 'team/invitations',
         component: InvitationList,

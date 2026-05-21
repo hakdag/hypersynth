@@ -3,7 +3,9 @@ mod admin_company_route;
 mod admin_user_route;
 mod ai;
 mod ai_provider_route;
+mod ai_usage_query_helpers;
 mod ai_usage_service;
+mod company_ai_usage_route;
 mod app_state;
 mod auth_route;
 mod authorization;
@@ -49,6 +51,10 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use company_ai_usage_route::{
+    company_ai_usage_by_project, company_ai_usage_by_provider_model, company_ai_usage_by_user,
+    company_ai_usage_failures, company_ai_usage_summary,
+};
 use company_registration_route::register_company;
 use company_route::{get_current_company, list_company_users, update_current_company};
 use configs::AppConfig;
@@ -238,6 +244,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/admin/ai-usage/failures",
             get(admin_ai_usage_failures),
+        )
+        .route(
+            "/api/v1/company/ai-usage/summary",
+            get(company_ai_usage_summary),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-user",
+            get(company_ai_usage_by_user),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-project",
+            get(company_ai_usage_by_project),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-provider-model",
+            get(company_ai_usage_by_provider_model),
+        )
+        .route(
+            "/api/v1/company/ai-usage/failures",
+            get(company_ai_usage_failures),
         )
         .route(
             "/api/v1/invitations",

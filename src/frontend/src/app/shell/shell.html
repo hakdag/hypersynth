@@ -68,6 +68,16 @@
             <span>Company</span>
           </a>
         }
+        @if (!isSystemAdmin() && hasCompanyAssociation() && isCompanyAdmin()) {
+          <a
+            routerLink="/app/company/ai-usage"
+            class="sidebar-link"
+            [class.sidebar-link-active]="companyAiUsageNavActive()"
+          >
+            <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">monitoring</span>
+            <span>AI usage</span>
+          </a>
+        }
         @if (!isSystemAdmin() && hasCompanyAssociation() && canInviteUsers()) {
           <a
             routerLink="/app/team/invitations"
