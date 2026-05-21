@@ -1,0 +1,253 @@
+<div class="aau-page">
+  <header class="aau-header">
+    <div>
+      <h1 class="aau-title">Company AI usage</h1>
+      <p class="aau-subtitle">Monitor your company's AI consumption, cost, and failures.</p>
+    </div>
+    <form class="aau-range" [formGroup]="rangeForm" (ngSubmit)="refresh()">
+      <label class="aau-range-field">
+        <span>From</span>
+        <input type="datetime-local" formControlName="from" />
+      </label>
+      <label class="aau-range-field">
+        <span>To</span>
+        <input type="datetime-local" formControlName="to" />
+      </label>
+      <button type="submit" class="aau-btn aau-btn-primary">Apply range</button>
+    </form>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="aau-muted">Loading AI usage…</p>
+    }
+    @case ('error') {
+      <div class="aau-banner aau-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="aau-btn aau-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (totals(); as t) {
+        <section class="aau-totals" aria-label="Usage totals">
+          <div class="aau-total-card">
+            <span class="aau-total-label">Requests</span>
+            <span class="aau-total-value">{{ t.requestCount | number }}</span>
+          </div>
+          <div class="aau-total-card">
+            <span class="aau-total-label">Total tokens</span>
+            <span class="aau-total-value">{{ t.totalTokens | number }}</span>
+          </div>
+          <div class="aau-total-card">
+            <span class="aau-total-label">Est. cost (USD)</span>
+            <span class="aau-total-value">${{ formatCost(t.estimatedCost) }}</span>
+          </div>
+          <div class="aau-total-card">
+            <span class="aau-total-label">Success</span>
+            <span class="aau-total-value aau-success">{{ t.successCount | number }}</span>
+          </div>
+          <div class="aau-total-card">
+            <span class="aau-total-label">Failed</span>
+            <span class="aau-total-value aau-failure">{{ t.failureCount | number }}</span>
+          </div>
+        </section>
+      }
+
+      <nav class="aau-tabs" aria-label="AI usage sections">
+        <button
+          type="button"
+          class="aau-tab"
+          [class.aau-tab-active]="activeSection() === 'users'"
+          (click)="setSection('users')"
+        >
+          By user
+        </button>
+        <button
+          type="button"
+          class="aau-tab"
+          [class.aau-tab-active]="activeSection() === 'projects'"
+          (click)="setSection('projects')"
+        >
+          By project
+        </button>
+        <button
+          type="button"
+          class="aau-tab"
+          [class.aau-tab-active]="activeSection() === 'providers'"
+          (click)="setSection('providers')"
+        >
+          By provider / model
+        </button>
+        <button
+          type="button"
+          class="aau-tab"
+          [class.aau-tab-active]="activeSection() === 'failures'"
+          (click)="setSection('failures')"
+        >
+          Failed requests
+        </button>
+      </nav>
+
+      @switch (activeSection()) {
+        @case ('users') {
+          <section class="aau-section">
+            <h2 class="aau-section-title">By user</h2>
+            @if (byUser().length === 0) {
+              <p class="aau-muted">No AI usage in this period.</p>
+            } @else {
+              <div class="aau-table-wrap">
+                <table class="aau-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Requests</th>
+                      <th>Tokens</th>
+                      <th>Cost (USD)</th>
+                      <th>Failed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of byUser(); track row.userId) {
+                      <tr>
+                        <td>
+                          {{ row.userFullName }}
+                          <span class="aau-secondary">{{ row.userEmail }}</span>
+                        </td>
+                        <td>{{ row.requestCount | number }}</td>
+                        <td>{{ row.totalTokens | number }}</td>
+                        <td>${{ formatCost(row.estimatedCost) }}</td>
+                        <td>{{ row.failureCount | number }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+        @case ('projects') {
+          <section class="aau-section">
+            <h2 class="aau-section-title">By project</h2>
+            @if (byProject().length === 0) {
+              <p class="aau-muted">No AI usage in this period.</p>
+            } @else {
+              <div class="aau-table-wrap">
+                <table class="aau-table">
+                  <thead>
+                    <tr>
+                      <th>Project</th>
+                      <th>Requests</th>
+                      <th>Tokens</th>
+                      <th>Cost (USD)</th>
+                      <th>Success</th>
+                      <th>Failed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of byProject(); track row.projectId ?? 'unattributed') {
+                      <tr>
+                        <td>
+                          @if (row.projectId) {
+                            <a [routerLink]="['/app/projects', row.projectId]" class="aau-link">
+                              {{ projectLabel(row) }}
+                            </a>
+                          } @else {
+                            {{ projectLabel(row) }}
+                          }
+                        </td>
+                        <td>{{ row.requestCount | number }}</td>
+                        <td>{{ row.totalTokens | number }}</td>
+                        <td>${{ formatCost(row.estimatedCost) }}</td>
+                        <td>{{ row.successCount | number }}</td>
+                        <td>{{ row.failureCount | number }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+        @case ('providers') {
+          <section class="aau-section">
+            <h2 class="aau-section-title">By provider and model</h2>
+            @if (byProviderModel().length === 0) {
+              <p class="aau-muted">No AI usage in this period.</p>
+            } @else {
+              <div class="aau-table-wrap">
+                <table class="aau-table">
+                  <thead>
+                    <tr>
+                      <th>Provider</th>
+                      <th>Model</th>
+                      <th>Requests</th>
+                      <th>Tokens</th>
+                      <th>Cost (USD)</th>
+                      <th>Failed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of byProviderModel(); track row.provider + row.model) {
+                      <tr>
+                        <td>{{ row.provider }}</td>
+                        <td>{{ row.model }}</td>
+                        <td>{{ row.requestCount | number }}</td>
+                        <td>{{ row.totalTokens | number }}</td>
+                        <td>${{ formatCost(row.estimatedCost) }}</td>
+                        <td>{{ row.failureCount | number }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+        @case ('failures') {
+          <section class="aau-section">
+            <h2 class="aau-section-title">Failed requests</h2>
+            <form class="aau-filters" [formGroup]="failureFilters" (ngSubmit)="refresh()">
+              <label>
+                <span>User ID</span>
+                <input type="text" formControlName="userId" placeholder="UUID (optional)" />
+              </label>
+              <label>
+                <span>Provider</span>
+                <input type="text" formControlName="provider" placeholder="anthropic or openai" />
+              </label>
+              <button type="submit" class="aau-btn aau-btn-ghost">Filter</button>
+            </form>
+            @if (failures().length === 0) {
+              <p class="aau-muted">No failed requests in this period.</p>
+            } @else {
+              <div class="aau-table-wrap">
+                <table class="aau-table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>User</th>
+                      <th>Provider</th>
+                      <th>Model</th>
+                      <th>Operation</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of failures(); track row.id) {
+                      <tr>
+                        <td>{{ row.createdAt | date: 'medium' }}</td>
+                        <td>{{ row.userEmail }}</td>
+                        <td>{{ row.provider }}</td>
+                        <td>{{ row.model }}</td>
+                        <td>{{ operationLabel(row.operationType) }}</td>
+                        <td><code class="aau-code">{{ row.errorCode ?? '—' }}</code></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+      }
+    }
+  }
+</div>

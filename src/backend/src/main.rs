@@ -1,7 +1,11 @@
+mod admin_ai_usage_route;
 mod admin_company_route;
 mod admin_user_route;
 mod ai;
 mod ai_provider_route;
+mod ai_usage_query_helpers;
+mod ai_usage_service;
+mod company_ai_usage_route;
 mod app_state;
 mod auth_route;
 mod authorization;
@@ -30,6 +34,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use admin_ai_usage_route::{
+    admin_ai_usage_by_company, admin_ai_usage_by_provider_model, admin_ai_usage_by_user,
+    admin_ai_usage_failures, admin_ai_usage_summary,
+};
 use admin_company_route::{get_admin_company, list_admin_companies, set_admin_company_status};
 use admin_user_route::{
     get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
@@ -43,6 +51,10 @@ use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use company_ai_usage_route::{
+    company_ai_usage_by_project, company_ai_usage_by_provider_model, company_ai_usage_by_user,
+    company_ai_usage_failures, company_ai_usage_summary,
+};
 use company_registration_route::register_company;
 use company_route::{get_current_company, list_company_users, update_current_company};
 use configs::AppConfig;
@@ -212,6 +224,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/admin/users/{user_id}/reset-access",
             post(reset_admin_user_access),
+        )
+        .route(
+            "/api/v1/admin/ai-usage/summary",
+            get(admin_ai_usage_summary),
+        )
+        .route(
+            "/api/v1/admin/ai-usage/by-company",
+            get(admin_ai_usage_by_company),
+        )
+        .route(
+            "/api/v1/admin/ai-usage/by-user",
+            get(admin_ai_usage_by_user),
+        )
+        .route(
+            "/api/v1/admin/ai-usage/by-provider-model",
+            get(admin_ai_usage_by_provider_model),
+        )
+        .route(
+            "/api/v1/admin/ai-usage/failures",
+            get(admin_ai_usage_failures),
+        )
+        .route(
+            "/api/v1/company/ai-usage/summary",
+            get(company_ai_usage_summary),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-user",
+            get(company_ai_usage_by_user),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-project",
+            get(company_ai_usage_by_project),
+        )
+        .route(
+            "/api/v1/company/ai-usage/by-provider-model",
+            get(company_ai_usage_by_provider_model),
+        )
+        .route(
+            "/api/v1/company/ai-usage/failures",
+            get(company_ai_usage_failures),
         )
         .route(
             "/api/v1/invitations",

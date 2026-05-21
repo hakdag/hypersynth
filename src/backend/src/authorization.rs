@@ -8,6 +8,8 @@ pub const MANAGE_COMPANY_PROFILE: &[CompanyRole] = &[CompanyRole::CompanyAdmin];
 /// Per Phase 1 FRD §5.3: Company Admin and Project Manager may invite users.
 pub const INVITE_USERS: &[CompanyRole] = &[CompanyRole::CompanyAdmin, CompanyRole::ProjectManager];
 
+pub const VIEW_COMPANY_AI_USAGE: &[CompanyRole] = &[CompanyRole::CompanyAdmin];
+
 pub async fn require_company_role(
     user: &SessionUser,
     allowed: &[CompanyRole],

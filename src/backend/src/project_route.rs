@@ -11,14 +11,15 @@ use serde_json::json;
 use tracing::{info, warn};
 
 use crate::ai::AiError;
+use crate::ai_usage_service::AiUsageService;
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::document_context_service::DocumentContextService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::types::{
-    AcceptGeneratedTasksRequest, ApiErrorBody, CompanyRole, CreateFeatureRequest,
-    CreateProjectRequest, CreateTaskRequest, DocumentContextError,
+    AcceptGeneratedTasksRequest, AiOperationType, AiUsageScope, ApiErrorBody, CompanyRole,
+    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
     EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
@@ -616,7 +617,17 @@ pub async fn enhance_project_requirements(
     .await
     .map_err(map_document_context_error)?;
 
-    let enhanced_requirements = state
+    let usage_scope = AiUsageScope {
+        company_id: scope.company_id_or_null(),
+        user_id: scope.session_user_id(),
+        project_id: Some(project_id),
+        feature_id: None,
+        operation_type: AiOperationType::EnhanceProjectRequirements,
+        provider: ai_settings.provider,
+        model: &ai_settings.selected_model,
+    };
+
+    let completion = state
         .ai_providers
         .get(ai_settings.provider)
         .enhance_requirements(
@@ -626,29 +637,41 @@ pub async fn enhance_project_requirements(
             requirements,
             &document_context,
         )
-        .await
-        .map_err(|e| {
-            let status = match e {
-                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
-                    StatusCode::BAD_GATEWAY
-                }
-            };
-            warn!(
-                error = %e,
-                user_id = %user.id,
-                %project_id,
-                "enhance_project_requirements: provider call failed"
-            );
-            (
-                status,
-                Json(ApiErrorBody {
-                    message:
-                        "Could not generate enhanced requirements right now. Please try again."
-                            .into(),
-                    ..Default::default()
-                }),
-            )
-        })?;
+        .await;
+
+    match &completion {
+        Ok(c) => {
+            AiUsageService::record_success(&state.pool, usage_scope, c.usage).await;
+        }
+        Err(e) => {
+            AiUsageService::record_failure(&state.pool, usage_scope, e.code()).await;
+        }
+    }
+
+    let completion = completion.map_err(|e| {
+        let status = match e {
+            AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                StatusCode::BAD_GATEWAY
+            }
+        };
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            "enhance_project_requirements: provider call failed"
+        );
+        (
+            status,
+            Json(ApiErrorBody {
+                message:
+                    "Could not generate enhanced requirements right now. Please try again."
+                        .into(),
+                ..Default::default()
+            }),
+        )
+    })?;
+
+    let enhanced_requirements = completion.value;
 
     info!(
         user_id = %user.id,
@@ -774,7 +797,17 @@ pub async fn enhance_feature_requirements(
     .await
     .map_err(map_document_context_error)?;
 
-    let enhanced_requirements = state
+    let usage_scope = AiUsageScope {
+        company_id: scope.company_id_or_null(),
+        user_id: scope.session_user_id(),
+        project_id: Some(project_id),
+        feature_id: Some(feature_id),
+        operation_type: AiOperationType::EnhanceFeatureRequirements,
+        provider: ai_settings.provider,
+        model: &ai_settings.selected_model,
+    };
+
+    let completion = state
         .ai_providers
         .get(ai_settings.provider)
         .enhance_feature_requirements(
@@ -786,30 +819,42 @@ pub async fn enhance_feature_requirements(
             feature_requirements,
             &document_context,
         )
-        .await
-        .map_err(|e| {
-            let status = match e {
-                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
-                    StatusCode::BAD_GATEWAY
-                }
-            };
-            warn!(
-                error = %e,
-                user_id = %user.id,
-                %project_id,
-                %feature_id,
-                "enhance_feature_requirements: provider call failed"
-            );
-            (
-                status,
-                Json(ApiErrorBody {
-                    message:
-                        "Could not generate enhanced requirements right now. Please try again."
-                            .into(),
-                    ..Default::default()
-                }),
-            )
-        })?;
+        .await;
+
+    match &completion {
+        Ok(c) => {
+            AiUsageService::record_success(&state.pool, usage_scope, c.usage).await;
+        }
+        Err(e) => {
+            AiUsageService::record_failure(&state.pool, usage_scope, e.code()).await;
+        }
+    }
+
+    let completion = completion.map_err(|e| {
+        let status = match e {
+            AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                StatusCode::BAD_GATEWAY
+            }
+        };
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "enhance_feature_requirements: provider call failed"
+        );
+        (
+            status,
+            Json(ApiErrorBody {
+                message:
+                    "Could not generate enhanced requirements right now. Please try again."
+                        .into(),
+                ..Default::default()
+            }),
+        )
+    })?;
+
+    let enhanced_requirements = completion.value;
 
     info!(
         user_id = %user.id,
@@ -942,7 +987,23 @@ pub async fn generate_feature_tasks(
     .await
     .map_err(map_document_context_error)?;
 
-    let tasks = state
+    let operation_type = if payload.feedback_history.is_empty() {
+        AiOperationType::GenerateTasks
+    } else {
+        AiOperationType::RegenerateTasks
+    };
+
+    let usage_scope = AiUsageScope {
+        company_id: scope.company_id_or_null(),
+        user_id: scope.session_user_id(),
+        project_id: Some(project_id),
+        feature_id: Some(feature_id),
+        operation_type,
+        provider: ai_settings.provider,
+        model: &ai_settings.selected_model,
+    };
+
+    let completion = state
         .ai_providers
         .get(ai_settings.provider)
         .generate_tasks(
@@ -955,28 +1016,40 @@ pub async fn generate_feature_tasks(
             &payload.feedback_history,
             &document_context,
         )
-        .await
-        .map_err(|e| {
-            let status = match e {
-                AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
-                    StatusCode::BAD_GATEWAY
-                }
-            };
-            warn!(
-                error = %e,
-                user_id = %user.id,
-                %project_id,
-                %feature_id,
-                "generate_feature_tasks: provider call failed"
-            );
-            (
-                status,
-                Json(ApiErrorBody {
-                    message: "Could not generate tasks right now. Please try again.".into(),
-                    ..Default::default()
-                }),
-            )
-        })?;
+        .await;
+
+    match &completion {
+        Ok(c) => {
+            AiUsageService::record_success(&state.pool, usage_scope, c.usage).await;
+        }
+        Err(e) => {
+            AiUsageService::record_failure(&state.pool, usage_scope, e.code()).await;
+        }
+    }
+
+    let completion = completion.map_err(|e| {
+        let status = match e {
+            AiError::Network | AiError::Provider(_) | AiError::Decode | AiError::Empty => {
+                StatusCode::BAD_GATEWAY
+            }
+        };
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            "generate_feature_tasks: provider call failed"
+        );
+        (
+            status,
+            Json(ApiErrorBody {
+                message: "Could not generate tasks right now. Please try again.".into(),
+                ..Default::default()
+            }),
+        )
+    })?;
+
+    let tasks = completion.value;
 
     if tasks.len() > MAX_AI_GENERATED_TASKS {
         warn!(

@@ -5,6 +5,7 @@ use axum_extra::extract::cookie::CookieJar;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::admin_ai_usage_route::company_ai_usage_summary;
 use crate::app_state::AppState;
 use crate::auth_route::require_system_admin;
 use crate::types::{
@@ -94,7 +95,7 @@ pub async fn get_admin_company(
     let mut detail = fetch_admin_company_detail(&state.pool, company_id)
         .await?
         .ok_or_else(not_found)?;
-    detail.ai_usage = None;
+    attach_company_ai_usage(&state.pool, &mut detail).await;
 
     Ok(Json(detail))
 }
@@ -156,9 +157,19 @@ pub async fn set_admin_company_status(
     let mut detail = fetch_admin_company_detail(&state.pool, company_id)
         .await?
         .ok_or_else(not_found)?;
-    detail.ai_usage = None;
+    attach_company_ai_usage(&state.pool, &mut detail).await;
 
     Ok(Json(detail))
+}
+
+async fn attach_company_ai_usage(pool: &PgPool, detail: &mut AdminCompanyDetail) {
+    match company_ai_usage_summary(pool, detail.id).await {
+        Ok(summary) => detail.ai_usage = Some(summary),
+        Err(e) => {
+            tracing::warn!(error = %e, company_id = %detail.id, "failed to load company ai usage summary");
+            detail.ai_usage = None;
+        }
+    }
 }
 
 async fn fetch_admin_company_detail(
