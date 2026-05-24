@@ -16,6 +16,7 @@ import { FeatureView } from './feature-view/feature-view';
 import { AdminCompaniesList } from './admin-companies-list/admin-companies-list';
 import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail';
 import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
+import { AdminAuditLogs } from './admin-audit-logs/admin-audit-logs';
 import { AdminAiUsage } from './admin-ai-usage/admin-ai-usage';
 import { AdminUsersList } from './admin-users-list/admin-users-list';
 import { CompanyDisabled } from './company-disabled/company-disabled';
@@ -56,6 +57,7 @@ export const routes: Routes = [
           { path: 'users', component: AdminUsersList },
           { path: 'users/:userId', component: AdminUserDetail },
           { path: 'ai-usage', component: AdminAiUsage },
+          { path: 'audit-logs', component: AdminAuditLogs },
         ],
       },
       { path: 'projects', component: ProjectList },

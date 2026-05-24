@@ -1,42 +1,46 @@
-use axum::extract::{Query, State};
+use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use chrono::{DateTime, Duration, Utc};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::ai_usage_query_helpers::{
     internal_error, pagination_limit, pagination_offset, resolve_range, DEFAULT_RANGE_DAYS,
 };
-use crate::app_state::AppState;
 use crate::auth_route::require_system_admin;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     AdminAiUsageByCompanyQuery, AdminAiUsageByCompanyRow, AdminAiUsageByProviderModelQuery,
     AdminAiUsageByProviderModelRow, AdminAiUsageByUserQuery, AdminAiUsageByUserRow,
     AdminAiUsageFailureQuery, AdminAiUsageFailureRow, AdminAiUsageHighUsageSort,
-    AdminAiUsageRangeQuery, AdminAiUsageSummary, AdminAiUsageTotals, ApiErrorBody,
+    AdminAiUsageRangeQuery, AdminAiUsageSummary, AdminAiUsageTotals, ApiErrorBody, Tx,
 };
 
 pub async fn admin_ai_usage_summary(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminAiUsageRangeQuery>,
 ) -> Result<Json<AdminAiUsageTotals>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
-    let totals = fetch_totals(&state.pool, from, to, None)
+    let totals = fetch_totals(conn, from, to, None)
         .await
         .map_err(|_| internal_error())?;
     Ok(Json(totals))
 }
 
 pub async fn admin_ai_usage_by_company(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminAiUsageByCompanyQuery>,
 ) -> Result<Json<Vec<AdminAiUsageByCompanyRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -76,7 +80,7 @@ pub async fn admin_ai_usage_by_company(
         .bind(to)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **conn)
         .await
         .map_err(|_| internal_error())?;
 
@@ -84,11 +88,13 @@ pub async fn admin_ai_usage_by_company(
 }
 
 pub async fn admin_ai_usage_by_user(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminAiUsageByUserQuery>,
 ) -> Result<Json<Vec<AdminAiUsageByUserRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -123,7 +129,7 @@ pub async fn admin_ai_usage_by_user(
     .bind(query.company_id)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -131,11 +137,13 @@ pub async fn admin_ai_usage_by_user(
 }
 
 pub async fn admin_ai_usage_by_provider_model(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminAiUsageByProviderModelQuery>,
 ) -> Result<Json<Vec<AdminAiUsageByProviderModelRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
 
     let rows = sqlx::query_as::<_, AdminAiUsageByProviderModelRow>(
@@ -160,7 +168,7 @@ pub async fn admin_ai_usage_by_provider_model(
     .bind(from)
     .bind(to)
     .bind(query.company_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -168,11 +176,13 @@ pub async fn admin_ai_usage_by_provider_model(
 }
 
 pub async fn admin_ai_usage_failures(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminAiUsageFailureQuery>,
 ) -> Result<Json<Vec<AdminAiUsageFailureRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -216,7 +226,7 @@ pub async fn admin_ai_usage_failures(
     .bind(provider.as_deref())
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -224,12 +234,12 @@ pub async fn admin_ai_usage_failures(
 }
 
 pub async fn company_ai_usage_summary(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     company_id: Uuid,
 ) -> Result<AdminAiUsageSummary, sqlx::Error> {
     let to = Utc::now();
     let from = to - Duration::days(DEFAULT_RANGE_DAYS);
-    let totals = fetch_totals(pool, from, to, Some(company_id)).await?;
+    let totals = fetch_totals(conn, from, to, Some(company_id)).await?;
     Ok(AdminAiUsageSummary {
         total_requests: totals.request_count,
         total_tokens: totals.total_tokens,
@@ -238,7 +248,7 @@ pub async fn company_ai_usage_summary(
 }
 
 async fn fetch_totals(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     from: DateTime<Utc>,
     to: DateTime<Utc>,
     company_id: Option<Uuid>,
@@ -260,7 +270,7 @@ async fn fetch_totals(
     .bind(from)
     .bind(to)
     .bind(company_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
 
     let (request_count, input_tokens, output_tokens, estimated_cost, success_count, failure_count) =
@@ -276,4 +286,3 @@ async fn fetch_totals(
         failure_count,
     })
 }
-

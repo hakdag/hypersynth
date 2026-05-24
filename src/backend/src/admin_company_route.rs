@@ -1,27 +1,29 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::admin_ai_usage_route::company_ai_usage_summary;
-use crate::app_state::AppState;
 use crate::auth_route::require_system_admin;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     AdminCompaniesListQuery, AdminCompanyDetail, AdminCompanySummary, ApiErrorBody, CompanyStatus,
-    UpdateCompanyStatusRequest,
+    Tx, UpdateCompanyStatusRequest,
 };
 
 const DEFAULT_LIST_LIMIT: i64 = 50;
 const MAX_LIST_LIMIT: i64 = 200;
 
 pub async fn list_admin_companies(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminCompaniesListQuery>,
 ) -> Result<Json<Vec<AdminCompanySummary>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
     let limit = query
         .limit
@@ -78,7 +80,7 @@ pub async fn list_admin_companies(
     .bind(search.as_deref())
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -86,27 +88,31 @@ pub async fn list_admin_companies(
 }
 
 pub async fn get_admin_company(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(company_id): Path<Uuid>,
 ) -> Result<Json<AdminCompanyDetail>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
-    let mut detail = fetch_admin_company_detail(&state.pool, company_id)
+    let mut detail = fetch_admin_company_detail(conn, company_id)
         .await?
         .ok_or_else(not_found)?;
-    attach_company_ai_usage(&state.pool, &mut detail).await;
+    attach_company_ai_usage(conn, &mut detail).await;
 
     Ok(Json(detail))
 }
 
 pub async fn set_admin_company_status(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(company_id): Path<Uuid>,
     Json(payload): Json<UpdateCompanyStatusRequest>,
 ) -> Result<Json<AdminCompanyDetail>, (StatusCode, Json<ApiErrorBody>)> {
-    let admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
     match payload.status {
         CompanyStatus::Active | CompanyStatus::Disabled => {}
@@ -117,18 +123,16 @@ pub async fn set_admin_company_status(
         }
     }
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
-
     let previous_status: Option<String> =
         sqlx::query_scalar("SELECT status FROM companies WHERE id = $1 FOR UPDATE")
             .bind(company_id)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **conn)
             .await
             .map_err(|_| internal_error())?;
 
-    let Some(previous_status) = previous_status else {
+    if previous_status.is_none() {
         return Err(not_found());
-    };
+    }
 
     sqlx::query(
         r#"
@@ -139,31 +143,20 @@ pub async fn set_admin_company_status(
     )
     .bind(company_id)
     .bind(payload.status.as_db_value())
-    .execute(&mut *tx)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
-    tx.commit().await.map_err(|_| internal_error())?;
-
-    tracing::warn!(
-        target: "system_admin_audit",
-        admin_email = %admin_email,
-        company_id = %company_id,
-        previous_status = %previous_status,
-        new_status = %payload.status.as_db_value(),
-        "company status changed by system admin"
-    );
-
-    let mut detail = fetch_admin_company_detail(&state.pool, company_id)
+    let mut detail = fetch_admin_company_detail(conn, company_id)
         .await?
         .ok_or_else(not_found)?;
-    attach_company_ai_usage(&state.pool, &mut detail).await;
+    attach_company_ai_usage(conn, &mut detail).await;
 
     Ok(Json(detail))
 }
 
-async fn attach_company_ai_usage(pool: &PgPool, detail: &mut AdminCompanyDetail) {
-    match company_ai_usage_summary(pool, detail.id).await {
+async fn attach_company_ai_usage(conn: &mut PgConnection, detail: &mut AdminCompanyDetail) {
+    match company_ai_usage_summary(conn, detail.id).await {
         Ok(summary) => detail.ai_usage = Some(summary),
         Err(e) => {
             tracing::warn!(error = %e, company_id = %detail.id, "failed to load company ai usage summary");
@@ -173,7 +166,7 @@ async fn attach_company_ai_usage(pool: &PgPool, detail: &mut AdminCompanyDetail)
 }
 
 async fn fetch_admin_company_detail(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     company_id: Uuid,
 ) -> Result<Option<AdminCompanyDetail>, (StatusCode, Json<ApiErrorBody>)> {
     sqlx::query_as::<_, AdminCompanyDetail>(
@@ -221,7 +214,7 @@ async fn fetch_admin_company_detail(
         "#,
     )
     .bind(company_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())
 }

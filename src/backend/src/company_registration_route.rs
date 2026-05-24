@@ -1,17 +1,16 @@
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
-use crate::types::{ApiErrorBody, CompanyRegistrationRequest, CompanyRegistrationResponse};
+use crate::tx_extractor::missing_tx_error;
+use crate::types::{ApiErrorBody, CompanyRegistrationRequest, CompanyRegistrationResponse, Tx};
 use crate::user_registration::{
     email_contains_at_and_dot, hash_password_argon2, password_policy_error, username_is_valid,
     USERNAME_VALIDATION_MESSAGE,
 };
 
 pub async fn register_company(
-    State(state): State<AppState>,
+    tx: Tx,
     Json(payload): Json<CompanyRegistrationRequest>,
 ) -> Result<(StatusCode, Json<CompanyRegistrationResponse>), (StatusCode, Json<ApiErrorBody>)> {
     let name = payload.name.trim();
@@ -74,7 +73,8 @@ pub async fn register_company(
 
     let hash_str = hash_password_argon2(password).map_err(|_| internal_error())?;
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
 
     let company_id = match sqlx::query_scalar::<_, Uuid>(
         r#"
@@ -87,7 +87,7 @@ pub async fn register_company(
     .bind(company_email)
     .bind(country)
     .bind(timezone)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **conn)
     .await
     {
         Ok(id) => id,
@@ -120,7 +120,7 @@ pub async fn register_company(
     .bind(email)
     .bind(username)
     .bind(&hash_str)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **conn)
     .await
     {
         Ok(id) => id,
@@ -142,11 +142,9 @@ pub async fn register_company(
     )
     .bind(company_id)
     .bind(user_id)
-    .execute(&mut *tx)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
-
-    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok((
         StatusCode::CREATED,

@@ -1,3 +1,4 @@
+mod admin_audit_route;
 mod admin_ai_usage_route;
 mod admin_company_route;
 mod admin_user_route;
@@ -5,6 +6,9 @@ mod ai;
 mod ai_provider_route;
 mod ai_usage_query_helpers;
 mod ai_usage_service;
+mod audit_events_service;
+mod audit_log_query_service;
+mod audit_tx_middleware;
 mod company_ai_usage_route;
 mod app_state;
 mod auth_route;
@@ -26,6 +30,7 @@ mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
 mod tenant_scope_service;
+mod tx_extractor;
 mod types;
 mod user_registration;
 
@@ -34,6 +39,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use admin_audit_route::list_admin_audit_logs;
 use admin_ai_usage_route::{
     admin_ai_usage_by_company, admin_ai_usage_by_provider_model, admin_ai_usage_by_user,
     admin_ai_usage_failures, admin_ai_usage_summary,
@@ -49,8 +55,10 @@ use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
+use axum::middleware::from_fn_with_state;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
+use audit_tx_middleware::audit_tx_middleware;
 use company_ai_usage_route::{
     company_ai_usage_by_project, company_ai_usage_by_provider_model, company_ai_usage_by_user,
     company_ai_usage_failures, company_ai_usage_summary,
@@ -188,9 +196,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         system_admin: system_admin_config,
     };
 
-    let app = Router::new()
+    let public = Router::new()
         .route("/api/v1/health", get(health))
-        .route("/api/v1/bootstrap", get(bootstrap))
+        .route("/api/v1/bootstrap", get(bootstrap));
+
+    let protected = Router::new()
         .route("/api/v1/register", post(register_user))
         .route("/api/v1/companies/register", post(register_company))
         .route(
@@ -245,6 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/admin/ai-usage/failures",
             get(admin_ai_usage_failures),
         )
+        .route("/api/v1/admin/audit-logs", get(list_admin_audit_logs))
         .route(
             "/api/v1/company/ai-usage/summary",
             get(company_ai_usage_summary),
@@ -348,6 +359,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/projects/{project_id}/features/{feature_id}/tasks/{task_id}",
             get(get_project_task).patch(update_project_task),
         )
+        .layer(from_fn_with_state(state.clone(), audit_tx_middleware));
+
+    let app = public
+        .merge(protected)
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(cors);
