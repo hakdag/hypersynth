@@ -1,39 +1,40 @@
-use axum::extract::{Query, State};
+use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::ai_usage_query_helpers::{
     internal_error, pagination_limit, pagination_offset, resolve_range,
 };
-use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization::{forbidden, require_company_role, VIEW_COMPANY_AI_USAGE};
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     AdminAiUsageByProviderModelRow, AdminAiUsageTotals, ApiErrorBody, CompanyAiUsageByProjectRow,
     CompanyAiUsageByUserRow, CompanyAiUsageFailureQuery, CompanyAiUsageFailureRow,
-    CompanyAiUsageListQuery, CompanyAiUsageRangeQuery, SessionUser,
+    CompanyAiUsageListQuery, CompanyAiUsageRangeQuery, Tx,
 };
 
 async fn require_company_admin_company(
-    state: &AppState,
+    conn: &mut PgConnection,
     jar: &CookieJar,
-) -> Result<(SessionUser, Uuid), (StatusCode, Json<ApiErrorBody>)> {
-    let user = require_authenticated_user(&state.pool, jar).await?;
+) -> Result<Uuid, (StatusCode, Json<ApiErrorBody>)> {
+    let user = require_authenticated_user(conn, jar).await?;
     require_company_role(&user, VIEW_COMPANY_AI_USAGE).await?;
-    let company_id = user
-        .company_id
-        .ok_or_else(|| forbidden("You do not have permission to perform this action."))?;
-    Ok((user, company_id))
+    user.company_id
+        .ok_or_else(|| forbidden("You do not have permission to perform this action."))
 }
 
 pub async fn company_ai_usage_summary(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<CompanyAiUsageRangeQuery>,
 ) -> Result<Json<AdminAiUsageTotals>, (StatusCode, Json<ApiErrorBody>)> {
-    let (_user, company_id) = require_company_admin_company(&state, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let company_id = require_company_admin_company(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
 
     let row: (i64, i64, i64, f64, i64, i64) = sqlx::query_as(
@@ -53,7 +54,7 @@ pub async fn company_ai_usage_summary(
     .bind(company_id)
     .bind(from)
     .bind(to)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -72,11 +73,13 @@ pub async fn company_ai_usage_summary(
 }
 
 pub async fn company_ai_usage_by_user(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<CompanyAiUsageListQuery>,
 ) -> Result<Json<Vec<CompanyAiUsageByUserRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let (_user, company_id) = require_company_admin_company(&state, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let company_id = require_company_admin_company(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -108,7 +111,7 @@ pub async fn company_ai_usage_by_user(
     .bind(to)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -116,11 +119,13 @@ pub async fn company_ai_usage_by_user(
 }
 
 pub async fn company_ai_usage_by_project(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<CompanyAiUsageListQuery>,
 ) -> Result<Json<Vec<CompanyAiUsageByProjectRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let (_user, company_id) = require_company_admin_company(&state, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let company_id = require_company_admin_company(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -151,7 +156,7 @@ pub async fn company_ai_usage_by_project(
     .bind(to)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -159,11 +164,13 @@ pub async fn company_ai_usage_by_project(
 }
 
 pub async fn company_ai_usage_by_provider_model(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<CompanyAiUsageRangeQuery>,
 ) -> Result<Json<Vec<AdminAiUsageByProviderModelRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let (_user, company_id) = require_company_admin_company(&state, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let company_id = require_company_admin_company(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
 
     let rows = sqlx::query_as::<_, AdminAiUsageByProviderModelRow>(
@@ -188,7 +195,7 @@ pub async fn company_ai_usage_by_provider_model(
     .bind(company_id)
     .bind(from)
     .bind(to)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -196,11 +203,13 @@ pub async fn company_ai_usage_by_provider_model(
 }
 
 pub async fn company_ai_usage_failures(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<CompanyAiUsageFailureQuery>,
 ) -> Result<Json<Vec<CompanyAiUsageFailureRow>>, (StatusCode, Json<ApiErrorBody>)> {
-    let (_user, company_id) = require_company_admin_company(&state, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let company_id = require_company_admin_company(conn, &jar).await?;
     let (from, to) = resolve_range(query.from, query.to)?;
     let limit = pagination_limit(query.limit);
     let offset = pagination_offset(query.offset);
@@ -241,7 +250,7 @@ pub async fn company_ai_usage_failures(
     .bind(provider.as_deref())
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 

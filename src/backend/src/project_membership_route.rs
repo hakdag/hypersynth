@@ -1,22 +1,23 @@
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use chrono::{DateTime, Utc};
+use sqlx::PgConnection;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
 use crate::auth_route;
 use crate::authorization;
 use crate::tenant_scope_service::TenantScopeService;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     AccountType, AddProjectMemberRequest, ApiErrorBody, CompanyRole, ProjectMemberResponse,
-    ProjectMembershipRole, TenantScope,
+    ProjectMembershipRole, TenantScope, Tx,
 };
 
 async fn project_in_company_scope(
-    pool: &sqlx::PgPool,
+    conn: &mut PgConnection,
     project_id: Uuid,
     scope: TenantScope,
 ) -> Result<bool, (StatusCode, Json<ApiErrorBody>)> {
@@ -44,7 +45,7 @@ async fn project_in_company_scope(
     .bind(owner_id)
     .bind(is_admin)
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -52,7 +53,7 @@ async fn project_in_company_scope(
 }
 
 async fn caller_is_project_manager_member(
-    pool: &sqlx::PgPool,
+    conn: &mut PgConnection,
     project_id: Uuid,
     user_id: Uuid,
 ) -> Result<bool, (StatusCode, Json<ApiErrorBody>)> {
@@ -69,18 +70,18 @@ async fn caller_is_project_manager_member(
     )
     .bind(project_id)
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
     Ok(ok)
 }
 
 async fn ensure_can_list_members(
-    pool: &sqlx::PgPool,
+    conn: &mut PgConnection,
     scope: TenantScope,
     project_id: Uuid,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
-    if !project_in_company_scope(pool, project_id, scope).await? {
+    if !project_in_company_scope(conn, project_id, scope).await? {
         return Err(not_found_project());
     }
     if scope.is_company_admin() {
@@ -97,7 +98,7 @@ async fn ensure_can_list_members(
     )
     .bind(project_id)
     .bind(uid)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
     if is_member {
@@ -108,18 +109,18 @@ async fn ensure_can_list_members(
 }
 
 async fn ensure_can_manage_members(
-    pool: &sqlx::PgPool,
+    conn: &mut PgConnection,
     scope: TenantScope,
     project_id: Uuid,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
-    if !project_in_company_scope(pool, project_id, scope).await? {
+    if !project_in_company_scope(conn, project_id, scope).await? {
         return Err(not_found_project());
     }
     if scope.is_company_admin() {
         return Ok(());
     }
     let uid = scope.session_user_id();
-    if caller_is_project_manager_member(pool, project_id, uid).await? {
+    if caller_is_project_manager_member(conn, project_id, uid).await? {
         Ok(())
     } else {
         Err(authorization::forbidden(
@@ -129,11 +130,14 @@ async fn ensure_can_manage_members(
 }
 
 pub async fn list_project_members(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectMemberResponse>>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     if user.account_type != AccountType::Company {
         return Err(authorization::forbidden(
             "You do not have permission to perform this action.",
@@ -146,7 +150,7 @@ pub async fn list_project_members(
         ));
     };
 
-    ensure_can_list_members(&state.pool, scope, project_id).await?;
+    ensure_can_list_members(conn, scope, project_id).await?;
 
     let rows = sqlx::query_as::<_, (Uuid, String, String, Option<String>, String, DateTime<Utc>)>(
         r#"
@@ -161,7 +165,7 @@ pub async fn list_project_members(
     )
     .bind(project_id)
     .bind(company_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, "list_project_members: query failed");
@@ -187,12 +191,15 @@ pub async fn list_project_members(
 }
 
 pub async fn add_project_member(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<AddProjectMemberRequest>,
 ) -> Result<Json<ProjectMemberResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     if user.account_type != AccountType::Company {
         return Err(authorization::forbidden(
             "You do not have permission to perform this action.",
@@ -205,7 +212,7 @@ pub async fn add_project_member(
         ));
     };
 
-    ensure_can_manage_members(&state.pool, scope, project_id).await?;
+    ensure_can_manage_members(conn, scope, project_id).await?;
 
     let in_company: bool = sqlx::query_scalar(
         r#"
@@ -217,7 +224,7 @@ pub async fn add_project_member(
     )
     .bind(company_id)
     .bind(payload.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -235,7 +242,7 @@ pub async fn add_project_member(
     .bind(project_id)
     .bind(payload.user_id)
     .bind(payload.project_role.as_db_value())
-    .execute(&state.pool)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -253,7 +260,7 @@ pub async fn add_project_member(
     .bind(project_id)
     .bind(payload.user_id)
     .bind(company_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|_| internal_error())?
     .ok_or_else(not_found_project)?;
@@ -274,11 +281,14 @@ pub async fn add_project_member(
 }
 
 pub async fn remove_project_member(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, member_user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     if user.account_type != AccountType::Company {
         return Err(authorization::forbidden(
             "You do not have permission to perform this action.",
@@ -291,7 +301,7 @@ pub async fn remove_project_member(
         ));
     };
 
-    ensure_can_manage_members(&state.pool, scope, project_id).await?;
+    ensure_can_manage_members(conn, scope, project_id).await?;
 
     sqlx::query(
         r#"
@@ -306,7 +316,7 @@ pub async fn remove_project_member(
     .bind(project_id)
     .bind(member_user_id)
     .bind(company_id)
-    .execute(&state.pool)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 

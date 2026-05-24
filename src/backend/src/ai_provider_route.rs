@@ -7,19 +7,23 @@ use tracing::{info, warn};
 use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     ApiErrorBody, ListProviderModelsRequest, ListProviderModelsResponse, ProviderCatalogResponse,
-    ProviderId,
+    ProviderId, Tx,
 };
 
 pub async fn list_supported_providers(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Json<ProviderCatalogResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, "api: GET /api/v1/ai/providers");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -30,6 +34,7 @@ pub async fn list_supported_providers(
             );
             (status, json)
         })?;
+    drop(guard);
 
     let providers = state.ai_providers.supported();
     info!(
@@ -43,6 +48,7 @@ pub async fn list_supported_providers(
 
 pub async fn list_provider_models(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(provider_id): Path<String>,
     Json(payload): Json<ListProviderModelsRequest>,
@@ -54,7 +60,9 @@ pub async fn list_provider_models(
         "api: POST /api/v1/ai/providers/:provider_id/models"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -66,6 +74,7 @@ pub async fn list_provider_models(
             );
             (status, json)
         })?;
+    drop(guard);
 
     let provider = provider_id
         .parse::<ProviderId>()
@@ -136,3 +145,4 @@ fn not_found(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         }),
     )
 }
+

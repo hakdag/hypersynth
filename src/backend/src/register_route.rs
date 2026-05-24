@@ -1,16 +1,15 @@
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
-use crate::types::{AccountType, ApiErrorBody, RegisterRequest, RegisterSuccessResponse};
+use crate::tx_extractor::missing_tx_error;
+use crate::types::{AccountType, ApiErrorBody, RegisterRequest, RegisterSuccessResponse, Tx};
 use crate::user_registration::{
     email_contains_at_and_dot, hash_password_argon2, password_policy_error,
 };
 
 pub async fn register_user(
-    State(state): State<AppState>,
+    tx: Tx,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterSuccessResponse>), (StatusCode, Json<ApiErrorBody>)> {
     let fullname = payload.fullname.trim();
@@ -42,7 +41,8 @@ pub async fn register_user(
         ));
     }
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
 
     let user_id = match sqlx::query_scalar::<_, Uuid>(
         r#"
@@ -55,7 +55,7 @@ pub async fn register_user(
     .bind(email)
     .bind(&hash_str)
     .bind(account_type)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **conn)
     .await
     {
         Ok(id) => id,
@@ -73,8 +73,6 @@ pub async fn register_user(
             return Err(internal_error());
         }
     };
-
-    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok((
         StatusCode::CREATED,

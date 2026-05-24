@@ -13,17 +13,19 @@ use tracing::{info, warn};
 use crate::ai::AiError;
 use crate::ai_usage_service::AiUsageService;
 use crate::app_state::AppState;
+use crate::audit_events_service::AuditEventsService;
 use crate::auth_route;
 use crate::document_context_service::DocumentContextService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
+use crate::tx_extractor::{missing_tx_error, AuditCtx};
 use crate::types::{
-    AcceptGeneratedTasksRequest, AiOperationType, AiUsageScope, ApiErrorBody, CompanyRole,
-    CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest, DocumentContextError,
-    EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
+    AcceptGeneratedTasksRequest, AiOperationType, AiUsageScope, ApiErrorBody, AuditEventType,
+    CompanyRole, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest,
+    DocumentContextError, EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
-    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, UpdateFeatureRequest,
+    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, Tx, UpdateFeatureRequest,
     UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
@@ -34,12 +36,15 @@ fn scope_bindings(scope: TenantScope) -> (Option<Uuid>, Option<Uuid>) {
 
 pub async fn list_projects(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Json<Vec<ProjectResponse>>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, "api: GET /api/v1/projects");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -73,7 +78,7 @@ pub async fn list_projects(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, "list_projects: query failed");
@@ -91,13 +96,16 @@ pub async fn list_projects(
 
 pub async fn get_project(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<ProjectDetailResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -153,7 +161,7 @@ pub async fn get_project(
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
     .bind(can_manage_ai_settings)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, "get_project: query failed");
@@ -180,6 +188,7 @@ pub async fn get_project(
 
 pub async fn create_project(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<CreateProjectRequest>,
 ) -> Result<(StatusCode, Json<ProjectResponse>), (StatusCode, Json<ApiErrorBody>)> {
@@ -194,7 +203,9 @@ pub async fn create_project(
         name_len, has_requirements, "api: POST /api/v1/projects"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -221,11 +232,6 @@ pub async fn create_project(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
-    let mut tx = state.pool.begin().await.map_err(|e| {
-        warn!(error = %e, user_id = %user.id, "create_project: begin tx failed");
-        internal_error()
-    })?;
-
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
         INSERT INTO projects (
@@ -245,7 +251,7 @@ pub async fn create_project(
     .bind(user.id)
     .bind(name)
     .bind(requirements.as_ref())
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, "create_project: insert failed");
@@ -262,7 +268,7 @@ pub async fn create_project(
         )
         .bind(row.id)
         .bind(user.id)
-        .execute(&mut *tx)
+        .execute(&mut **conn)
         .await
         .map_err(|e| {
             warn!(
@@ -274,11 +280,6 @@ pub async fn create_project(
             internal_error()
         })?;
     }
-
-    tx.commit().await.map_err(|e| {
-        warn!(error = %e, user_id = %user.id, project_id = %row.id, "create_project: commit failed");
-        internal_error()
-    })?;
 
     info!(
         project_id = %row.id,
@@ -292,6 +293,7 @@ pub async fn create_project(
 
 pub async fn update_project(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<UpdateProjectRequest>,
@@ -305,7 +307,9 @@ pub async fn update_project(
         "api: PATCH /api/v1/projects/:id"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -339,11 +343,6 @@ pub async fn update_project(
         Some(requirements_trimmed.to_string())
     };
 
-    let mut tx = state.pool.begin().await.map_err(|e| {
-        warn!(error = %e, user_id = %user.id, %project_id, "update_project: begin tx failed");
-        internal_error()
-    })?;
-
     let row = sqlx::query_as::<_, ProjectResponse>(
         r#"
         UPDATE projects
@@ -374,7 +373,7 @@ pub async fn update_project(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "update_project: update failed");
@@ -390,11 +389,6 @@ pub async fn update_project(
         return Err(not_found("Project not found."));
     };
 
-    tx.commit().await.map_err(|e| {
-        warn!(error = %e, user_id = %user.id, %project_id, "update_project: commit failed");
-        internal_error()
-    })?;
-
     info!(
         user_id = %user.id,
         project_id = %row.id,
@@ -407,6 +401,7 @@ pub async fn update_project(
 
 pub async fn create_feature(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<CreateFeatureRequest>,
@@ -420,7 +415,9 @@ pub async fn create_feature(
         "api: POST /api/v1/projects/:id/features (body summarized)"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -475,7 +472,7 @@ pub async fn create_feature(
     .bind(scope_owner_user_id)
     .bind(scope_is_admin)
     .bind(scope_user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, "create_feature: project lookup failed");
@@ -501,7 +498,7 @@ pub async fn create_feature(
     .bind(project_id)
     .bind(title)
     .bind(requirements.as_ref())
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "create_feature: insert failed");
@@ -521,6 +518,8 @@ pub async fn create_feature(
 
 pub async fn enhance_project_requirements(
     State(state): State<AppState>,
+    tx: Tx,
+    auditctx: AuditCtx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<EnhanceProjectRequirementsRequest>,
@@ -532,7 +531,9 @@ pub async fn enhance_project_requirements(
         "api: POST /api/v1/projects/:id/ai/enhance-requirements"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -568,7 +569,7 @@ pub async fn enhance_project_requirements(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -595,7 +596,7 @@ pub async fn enhance_project_requirements(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| bad_request("Project requirements are required before AI enhancement."))?;
 
-    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, conn, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -609,7 +610,7 @@ pub async fn enhance_project_requirements(
         .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
-        &state.pool,
+        conn,
         project_id,
         scope,
         &payload.document_context.document_ids,
@@ -626,6 +627,17 @@ pub async fn enhance_project_requirements(
         provider: ai_settings.provider,
         model: &ai_settings.selected_model,
     };
+
+    AuditEventsService::record_with_pool(
+        &state.pool,
+        AuditEventType::AiEnhanceProjectRequirementsRequested,
+        &auditctx.0,
+        serde_json::json!({
+            "project_id": project_id,
+            "model": ai_settings.selected_model,
+        }),
+    )
+    .await;
 
     let completion = state
         .ai_providers
@@ -688,6 +700,8 @@ pub async fn enhance_project_requirements(
 
 pub async fn enhance_feature_requirements(
     State(state): State<AppState>,
+    tx: Tx,
+    auditctx: AuditCtx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<EnhanceFeatureRequirementsRequest>,
@@ -700,7 +714,9 @@ pub async fn enhance_feature_requirements(
         "api: POST /api/v1/projects/:id/features/:feature_id/ai/enhance-requirements"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -739,7 +755,7 @@ pub async fn enhance_feature_requirements(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -775,7 +791,7 @@ pub async fn enhance_feature_requirements(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, conn, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -789,7 +805,7 @@ pub async fn enhance_feature_requirements(
         .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
-        &state.pool,
+        conn,
         project_id,
         scope,
         &payload.document_context.document_ids,
@@ -806,6 +822,18 @@ pub async fn enhance_feature_requirements(
         provider: ai_settings.provider,
         model: &ai_settings.selected_model,
     };
+
+    AuditEventsService::record_with_pool(
+        &state.pool,
+        AuditEventType::AiEnhanceFeatureRequirementsRequested,
+        &auditctx.0,
+        serde_json::json!({
+            "project_id": project_id,
+            "feature_id": feature_id,
+            "model": ai_settings.selected_model,
+        }),
+    )
+    .await;
 
     let completion = state
         .ai_providers
@@ -875,6 +903,8 @@ const MAX_TASK_TITLE_LEN: usize = 512;
 
 pub async fn generate_feature_tasks(
     State(state): State<AppState>,
+    tx: Tx,
+    auditctx: AuditCtx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<GenerateTasksRequest>,
@@ -888,7 +918,9 @@ pub async fn generate_feature_tasks(
         "api: POST /api/v1/projects/:id/features/:feature_id/ai/generate-tasks"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -927,7 +959,7 @@ pub async fn generate_feature_tasks(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -965,7 +997,7 @@ pub async fn generate_feature_tasks(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, project_id, scope)
+    let ai_settings = ProjectAiSettingsService::load_for_runtime(&state, conn, project_id, scope)
         .await
         .map_err(|e| {
             warn!(
@@ -979,7 +1011,7 @@ pub async fn generate_feature_tasks(
         .ok_or_else(|| bad_request("Configure AI settings for this project first."))?;
 
     let document_context = DocumentContextService::load_for_project(
-        &state.pool,
+        conn,
         project_id,
         scope,
         &payload.document_context.document_ids,
@@ -1002,6 +1034,19 @@ pub async fn generate_feature_tasks(
         provider: ai_settings.provider,
         model: &ai_settings.selected_model,
     };
+
+    AuditEventsService::record_with_pool(
+        &state.pool,
+        AuditEventType::AiGenerateTasksRequested,
+        &auditctx.0,
+        serde_json::json!({
+            "project_id": project_id,
+            "feature_id": feature_id,
+            "model": ai_settings.selected_model,
+            "is_regeneration": !payload.feedback_history.is_empty(),
+        }),
+    )
+    .await;
 
     let completion = state
         .ai_providers
@@ -1077,6 +1122,7 @@ pub async fn generate_feature_tasks(
 
 pub async fn accept_generated_tasks(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<AcceptGeneratedTasksRequest>,
@@ -1091,7 +1137,9 @@ pub async fn accept_generated_tasks(
         "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1138,17 +1186,6 @@ pub async fn accept_generated_tasks(
             )));
         }
     }
-
-    let mut tx = state.pool.begin().await.map_err(|e| {
-        warn!(
-            error = %e,
-            user_id = %user.id,
-            %project_id,
-            %feature_id,
-            "accept_generated_tasks: begin tx failed"
-        );
-        internal_error()
-    })?;
 
     let mut created: Vec<TaskResponse> = Vec::new();
 
@@ -1229,7 +1266,7 @@ pub async fn accept_generated_tasks(
         .bind(scope.session_user_id())
         .bind(title)
         .bind(description_for_db.as_ref())
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **conn)
         .await
         .map_err(|e| {
             warn!(
@@ -1249,23 +1286,11 @@ pub async fn accept_generated_tasks(
                 %feature_id,
                 "api: POST /api/v1/projects/:id/features/:feature_id/ai/accept-tasks -> 404"
             );
-            let _ = tx.rollback().await;
             return Err(not_found("Feature not found."));
         };
 
         created.push(row);
     }
-
-    tx.commit().await.map_err(|e| {
-        warn!(
-            error = %e,
-            user_id = %user.id,
-            %project_id,
-            %feature_id,
-            "accept_generated_tasks: commit failed"
-        );
-        internal_error()
-    })?;
 
     info!(
         user_id = %user.id,
@@ -1280,13 +1305,16 @@ pub async fn accept_generated_tasks(
 
 pub async fn list_project_features(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<FeatureResponse>>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id/features");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1324,7 +1352,7 @@ pub async fn list_project_features(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "list_project_features: query failed");
@@ -1343,13 +1371,16 @@ pub async fn list_project_features(
 
 pub async fn list_project_documents(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectDocumentResponse>>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, "api: GET /api/v1/projects/:id/documents");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1387,7 +1418,7 @@ pub async fn list_project_documents(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "list_project_documents: query failed");
@@ -1406,13 +1437,16 @@ pub async fn list_project_documents(
 
 pub async fn download_project_document(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, document_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Response, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, %document_id, "api: GET /api/v1/projects/:id/documents/:document_id/download");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1451,7 +1485,7 @@ pub async fn download_project_document(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, %document_id, "download_project_document: query failed");
@@ -1529,6 +1563,7 @@ pub async fn download_project_document(
 
 pub async fn upload_project_documents(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     mut multipart: Multipart,
@@ -1536,7 +1571,9 @@ pub async fn upload_project_documents(
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, "api: POST /api/v1/projects/:id/documents");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1573,7 +1610,7 @@ pub async fn upload_project_documents(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, "upload_project_documents: project lookup failed");
@@ -1687,7 +1724,7 @@ pub async fn upload_project_documents(
         .bind(project_id)
         .bind(&file_path)
         .bind(metadata)
-        .fetch_one(&state.pool)
+        .fetch_one(&mut **conn)
         .await
         .map_err(|e| {
             warn!(
@@ -1724,13 +1761,16 @@ pub async fn upload_project_documents(
 
 pub async fn get_project_feature(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<FeatureResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let has_cookie = auth_route::has_session_cookie(&jar);
     info!(has_cookie, %project_id, %feature_id, "api: GET /api/v1/projects/:id/features/:feature_id");
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1769,7 +1809,7 @@ pub async fn get_project_feature(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(error = %e, user_id = %user.id, %project_id, %feature_id, "get_project_feature: query failed");
@@ -1798,6 +1838,7 @@ pub async fn get_project_feature(
 
 pub async fn list_feature_tasks(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<TaskResponse>>, (StatusCode, Json<ApiErrorBody>)> {
@@ -1809,7 +1850,9 @@ pub async fn list_feature_tasks(
         "api: GET /api/v1/projects/:id/features/:feature_id/tasks"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1865,7 +1908,7 @@ pub async fn list_feature_tasks(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -1891,6 +1934,7 @@ pub async fn list_feature_tasks(
 
 pub async fn get_project_task(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id, task_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<TaskDetailResponse>, (StatusCode, Json<ApiErrorBody>)> {
@@ -1903,7 +1947,9 @@ pub async fn get_project_task(
         "api: GET /api/v1/projects/:id/features/:feature_id/tasks/:task_id"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -1963,7 +2009,7 @@ pub async fn get_project_task(
     .bind(scope.owner_user_id_or_null())
     .bind(scope.is_company_admin())
     .bind(scope.session_user_id())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -2001,6 +2047,7 @@ pub async fn get_project_task(
 
 pub async fn create_task(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<CreateTaskRequest>,
@@ -2015,7 +2062,9 @@ pub async fn create_task(
         "api: POST /api/v1/projects/:id/features/:feature_id/tasks (body summarized)"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -2157,7 +2206,7 @@ pub async fn create_task(
     .bind(priority_val)
     .bind(assignee_bind)
     .bind(user.id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -2195,6 +2244,7 @@ pub async fn create_task(
 
 pub async fn update_project_feature(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<UpdateFeatureRequest>,
@@ -2207,7 +2257,9 @@ pub async fn update_project_feature(
         "api: PATCH /api/v1/projects/:id/features/:feature_id"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -2282,7 +2334,7 @@ pub async fn update_project_feature(
     .bind(title)
     .bind(requirements.as_ref())
     .bind(status_trimmed)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(
@@ -2318,6 +2370,7 @@ pub async fn update_project_feature(
 
 pub async fn update_project_task(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path((project_id, feature_id, task_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(payload): Json<UpdateTaskRequest>,
@@ -2331,7 +2384,9 @@ pub async fn update_project_task(
         "api: PATCH /api/v1/projects/:id/features/:feature_id/tasks/:task_id"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -2482,7 +2537,7 @@ pub async fn update_project_task(
     .bind(status_trimmed)
     .bind(priority_val)
     .bind(assignee_bind)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
         warn!(

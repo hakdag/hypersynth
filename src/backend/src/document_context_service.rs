@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use base64::engine::general_purpose::STANDARD as B64_STD;
 use base64::Engine;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::types::{DocumentContentKind, DocumentContextError, DocumentContextItem, TenantScope};
@@ -12,7 +12,7 @@ pub struct DocumentContextService;
 
 impl DocumentContextService {
     pub async fn load_for_project(
-        pool: &PgPool,
+        conn: &mut PgConnection,
         project_id: Uuid,
         scope: TenantScope,
         document_ids: &[Uuid],
@@ -48,7 +48,7 @@ impl DocumentContextService {
         .bind(scope.is_company_admin())
         .bind(scope.session_user_id())
         .bind(&ordered)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|_| DocumentContextError::ContentUnavailable)?;
 

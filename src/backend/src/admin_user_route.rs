@@ -1,26 +1,28 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
 use crate::auth_route::require_system_admin;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
-    AdminUserDetail, AdminUserSummary, AdminUsersListQuery, ApiErrorBody, UpdateUserStatusRequest,
-    UserStatus,
+    AdminUserDetail, AdminUserSummary, AdminUsersListQuery, ApiErrorBody, Tx,
+    UpdateUserStatusRequest, UserStatus,
 };
 
 const DEFAULT_LIST_LIMIT: i64 = 50;
 const MAX_LIST_LIMIT: i64 = 200;
 
 pub async fn list_admin_users(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Query(query): Query<AdminUsersListQuery>,
 ) -> Result<Json<Vec<AdminUserSummary>>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
     let limit = query
         .limit
@@ -85,7 +87,7 @@ pub async fn list_admin_users(
     .bind(query.company_id)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -93,13 +95,15 @@ pub async fn list_admin_users(
 }
 
 pub async fn get_admin_user(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<AdminUserDetail>, (StatusCode, Json<ApiErrorBody>)> {
-    let _admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
-    let detail = fetch_admin_user_detail(&state.pool, user_id)
+    let detail = fetch_admin_user_detail(conn, user_id)
         .await?
         .ok_or_else(not_found)?;
 
@@ -107,12 +111,14 @@ pub async fn get_admin_user(
 }
 
 pub async fn set_admin_user_status(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(user_id): Path<Uuid>,
     Json(payload): Json<UpdateUserStatusRequest>,
 ) -> Result<Json<AdminUserDetail>, (StatusCode, Json<ApiErrorBody>)> {
-    let admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
     match payload.status {
         UserStatus::Active | UserStatus::Disabled => {}
@@ -123,18 +129,16 @@ pub async fn set_admin_user_status(
         }
     }
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
-
     let previous_status: Option<String> =
         sqlx::query_scalar("SELECT status FROM users WHERE id = $1 FOR UPDATE")
             .bind(user_id)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **conn)
             .await
             .map_err(|_| internal_error())?;
 
-    let Some(previous_status) = previous_status else {
+    if previous_status.is_none() {
         return Err(not_found());
-    };
+    }
 
     sqlx::query(
         r#"
@@ -145,30 +149,19 @@ pub async fn set_admin_user_status(
     )
     .bind(user_id)
     .bind(payload.status.as_db_value())
-    .execute(&mut *tx)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
     if payload.status == UserStatus::Disabled {
         sqlx::query("DELETE FROM sessions WHERE user_id = $1")
             .bind(user_id)
-            .execute(&mut *tx)
+            .execute(&mut **conn)
             .await
             .map_err(|_| internal_error())?;
     }
 
-    tx.commit().await.map_err(|_| internal_error())?;
-
-    tracing::warn!(
-        target: "system_admin_audit",
-        admin_email = %admin_email,
-        user_id = %user_id,
-        previous_status = %previous_status,
-        new_status = %payload.status.as_db_value(),
-        "user status changed by system admin"
-    );
-
-    let detail = fetch_admin_user_detail(&state.pool, user_id)
+    let detail = fetch_admin_user_detail(conn, user_id)
         .await?
         .ok_or_else(not_found)?;
 
@@ -176,15 +169,17 @@ pub async fn set_admin_user_status(
 }
 
 pub async fn reset_admin_user_access(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<AdminUserDetail>, (StatusCode, Json<ApiErrorBody>)> {
-    let admin_email = require_system_admin(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let _admin_email = require_system_admin(conn, &jar).await?;
 
     let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE id = $1")
         .bind(user_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **conn)
         .await
         .map_err(|_| internal_error())?;
 
@@ -194,18 +189,11 @@ pub async fn reset_admin_user_access(
 
     sqlx::query("DELETE FROM sessions WHERE user_id = $1")
         .bind(user_id)
-        .execute(&state.pool)
+        .execute(&mut **conn)
         .await
         .map_err(|_| internal_error())?;
 
-    tracing::warn!(
-        target: "system_admin_audit",
-        admin_email = %admin_email,
-        user_id = %user_id,
-        "user access reset by system admin"
-    );
-
-    let detail = fetch_admin_user_detail(&state.pool, user_id)
+    let detail = fetch_admin_user_detail(conn, user_id)
         .await?
         .ok_or_else(not_found)?;
 
@@ -213,7 +201,7 @@ pub async fn reset_admin_user_access(
 }
 
 async fn fetch_admin_user_detail(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
 ) -> Result<Option<AdminUserDetail>, (StatusCode, Json<ApiErrorBody>)> {
     let detail = sqlx::query_as::<_, AdminUserDetail>(
@@ -239,7 +227,7 @@ async fn fetch_admin_user_detail(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -255,7 +243,7 @@ async fn fetch_admin_user_detail(
         "#,
     )
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 

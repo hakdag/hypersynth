@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 use axum::Json;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -15,7 +16,7 @@ pub struct ProjectAiSettingsService;
 
 impl ProjectAiSettingsService {
     pub async fn can_manage(
-        state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
         scope: TenantScope,
     ) -> Result<bool, sqlx::Error> {
@@ -45,18 +46,18 @@ impl ProjectAiSettingsService {
         .bind(scope.company_id_or_null())
         .bind(scope.owner_user_id_or_null())
         .bind(company_can_manage)
-        .fetch_one(&state.pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         Ok(allowed)
     }
 
     pub async fn authorize_manage(
-        state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
         scope: TenantScope,
     ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
-        let allowed = Self::can_manage(state, project_id, scope)
+        let allowed = Self::can_manage(conn, project_id, scope)
             .await
             .map_err(|_| internal_error())?;
 
@@ -69,6 +70,7 @@ impl ProjectAiSettingsService {
 
     pub async fn load_response(
         state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
     ) -> Result<ProjectAiSettingsResponse, RuntimeDecryptError> {
         let row: Option<(String, Vec<String>, Option<i64>, bool, Vec<u8>)> = sqlx::query_as(
@@ -79,7 +81,7 @@ impl ProjectAiSettingsService {
             "#,
         )
         .bind(project_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *conn)
         .await?;
 
         let Some((
@@ -122,6 +124,7 @@ impl ProjectAiSettingsService {
 
     pub async fn decrypt_existing_api_key(
         state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
     ) -> Result<Option<String>, RuntimeDecryptError> {
         let row: Option<(Vec<u8>,)> = sqlx::query_as(
@@ -132,7 +135,7 @@ impl ProjectAiSettingsService {
             "#,
         )
         .bind(project_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *conn)
         .await?;
 
         let Some((encrypted_api_key,)) = row else {
@@ -143,8 +146,10 @@ impl ProjectAiSettingsService {
         Ok(Some(cipher.decrypt(&encrypted_api_key)?))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert(
         state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
         user_id: Uuid,
         provider: ProviderId,
@@ -162,12 +167,10 @@ impl ProjectAiSettingsService {
             "#,
         )
         .bind(project_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(|_| internal_error())?;
         let had_existing = existing.is_some();
-
-        let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
 
         if clear_api_key {
             if had_existing {
@@ -178,12 +181,12 @@ impl ProjectAiSettingsService {
                     "#,
                 )
                 .bind(project_id)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await
                 .map_err(|_| internal_error())?;
 
                 ProjectApiKeyService::record_audit(
-                    &mut *tx,
+                    &mut *conn,
                     project_id,
                     user_id,
                     ApiKeyAuditEvent::Cleared,
@@ -192,7 +195,6 @@ impl ProjectAiSettingsService {
                 .map_err(|_| internal_error())?;
             }
 
-            tx.commit().await.map_err(|_| internal_error())?;
             return Ok(());
         }
 
@@ -222,7 +224,7 @@ impl ProjectAiSettingsService {
             .bind(&allowed_models)
             .bind(monthly_token_limit)
             .bind(usage_tracking_enabled)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await
             .map_err(|_| internal_error())?;
         } else {
@@ -253,7 +255,7 @@ impl ProjectAiSettingsService {
             .bind(&allowed_models)
             .bind(monthly_token_limit)
             .bind(usage_tracking_enabled)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await
             .map_err(|_| internal_error())?;
         }
@@ -264,17 +266,17 @@ impl ProjectAiSettingsService {
             } else {
                 ApiKeyAuditEvent::Created
             };
-            ProjectApiKeyService::record_audit(&mut *tx, project_id, user_id, event)
+            ProjectApiKeyService::record_audit(&mut *conn, project_id, user_id, event)
                 .await
                 .map_err(|_| internal_error())?;
         }
 
-        tx.commit().await.map_err(|_| internal_error())?;
         Ok(())
     }
 
     pub async fn load_for_runtime(
         state: &AppState,
+        conn: &mut PgConnection,
         project_id: Uuid,
         scope: TenantScope,
     ) -> Result<Option<ProjectAiRuntimeSettings>, RuntimeDecryptError> {
@@ -302,7 +304,7 @@ impl ProjectAiSettingsService {
         .bind(scope.owner_user_id_or_null())
         .bind(scope.is_company_admin())
         .bind(scope.session_user_id())
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut *conn)
         .await?;
 
         let Some((provider_raw, allowed_models, usage_tracking_enabled, encrypted_api_key)) = row
@@ -323,7 +325,7 @@ impl ProjectAiSettingsService {
         let api_key = cipher.decrypt(&encrypted_api_key)?;
 
         ProjectApiKeyService::record_audit(
-            &state.pool,
+            &mut *conn,
             project_id,
             scope.session_user_id(),
             ApiKeyAuditEvent::RuntimeUse,

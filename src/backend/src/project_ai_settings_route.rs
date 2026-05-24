@@ -10,13 +10,15 @@ use crate::app_state::AppState;
 use crate::auth_route;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     ApiErrorBody, ListProviderModelsResponse, ProjectAiModelsRequest, ProjectAiSettingsResponse,
-    UpdateProjectAiSettingsRequest,
+    Tx, UpdateProjectAiSettingsRequest,
 };
 
 pub async fn get_project_ai_settings(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<ProjectAiSettingsResponse>, (StatusCode, Json<ApiErrorBody>)> {
@@ -27,7 +29,10 @@ pub async fn get_project_ai_settings(
         "api: GET /api/v1/projects/:id/ai-settings"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -39,9 +44,9 @@ pub async fn get_project_ai_settings(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
-    ProjectAiSettingsService::authorize_manage(&state, project_id, scope).await?;
+    ProjectAiSettingsService::authorize_manage(conn, project_id, scope).await?;
 
-    let response = ProjectAiSettingsService::load_response(&state, project_id)
+    let response = ProjectAiSettingsService::load_response(&state, conn, project_id)
         .await
         .map_err(|e| {
             warn!(
@@ -65,6 +70,7 @@ pub async fn get_project_ai_settings(
 
 pub async fn update_project_ai_settings(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<UpdateProjectAiSettingsRequest>,
@@ -80,7 +86,10 @@ pub async fn update_project_ai_settings(
         "api: PUT /api/v1/projects/:id/ai-settings (body summarized; API key not logged)"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -92,7 +101,7 @@ pub async fn update_project_ai_settings(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
-    ProjectAiSettingsService::authorize_manage(&state, project_id, scope).await?;
+    ProjectAiSettingsService::authorize_manage(conn, project_id, scope).await?;
 
     if payload.clear_api_key {
         if payload
@@ -106,6 +115,7 @@ pub async fn update_project_ai_settings(
         }
         ProjectAiSettingsService::upsert(
             &state,
+            conn,
             project_id,
             user.id,
             payload.provider,
@@ -117,7 +127,7 @@ pub async fn update_project_ai_settings(
         )
         .await?;
 
-        let response = ProjectAiSettingsService::load_response(&state, project_id)
+        let response = ProjectAiSettingsService::load_response(&state, conn, project_id)
             .await
             .map_err(|e| {
                 warn!(
@@ -148,7 +158,7 @@ pub async fn update_project_ai_settings(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let existing_api_key = if api_key.is_none() {
-        ProjectAiSettingsService::decrypt_existing_api_key(&state, project_id)
+        ProjectAiSettingsService::decrypt_existing_api_key(&state, conn, project_id)
             .await
             .map_err(|e| {
                 warn!(
@@ -193,6 +203,7 @@ pub async fn update_project_ai_settings(
 
     ProjectAiSettingsService::upsert(
         &state,
+        conn,
         project_id,
         user.id,
         payload.provider,
@@ -204,7 +215,7 @@ pub async fn update_project_ai_settings(
     )
     .await?;
 
-    let response = ProjectAiSettingsService::load_response(&state, project_id)
+    let response = ProjectAiSettingsService::load_response(&state, conn, project_id)
         .await
         .map_err(|e| {
             warn!(
@@ -229,6 +240,7 @@ pub async fn update_project_ai_settings(
 
 pub async fn list_project_ai_provider_models(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(project_id): Path<Uuid>,
     Json(payload): Json<ProjectAiModelsRequest>,
@@ -241,7 +253,10 @@ pub async fn list_project_ai_provider_models(
         "api: POST /api/v1/projects/:id/ai-settings/provider-models (body summarized; API key not logged)"
     );
 
-    let user = auth_route::require_authenticated_user(&state.pool, &jar)
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar)
         .await
         .map_err(|(status, json)| {
             warn!(
@@ -253,11 +268,11 @@ pub async fn list_project_ai_provider_models(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
-    ProjectAiSettingsService::authorize_manage(&state, project_id, scope).await?;
+    ProjectAiSettingsService::authorize_manage(conn, project_id, scope).await?;
 
     let submitted_api_key = payload.api_key.trim();
     let stored_api_key = if submitted_api_key.is_empty() {
-        ProjectAiSettingsService::decrypt_existing_api_key(&state, project_id)
+        ProjectAiSettingsService::decrypt_existing_api_key(&state, conn, project_id)
             .await
             .map_err(|e| {
                 warn!(
