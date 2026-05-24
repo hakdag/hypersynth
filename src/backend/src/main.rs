@@ -1,3 +1,4 @@
+mod admin_audit_route;
 mod admin_ai_usage_route;
 mod admin_company_route;
 mod admin_user_route;
@@ -6,6 +7,7 @@ mod ai_provider_route;
 mod ai_usage_query_helpers;
 mod ai_usage_service;
 mod audit_events_service;
+mod audit_log_query_service;
 mod audit_tx_middleware;
 mod company_ai_usage_route;
 mod app_state;
@@ -37,6 +39,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use admin_audit_route::list_admin_audit_logs;
 use admin_ai_usage_route::{
     admin_ai_usage_by_company, admin_ai_usage_by_provider_model, admin_ai_usage_by_user,
     admin_ai_usage_failures, admin_ai_usage_summary,
@@ -252,6 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/admin/ai-usage/failures",
             get(admin_ai_usage_failures),
         )
+        .route("/api/v1/admin/audit-logs", get(list_admin_audit_logs))
         .route(
             "/api/v1/company/ai-usage/summary",
             get(company_ai_usage_summary),
