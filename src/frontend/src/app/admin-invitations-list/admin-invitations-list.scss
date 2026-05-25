@@ -1,0 +1,39 @@
+@import '../admin-users-list/admin-users-list.scss';
+
+.au-header-text {
+  flex: 1 1 16rem;
+}
+
+.ail-date-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ail-date-caption {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.ail-date-day {
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.ail-date-input {
+  min-width: 11rem;
+}
+
+.ail-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.ail-pagination-actions {
+  display: flex;
+  gap: 0.5rem;
+}
