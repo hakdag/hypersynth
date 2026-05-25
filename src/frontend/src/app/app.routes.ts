@@ -18,6 +18,7 @@ import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail'
 import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
 import { AdminAuditLogs } from './admin-audit-logs/admin-audit-logs';
 import { AdminAiUsage } from './admin-ai-usage/admin-ai-usage';
+import { AdminInvitationsList } from './admin-invitations-list/admin-invitations-list';
 import { AdminUsersList } from './admin-users-list/admin-users-list';
 import { CompanyDisabled } from './company-disabled/company-disabled';
 import { Login } from './login/login';
@@ -56,6 +57,7 @@ export const routes: Routes = [
           { path: 'companies/:companyId', component: AdminCompanyDetail },
           { path: 'users', component: AdminUsersList },
           { path: 'users/:userId', component: AdminUserDetail },
+          { path: 'invitations', component: AdminInvitationsList },
           { path: 'ai-usage', component: AdminAiUsage },
           { path: 'audit-logs', component: AdminAuditLogs },
         ],

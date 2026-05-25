@@ -1,6 +1,7 @@
 mod admin_audit_route;
 mod admin_ai_usage_route;
 mod admin_company_route;
+mod admin_invitation_route;
 mod admin_user_route;
 mod ai;
 mod ai_provider_route;
@@ -45,6 +46,7 @@ use admin_ai_usage_route::{
     admin_ai_usage_failures, admin_ai_usage_summary,
 };
 use admin_company_route::{get_admin_company, list_admin_companies, set_admin_company_status};
+use admin_invitation_route::{cancel_admin_invitation, list_admin_invitations};
 use admin_user_route::{
     get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
 };
@@ -256,6 +258,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(admin_ai_usage_failures),
         )
         .route("/api/v1/admin/audit-logs", get(list_admin_audit_logs))
+        .route(
+            "/api/v1/admin/invitations",
+            get(list_admin_invitations),
+        )
+        .route(
+            "/api/v1/admin/invitations/{invitation_id}/cancel",
+            post(cancel_admin_invitation),
+        )
         .route(
             "/api/v1/company/ai-usage/summary",
             get(company_ai_usage_summary),
