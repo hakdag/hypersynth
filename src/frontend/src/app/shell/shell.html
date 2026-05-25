@@ -131,6 +131,20 @@
       </section>
     }
 
+    @if (showAnnouncement()) {
+      <div class="platform-announcement" role="status">
+        <p class="platform-announcement-text">{{ bootstrapApi.platformAnnouncement() }}</p>
+        <button
+          type="button"
+          class="platform-announcement-dismiss"
+          (click)="dismissAnnouncement()"
+          aria-label="Dismiss announcement"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
+    }
+
     <main class="content">
       <router-outlet />
     </main>

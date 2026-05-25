@@ -1,0 +1,116 @@
+<div class="apc-page">
+  <header class="apc-header">
+    <div>
+      <h1 class="apc-title">Configuration</h1>
+      <p class="apc-subtitle">
+        Manage allowed AI providers, defaults, announcements, and feature flags without code changes.
+      </p>
+    </div>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="apc-muted">Loading configuration…</p>
+    }
+    @case ('error') {
+      <div class="apc-banner apc-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="apc-btn apc-btn-ghost" (click)="load()">Retry</button>
+    }
+    @case ('ok') {
+      @if (actionError()) {
+        <div class="apc-banner apc-banner-error" role="alert">{{ actionError() }}</div>
+      }
+      @if (saveSuccess()) {
+        <div class="apc-banner apc-banner-success" role="status">{{ saveSuccess() }}</div>
+      }
+
+      <form class="apc-form" [formGroup]="form" (ngSubmit)="save()">
+        <section class="apc-section">
+          <h2 class="apc-section-title">Allowed AI providers</h2>
+          <p class="apc-hint">Users can only select providers enabled here for project AI settings.</p>
+          <div class="apc-checkboxes">
+            @for (opt of providerOptions; track opt.id) {
+              <label class="apc-check">
+                <input
+                  type="checkbox"
+                  [checked]="providerChecked(opt.id)"
+                  (change)="toggleProvider(opt.id, $any($event.target).checked)"
+                />
+                <span>{{ opt.label }}</span>
+              </label>
+            }
+          </div>
+        </section>
+
+        <section class="apc-section">
+          <h2 class="apc-section-title">Default monthly token limit</h2>
+          <p class="apc-hint">
+            Applied when creating new project AI settings if no limit is specified. Leave empty for no default.
+          </p>
+          <input
+            type="number"
+            class="apc-input"
+            formControlName="defaultMonthlyTokenLimit"
+            min="1"
+            placeholder="e.g. 500000"
+          />
+        </section>
+
+        <section class="apc-section">
+          <h2 class="apc-section-title">Platform announcement</h2>
+          <p class="apc-hint">Shown as a banner in the app shell for all signed-in users.</p>
+          <textarea
+            class="apc-textarea"
+            formControlName="platformAnnouncement"
+            rows="3"
+            maxlength="2000"
+            placeholder="Optional message for all users"
+          ></textarea>
+        </section>
+
+        <section class="apc-section">
+          <h2 class="apc-section-title">Feature flags</h2>
+          <label class="apc-check apc-check-highlight">
+            <input type="checkbox" formControlName="aiRequestsEnabled" />
+            <span>
+              <strong>ai_requests_enabled</strong>
+              — Allow AI generation requests platform-wide (kill switch when off).
+            </span>
+          </label>
+
+          <div class="apc-extra-flags">
+            <p class="apc-hint">Additional boolean flags (stored for future use).</p>
+            @for (entry of extraFlags() | keyvalue; track entry.key) {
+              <div class="apc-flag-row">
+                <code>{{ entry.key }}</code>
+                <span>{{ entry.value ? 'true' : 'false' }}</span>
+                <button type="button" class="apc-btn apc-btn-ghost apc-btn-sm" (click)="removeExtraFlag(entry.key)">
+                  Remove
+                </button>
+              </div>
+            }
+            <div class="apc-flag-add">
+              <input
+                type="text"
+                class="apc-input"
+                [formControl]="extraFlagKey"
+                placeholder="flag_key"
+              />
+              <label class="apc-check">
+                <input type="checkbox" [formControl]="extraFlagValue" />
+                <span>true</span>
+              </label>
+              <button type="button" class="apc-btn apc-btn-ghost" (click)="addExtraFlag()">Add flag</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="apc-actions">
+          <button type="submit" class="apc-btn apc-btn-primary" [disabled]="saving()">
+            {{ saving() ? 'Saving…' : 'Save configuration' }}
+          </button>
+        </div>
+      </form>
+    }
+  }
+</div>

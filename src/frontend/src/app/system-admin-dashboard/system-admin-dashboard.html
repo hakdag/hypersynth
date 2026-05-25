@@ -40,6 +40,22 @@
     >
       Audit logs
     </a>
+    <a
+      routerLink="/app/admin/health"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      System health
+    </a>
+    <a
+      routerLink="/app/admin/config"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Configuration
+    </a>
   </nav>
   <div class="sad-content">
     <router-outlet />

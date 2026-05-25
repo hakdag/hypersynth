@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../auth.service';
@@ -22,6 +22,8 @@ export class Shell implements OnInit {
   readonly hasCompanyAssociation = this.companyAccess.hasCompanyAssociation;
   readonly canInviteUsers = this.auth.canInviteUsers;
   readonly isCompanyAdmin = this.auth.isCompanyAdmin;
+
+  protected readonly announcementDismissed = signal(false);
 
   ngOnInit(): void {
     this.bootstrapApi.loadBootstrap();
@@ -57,6 +59,17 @@ export class Shell implements OnInit {
   protected adminNavActive(): boolean {
     const path = this.router.url.split('?')[0];
     return path === '/app/admin' || path.startsWith('/app/admin/');
+  }
+
+  protected showAnnouncement(): boolean {
+    return (
+      !this.announcementDismissed() &&
+      this.bootstrapApi.platformAnnouncement() != null
+    );
+  }
+
+  protected dismissAnnouncement(): void {
+    this.announcementDismissed.set(true);
   }
 
   protected logout(): void {
