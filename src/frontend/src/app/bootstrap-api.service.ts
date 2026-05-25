@@ -5,6 +5,8 @@ import { environment } from '../environments/environment';
 export interface BootstrapPayload {
   appName: string;
   statusLabels: string[];
+  platformAnnouncement?: string | null;
+  featureFlags?: Record<string, boolean>;
 }
 
 export type BootstrapLoadState = 'idle' | 'loading' | 'success' | 'error';
@@ -28,6 +30,15 @@ export class BootstrapApiService {
   });
 
   readonly appName = computed(() => this.bootstrap()?.appName ?? 'HyperSynth');
+
+  readonly platformAnnouncement = computed(() => {
+    const msg = this.bootstrap()?.platformAnnouncement?.trim();
+    return msg && msg.length > 0 ? msg : null;
+  });
+
+  readonly featureFlags = computed(
+    () => this.bootstrap()?.featureFlags ?? ({} as Record<string, boolean>),
+  );
 
   loadBootstrap(): void {
     this.loadState.set('loading');

@@ -9,13 +9,14 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth_route;
-use crate::invitation_token_service::hash_invitation_token;
 use crate::authorization;
 use crate::email::InvitationEmail;
+use crate::invitation_token_service::hash_invitation_token;
 use crate::tenant_scope_service::TenantScopeService;
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     ApiErrorBody, CompanyRole, CreateInvitationRequest, Invitation, InvitationResponse,
-    InvitationStatus, TenantScope,
+    InvitationStatus, TenantScope, Tx,
 };
 use crate::user_registration::email_contains_at_and_dot;
 
@@ -31,15 +32,18 @@ fn company_role_invite_label(role: CompanyRole) -> &'static str {
 fn invited_role_allowed_for_inviter(inviter: CompanyRole, invited: CompanyRole) -> bool {
     match inviter {
         CompanyRole::CompanyAdmin => true,
-        // Project Managers cannot grant company-level admin or PM roles (FRD matrix: no "manage users").
-        CompanyRole::ProjectManager => matches!(invited, CompanyRole::Contributor | CompanyRole::Viewer),
+        CompanyRole::ProjectManager => {
+            matches!(invited, CompanyRole::Contributor | CompanyRole::Viewer)
+        }
         CompanyRole::Contributor | CompanyRole::Viewer => false,
     }
 }
 
-fn invitation_to_response(inv: Invitation) -> Result<InvitationResponse, (StatusCode, Json<ApiErrorBody>)> {
-    let invited_role = CompanyRole::from_db_value(inv.invited_role.as_str())
-        .ok_or_else(internal_error)?;
+fn invitation_to_response(
+    inv: Invitation,
+) -> Result<InvitationResponse, (StatusCode, Json<ApiErrorBody>)> {
+    let invited_role =
+        CompanyRole::from_db_value(inv.invited_role.as_str()).ok_or_else(internal_error)?;
     let status = InvitationStatus::from_db_value(inv.status.as_str()).ok_or_else(internal_error)?;
     Ok(InvitationResponse {
         id: inv.id,
@@ -57,10 +61,14 @@ fn invitation_to_response(inv: Invitation) -> Result<InvitationResponse, (Status
 
 pub async fn create_invitation(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<CreateInvitationRequest>,
 ) -> Result<(StatusCode, Json<InvitationResponse>), (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     authorization::require_company_role(&user, authorization::INVITE_USERS).await?;
 
     let scope = TenantScopeService::from_session(&user)?;
@@ -100,7 +108,7 @@ pub async fn create_invitation(
         )
         .bind(pid)
         .bind(company_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **conn)
         .await
         .map_err(|_| internal_error())?;
         if ok.is_none() {
@@ -108,26 +116,24 @@ pub async fn create_invitation(
                 StatusCode::NOT_FOUND,
                 Json(ApiErrorBody {
                     message: "Project not found.".into(),
-            ..Default::default()
-        }),
+                    ..Default::default()
+                }),
             ));
         }
     }
 
-    let company_name: String = sqlx::query_scalar(
-        "SELECT name FROM companies WHERE id = $1",
-    )
-    .bind(company_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| internal_error())?
-    .ok_or_else(internal_error)?;
+    let company_name: String = sqlx::query_scalar("SELECT name FROM companies WHERE id = $1")
+        .bind(company_id)
+        .fetch_optional(&mut **conn)
+        .await
+        .map_err(|_| internal_error())?
+        .ok_or_else(internal_error)?;
 
     let project_name: Option<String> = if let Some(pid) = payload.project_id {
         sqlx::query_scalar("SELECT name FROM projects WHERE id = $1 AND company_id = $2")
             .bind(pid)
             .bind(company_id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **conn)
             .await
             .map_err(|_| internal_error())?
     } else {
@@ -139,8 +145,7 @@ pub async fn create_invitation(
     let token_hex = hex::encode(raw);
     let token_hash = hash_invitation_token(&raw);
 
-    let expires_at =
-        Utc::now() + ChronoDuration::hours(state.invitation_config.expires_in_hours);
+    let expires_at = Utc::now() + ChronoDuration::hours(state.invitation_config.expires_in_hours);
     let accept_url = format!(
         "{}/invitations/accept?id={token_hex}",
         state.invitation_config.app_base_url
@@ -181,7 +186,7 @@ pub async fn create_invitation(
     .bind(user.id)
     .bind(InvitationStatus::Pending.as_db_value())
     .bind(expires_at)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **conn)
     .await;
 
     let invitation = match insert_result {
@@ -194,8 +199,8 @@ pub async fn create_invitation(
                         Json(ApiErrorBody {
                             message: "An invitation is already pending for this email address."
                                 .into(),
-            ..Default::default()
-        }),
+                            ..Default::default()
+                        }),
                     ));
                 }
             }
@@ -230,15 +235,15 @@ pub async fn create_invitation(
         .bind(company_id)
         .bind(InvitationStatus::Cancelled.as_db_value())
         .bind(InvitationStatus::Pending.as_db_value())
-        .execute(&state.pool)
+        .execute(&mut **conn)
         .await;
 
         return Err((
             StatusCode::BAD_GATEWAY,
             Json(ApiErrorBody {
                 message: "Invitation was created but the invitation email could not be sent. Please try again or contact support.".into(),
-            ..Default::default()
-        }),
+                ..Default::default()
+            }),
         ));
     }
 
@@ -247,10 +252,13 @@ pub async fn create_invitation(
 }
 
 pub async fn list_invitations(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Json<Vec<InvitationResponse>>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     authorization::require_company_role(&user, authorization::INVITE_USERS).await?;
 
     let scope = TenantScopeService::from_session(&user)?;
@@ -272,7 +280,7 @@ pub async fn list_invitations(
     .bind(company_id)
     .bind(InvitationStatus::Expired.as_db_value())
     .bind(InvitationStatus::Pending.as_db_value())
-    .execute(&state.pool)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -297,7 +305,7 @@ pub async fn list_invitations(
     )
     .bind(company_id)
     .bind(user.id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -310,11 +318,14 @@ pub async fn list_invitations(
 }
 
 pub async fn cancel_invitation(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Path(invitation_id): Path<Uuid>,
 ) -> Result<Json<InvitationResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
     authorization::require_company_role(&user, authorization::INVITE_USERS).await?;
 
     let scope = TenantScopeService::from_session(&user)?;
@@ -351,7 +362,7 @@ pub async fn cancel_invitation(
     .bind(user.id)
     .bind(InvitationStatus::Cancelled.as_db_value())
     .bind(InvitationStatus::Pending.as_db_value())
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|_| internal_error())?
     .ok_or_else(not_found)?;

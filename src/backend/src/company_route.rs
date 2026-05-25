@@ -1,20 +1,26 @@
-use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
 use crate::auth_route::require_authenticated_user;
 use crate::authorization;
-use crate::types::{AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse, UpdateCompanyRequest};
+use crate::tx_extractor::missing_tx_error;
+use crate::types::{
+    AccountType, ApiErrorBody, CompanyResponse, CompanyRole, CompanyUserResponse, Tx,
+    UpdateCompanyRequest,
+};
 use crate::user_registration::email_contains_at_and_dot;
 
 pub async fn list_company_users(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Json<Vec<CompanyUserResponse>>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = require_authenticated_user(conn, &jar).await?;
     if user.account_type != AccountType::Company {
         return Err(authorization::forbidden(
             "You do not have permission to perform this action.",
@@ -34,15 +40,13 @@ pub async fn list_company_users(
         "#,
     )
     .bind(company_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
     let mut out = Vec::with_capacity(rows.len());
     for (id, fullname, email, role_raw) in rows {
-        let role = role_raw
-            .as_deref()
-            .and_then(CompanyRole::from_db_value);
+        let role = role_raw.as_deref().and_then(CompanyRole::from_db_value);
         out.push(CompanyUserResponse {
             id,
             fullname,
@@ -55,22 +59,27 @@ pub async fn list_company_users(
 }
 
 pub async fn get_current_company(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Json<CompanyResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = require_authenticated_user(&state.pool, &jar).await?;
-    let company = fetch_company_for_user(&state.pool, user.id).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+    let user = require_authenticated_user(conn, &jar).await?;
+    let company = fetch_company_for_user(conn, user.id).await?;
     Ok(Json(company))
 }
 
 pub async fn update_current_company(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<UpdateCompanyRequest>,
 ) -> Result<Json<CompanyResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = require_authenticated_user(conn, &jar).await?;
     authorization::require_company_role(&user, authorization::MANAGE_COMPANY_PROFILE).await?;
-    let company = fetch_company_for_user(&state.pool, user.id).await?;
+    let company = fetch_company_for_user(conn, user.id).await?;
 
     let name = payload.name.trim();
     let company_email = payload.company_email.trim();
@@ -162,7 +171,7 @@ pub async fn update_current_company(
     .bind(billing_email.as_deref())
     .bind(address.as_deref())
     .bind(tax_vat_number.as_deref())
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **conn)
     .await
     {
         Ok(row) => row,
@@ -180,7 +189,7 @@ pub async fn update_current_company(
 }
 
 async fn fetch_company_for_user(
-    pool: &sqlx::PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
 ) -> Result<CompanyResponse, (StatusCode, Json<ApiErrorBody>)> {
     sqlx::query_as::<_, CompanyResponse>(
@@ -209,10 +218,10 @@ async fn fetch_company_for_user(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?
-    .ok_or_else(|| not_found())
+    .ok_or_else(not_found)
 }
 
 fn optional_trimmed(value: Option<String>) -> Option<String> {
@@ -238,7 +247,8 @@ fn conflict_for_constraint(constraint: Option<&str>) -> (StatusCode, Json<ApiErr
     };
     (
         StatusCode::CONFLICT,
-        Json(ApiErrorBody { message,
+        Json(ApiErrorBody {
+            message,
             ..Default::default()
         }),
     )

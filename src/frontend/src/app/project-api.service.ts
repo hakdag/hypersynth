@@ -7,15 +7,12 @@ import { environment } from '../environments/environment';
 export interface CreateProjectPayload {
   name: string;
   requirements?: string;
-  aiApiKey?: string;
 }
 
 export interface UpdateProjectPayload {
   name: string;
   requirements: string;
   status: string;
-  clearAiApiKey: boolean;
-  aiApiKey: string;
 }
 
 export interface CreatedProject {
@@ -30,6 +27,37 @@ export interface CreatedProject {
 
 export interface ProjectDetail extends CreatedProject {
   hasAiApiKey: boolean;
+  canManageAiSettings: boolean;
+}
+
+export type AiProviderId = 'anthropic' | 'openai';
+
+export interface ProviderCatalogResponse {
+  providers: AiProviderId[];
+}
+
+export interface ProjectAiSettings {
+  projectId: string;
+  provider: AiProviderId | null;
+  allowedModels: string[];
+  monthlyTokenLimit: number | null;
+  usageTrackingEnabled: boolean;
+  hasApiKey: boolean;
+  apiKeyHint: string | null;
+}
+
+export interface UpdateProjectAiSettingsPayload {
+  provider: AiProviderId;
+  allowedModels: string[];
+  monthlyTokenLimit: number | null;
+  usageTrackingEnabled: boolean;
+  apiKey?: string;
+  clearApiKey: boolean;
+}
+
+export interface ListProviderModelsResponse {
+  provider: AiProviderId;
+  models: string[];
 }
 
 export interface EnhanceProjectRequirementsResponse {
@@ -128,9 +156,6 @@ export class ProjectApiService {
     if (payload.requirements !== undefined && payload.requirements.length > 0) {
       body['requirements'] = payload.requirements;
     }
-    if (payload.aiApiKey !== undefined && payload.aiApiKey.length > 0) {
-      body['aiApiKey'] = payload.aiApiKey;
-    }
     const url = `${environment.apiBaseUrl}/api/v1/projects`;
     return this.http.post<CreatedProject>(url, body);
   }
@@ -141,10 +166,48 @@ export class ProjectApiService {
       name: payload.name.trim(),
       requirements: payload.requirements,
       status: payload.status,
-      clearAiApiKey: payload.clearAiApiKey,
-      aiApiKey: payload.aiApiKey.trim().length > 0 ? payload.aiApiKey.trim() : null,
     };
     return this.http.patch<CreatedProject>(url, body);
+  }
+
+  listAiProviders(): Observable<ProviderCatalogResponse> {
+    const url = `${environment.apiBaseUrl}/api/v1/ai/providers`;
+    return this.http.get<ProviderCatalogResponse>(url);
+  }
+
+  getAiSettings(projectId: string): Observable<ProjectAiSettings> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/ai-settings`;
+    return this.http.get<ProjectAiSettings>(url);
+  }
+
+  updateAiSettings(
+    projectId: string,
+    payload: UpdateProjectAiSettingsPayload,
+  ): Observable<ProjectAiSettings> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/ai-settings`;
+    const body: Record<string, unknown> = {
+      provider: payload.provider,
+      allowedModels: payload.allowedModels,
+      monthlyTokenLimit: payload.monthlyTokenLimit,
+      usageTrackingEnabled: payload.usageTrackingEnabled,
+      clearApiKey: payload.clearApiKey,
+    };
+    if (payload.apiKey !== undefined && payload.apiKey.trim().length > 0) {
+      body['apiKey'] = payload.apiKey.trim();
+    }
+    return this.http.put<ProjectAiSettings>(url, body);
+  }
+
+  fetchProviderModels(
+    projectId: string,
+    provider: AiProviderId,
+    apiKey: string,
+  ): Observable<ListProviderModelsResponse> {
+    const url = `${environment.apiBaseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/ai-settings/provider-models`;
+    return this.http.post<ListProviderModelsResponse>(url, {
+      provider,
+      apiKey,
+    });
   }
 
   enhanceProjectRequirements(
@@ -523,6 +586,31 @@ export class ProjectApiService {
         return 'Project not found or you do not have access.';
       }
       return `Could not save project (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static aiSettingsErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      if (err.status === 404) {
+        return 'Project not found or you do not have access.';
+      }
+      return `Could not save AI settings (HTTP ${err.status}).`;
+    }
+    return 'Could not reach the server. Ensure the backend is running.';
+  }
+
+  static listProviderModelsErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { message?: string } | null;
+      if (body && typeof body.message === 'string' && body.message.length > 0) {
+        return body.message;
+      }
+      return `Could not fetch provider models (HTTP ${err.status}).`;
     }
     return 'Could not reach the server. Ensure the backend is running.';
   }

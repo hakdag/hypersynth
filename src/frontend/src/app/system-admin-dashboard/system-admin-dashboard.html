@@ -16,8 +16,46 @@
     >
       Users
     </a>
-    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">AI usage</span>
-    <span class="sad-nav-link sad-nav-disabled" title="Coming in a future release">Audit logs</span>
+    <a
+      routerLink="/app/admin/invitations"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Invitations
+    </a>
+    <a
+      routerLink="/app/admin/ai-usage"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      AI usage
+    </a>
+    <a
+      routerLink="/app/admin/audit-logs"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Audit logs
+    </a>
+    <a
+      routerLink="/app/admin/health"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      System health
+    </a>
+    <a
+      routerLink="/app/admin/config"
+      routerLinkActive="sad-nav-active"
+      [routerLinkActiveOptions]="{ exact: false }"
+      class="sad-nav-link"
+    >
+      Configuration
+    </a>
   </nav>
   <div class="sad-content">
     <router-outlet />

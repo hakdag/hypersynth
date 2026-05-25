@@ -2,10 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, finalize, map, of, Subscription, switchMap } from 'rxjs';
+import { catchError, finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 
 import { DocumentContextPickerModal } from '../document-context-picker-modal/document-context-picker-modal';
 import {
+  AiProviderId,
+  ProjectAiSettings,
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
 } from '../project-api.service';
@@ -33,6 +35,15 @@ export class ProjectEdit implements OnInit, OnDestroy {
   protected readonly projectId = signal('');
   protected readonly headerName = signal('');
   protected readonly hadAiApiKey = signal(false);
+  protected readonly canManageAiSettings = signal(false);
+  protected readonly aiSettingsLoading = signal(false);
+  protected readonly aiSettingsSubmitting = signal(false);
+  protected readonly aiSettingsError = signal<string | null>(null);
+  protected readonly aiSettingsSuccess = signal<string | null>(null);
+  protected readonly providerOptions = signal<AiProviderId[]>([]);
+  protected readonly availableModels = signal<string[]>([]);
+  protected readonly selectedModels = signal<string[]>([]);
+  protected readonly aiKeyHint = signal<string | null>(null);
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly showSuccess = signal(false);
@@ -53,8 +64,14 @@ export class ProjectEdit implements OnInit, OnDestroy {
     name: ['', [Validators.required, Validators.maxLength(512)]],
     requirements: [''],
     status: ['Pending' as ProjectPhase0Status, Validators.required],
-    aiApiKey: [''],
-    clearAiApiKey: [false],
+  });
+
+  protected readonly aiSettingsForm = this.fb.nonNullable.group({
+    provider: ['anthropic' as AiProviderId, Validators.required],
+    apiKey: [''],
+    clearApiKey: [false],
+    monthlyTokenLimit: [''],
+    usageTrackingEnabled: [true],
   });
 
   ngOnInit(): void {
@@ -98,13 +115,18 @@ export class ProjectEdit implements OnInit, OnDestroy {
         const p = res.row;
         this.headerName.set(p.name);
         this.hadAiApiKey.set(p.hasAiApiKey);
+        this.canManageAiSettings.set(p.canManageAiSettings);
         this.form.patchValue({
           name: p.name,
           requirements: p.requirements ?? '',
           status: this.normalizeStatus(p.status),
-          aiApiKey: '',
-          clearAiApiKey: false,
         });
+        if (p.canManageAiSettings) {
+          this.loadAiSettings(p.id);
+        } else {
+          this.hadAiApiKey.set(false);
+          this.aiKeyHint.set(null);
+        }
         this.loadState.set('ok');
       });
   }
@@ -112,6 +134,42 @@ export class ProjectEdit implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
     this.clearRequirementsCopyFlash();
+  }
+
+  private loadAiSettings(projectId: string): void {
+    this.aiSettingsLoading.set(true);
+    this.aiSettingsError.set(null);
+    this.aiSettingsSuccess.set(null);
+
+    forkJoin({
+      catalog: this.projectApi.listAiProviders(),
+      settings: this.projectApi.getAiSettings(projectId),
+    })
+      .pipe(finalize(() => this.aiSettingsLoading.set(false)))
+      .subscribe({
+        next: ({ catalog, settings }) => {
+          this.providerOptions.set(catalog.providers);
+          this.applyAiSettings(settings);
+        },
+        error: (err: unknown) => {
+          this.aiSettingsError.set(ProjectApiService.aiSettingsErrorMessage(err));
+        },
+      });
+  }
+
+  private applyAiSettings(settings: ProjectAiSettings): void {
+    const provider = settings.provider ?? this.providerOptions()[0] ?? 'anthropic';
+    this.hadAiApiKey.set(settings.hasApiKey);
+    this.aiKeyHint.set(settings.apiKeyHint);
+    this.availableModels.set(settings.allowedModels);
+    this.selectedModels.set(settings.allowedModels);
+    this.aiSettingsForm.patchValue({
+      provider,
+      apiKey: '',
+      clearApiKey: false,
+      monthlyTokenLimit: settings.monthlyTokenLimit?.toString() ?? '',
+      usageTrackingEnabled: settings.usageTrackingEnabled,
+    });
   }
 
   private clearRequirementsCopyFlash(): void {
@@ -150,8 +208,122 @@ export class ProjectEdit implements OnInit, OnDestroy {
 
   protected onClearKeyChecked(checked: boolean): void {
     if (checked) {
-      this.form.patchValue({ aiApiKey: '' });
+      this.aiSettingsForm.patchValue({ apiKey: '' });
     }
+  }
+
+  protected providerLabel(provider: AiProviderId): string {
+    return provider === 'openai' ? 'OpenAI' : 'Anthropic';
+  }
+
+  protected isModelSelected(model: string): boolean {
+    return this.selectedModels().includes(model);
+  }
+
+  protected onModelChecked(model: string, checked: boolean): void {
+    const selected = this.selectedModels();
+    if (checked) {
+      if (!selected.includes(model)) {
+        this.selectedModels.set([...selected, model]);
+      }
+      return;
+    }
+    this.selectedModels.set(selected.filter((current) => current !== model));
+  }
+
+  protected canFetchModels(): boolean {
+    const { provider, apiKey, clearApiKey } = this.aiSettingsForm.getRawValue();
+    const hasUsableKey = apiKey.trim().length > 0 || this.hadAiApiKey();
+    return (
+      this.canManageAiSettings() &&
+      !this.aiSettingsLoading() &&
+      !this.aiSettingsSubmitting() &&
+      !clearApiKey &&
+      provider.length > 0 &&
+      hasUsableKey
+    );
+  }
+
+  protected fetchProviderModels(): void {
+    this.aiSettingsError.set(null);
+    this.aiSettingsSuccess.set(null);
+    if (!this.canFetchModels()) {
+      this.aiSettingsError.set('Enter an API key before fetching models, or save one first.');
+      return;
+    }
+
+    const projectId = this.projectId();
+    const { provider, apiKey } = this.aiSettingsForm.getRawValue();
+    this.aiSettingsLoading.set(true);
+    this.projectApi
+      .fetchProviderModels(projectId, provider, apiKey)
+      .pipe(finalize(() => this.aiSettingsLoading.set(false)))
+      .subscribe({
+        next: (response) => {
+          this.availableModels.set(response.models);
+          this.selectedModels.set(this.selectedModels().filter((model) => response.models.includes(model)));
+          this.aiSettingsSuccess.set('Models loaded. Select a model and save settings.');
+        },
+        error: (err: unknown) => {
+          this.aiSettingsError.set(ProjectApiService.listProviderModelsErrorMessage(err));
+        },
+      });
+  }
+
+  protected saveAiSettings(): void {
+    this.aiSettingsError.set(null);
+    this.aiSettingsSuccess.set(null);
+    this.aiSettingsForm.markAllAsTouched();
+    if (this.aiSettingsForm.invalid || this.aiSettingsSubmitting() || !this.canManageAiSettings()) {
+      return;
+    }
+
+    const { provider, apiKey, clearApiKey, monthlyTokenLimit, usageTrackingEnabled } =
+      this.aiSettingsForm.getRawValue();
+    const trimmedKey = apiKey.trim();
+    const selectedModels = this.selectedModels();
+    let monthlyLimit: number | null = null;
+    const monthlyRaw = monthlyTokenLimit.trim();
+    if (monthlyRaw.length > 0) {
+      const parsed = Number(monthlyRaw);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        this.aiSettingsError.set('Monthly token limit must be a positive whole number.');
+        return;
+      }
+      monthlyLimit = parsed;
+    }
+
+    if (!clearApiKey) {
+      if (selectedModels.length === 0) {
+        this.aiSettingsError.set('Select at least one AI model.');
+        return;
+      }
+      if (!this.hadAiApiKey() && trimmedKey.length === 0) {
+        this.aiSettingsError.set('Enter an API key before saving AI settings.');
+        return;
+      }
+    }
+
+    this.aiSettingsSubmitting.set(true);
+    this.projectApi
+      .updateAiSettings(this.projectId(), {
+        provider,
+        allowedModels: clearApiKey ? [] : selectedModels,
+        monthlyTokenLimit: monthlyLimit,
+        usageTrackingEnabled,
+        apiKey: trimmedKey.length > 0 ? trimmedKey : undefined,
+        clearApiKey,
+      })
+      .pipe(finalize(() => this.aiSettingsSubmitting.set(false)))
+      .subscribe({
+        next: (settings) => {
+          this.applyAiSettings(settings);
+          this.aiSettingsSuccess.set('AI settings saved.');
+        },
+        error: (err: unknown) => {
+          this.aiSettingsError.set(ProjectApiService.aiSettingsErrorMessage(err));
+        },
+      });
   }
 
   protected submit(): void {
@@ -162,7 +334,7 @@ export class ProjectEdit implements OnInit, OnDestroy {
     }
 
     const id = this.projectId();
-    const { name, requirements, status, aiApiKey, clearAiApiKey } = this.form.getRawValue();
+    const { name, requirements, status } = this.form.getRawValue();
 
     this.submitting.set(true);
     this.projectApi
@@ -170,8 +342,6 @@ export class ProjectEdit implements OnInit, OnDestroy {
         name: name.trim(),
         requirements,
         status,
-        clearAiApiKey,
-        aiApiKey,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({

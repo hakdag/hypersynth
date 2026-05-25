@@ -68,6 +68,16 @@
             <span>Company</span>
           </a>
         }
+        @if (!isSystemAdmin() && hasCompanyAssociation() && isCompanyAdmin()) {
+          <a
+            routerLink="/app/company/ai-usage"
+            class="sidebar-link"
+            [class.sidebar-link-active]="companyAiUsageNavActive()"
+          >
+            <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">monitoring</span>
+            <span>AI usage</span>
+          </a>
+        }
         @if (!isSystemAdmin() && hasCompanyAssociation() && canInviteUsers()) {
           <a
             routerLink="/app/team/invitations"
@@ -119,6 +129,20 @@
           }
         }
       </section>
+    }
+
+    @if (showAnnouncement()) {
+      <div class="platform-announcement" role="status">
+        <p class="platform-announcement-text">{{ bootstrapApi.platformAnnouncement() }}</p>
+        <button
+          type="button"
+          class="platform-announcement-dismiss"
+          (click)="dismissAnnouncement()"
+          aria-label="Dismiss announcement"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">close</span>
+        </button>
+      </div>
     }
 
     <main class="content">

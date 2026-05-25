@@ -20,8 +20,7 @@
     <header class="pc-header">
       <h1 class="pc-title">Edit Project</h1>
       <p class="pc-subtitle">
-        Update name, requirements, status, and AI API key. Keys are never shown after they are stored—provide a new value
-        only to replace the existing one.
+        Update name, requirements, status, and project-level AI settings. Stored API keys are never returned in full.
       </p>
     </header>
 
@@ -127,54 +126,6 @@
               <p class="pc-hint">Phase 0 statuses: Pending, In Progress, or Done.</p>
             </div>
 
-            <div class="pc-field">
-              <label class="pc-label" for="edit-project-api-key">
-                AI API Key <span class="pc-opt">(Optional)</span>
-              </label>
-              @if (hadAiApiKey()) {
-                <p class="pc-hint pc-hint-tight">
-                  A key is already stored. Leave the field empty to keep it, enter a new key to replace it, or check
-                  "Remove stored key" below to clear it.
-                </p>
-              }
-              <div
-                class="pc-input-wrap"
-                [class.pc-key-field-muted]="form.controls.clearAiApiKey.value"
-              >
-                <input
-                  id="edit-project-api-key"
-                  class="pc-input pc-input-key"
-                  [type]="apiKeyVisible() ? 'text' : 'password'"
-                  autocomplete="off"
-                  placeholder="sk-••••••••••••••••••••••••"
-                  formControlName="aiApiKey"
-                />
-                <button
-                  type="button"
-                  class="pc-key-toggle material-symbols-outlined"
-                  (click)="toggleApiKeyVisible()"
-                  [attr.aria-pressed]="apiKeyVisible()"
-                  [attr.aria-label]="apiKeyVisible() ? 'Hide API key' : 'Show API key'"
-                  [disabled]="form.controls.clearAiApiKey.value"
-                >
-                  {{ apiKeyVisible() ? 'visibility' : 'visibility_off' }}
-                </button>
-              </div>
-              @if (hadAiApiKey()) {
-                <div class="pc-checkbox-row">
-                  <input
-                    id="edit-clear-ai-key"
-                    type="checkbox"
-                    class="pc-checkbox"
-                    formControlName="clearAiApiKey"
-                    (change)="onClearKeyChecked($any($event.target).checked)"
-                  />
-                  <label class="pc-checkbox-label" for="edit-clear-ai-key">Remove stored API key from this project</label>
-                </div>
-              }
-              <p class="pc-hint">Provide your own key for enhanced project analysis and automation features.</p>
-            </div>
-
             <div class="pc-actions">
               <button type="button" class="pc-btn pc-btn-ghost" (click)="cancel()">Cancel</button>
               <button type="submit" class="pc-btn pc-btn-primary" [disabled]="submitting()">
@@ -183,6 +134,139 @@
             </div>
           </form>
         </div>
+
+        @if (canManageAiSettings()) {
+          <div class="pc-card pc-card-form pe-ai-card">
+            <form class="pc-form" [formGroup]="aiSettingsForm" (ngSubmit)="saveAiSettings()" novalidate>
+              <div>
+                <h2 class="pe-card-title">AI Settings</h2>
+                <p class="pc-hint">
+                  Configure the provider, API key, selected model, and usage preferences for this project.
+                </p>
+              </div>
+
+              @if (aiSettingsError(); as aiErr) {
+                <div class="pc-banner pc-banner-error" role="alert">{{ aiErr }}</div>
+              }
+              @if (aiSettingsSuccess(); as aiMsg) {
+                <div class="pc-banner pe-banner-success" role="status">{{ aiMsg }}</div>
+              }
+
+              <div class="pc-field">
+                <label class="pc-label" for="edit-ai-provider">Provider</label>
+                <select id="edit-ai-provider" class="pc-input pc-select" formControlName="provider">
+                  @for (provider of providerOptions(); track provider) {
+                    <option [value]="provider">{{ providerLabel(provider) }}</option>
+                  }
+                </select>
+                <p class="pc-hint">Provider choices come from the server-side SF-21 catalog.</p>
+              </div>
+
+              <div class="pc-field">
+                <label class="pc-label" for="edit-ai-key">
+                  API Key <span class="pc-opt">(Required to fetch models)</span>
+                </label>
+                @if (hadAiApiKey()) {
+                  <p class="pc-hint pc-hint-tight">
+                    Stored key: {{ aiKeyHint() ?? 'masked' }}. Leave this field empty to keep it when saving.
+                  </p>
+                }
+                <div class="pc-input-wrap" [class.pc-key-field-muted]="aiSettingsForm.controls.clearApiKey.value">
+                  <input
+                    id="edit-ai-key"
+                    class="pc-input pc-input-key"
+                    [type]="apiKeyVisible() ? 'text' : 'password'"
+                    autocomplete="off"
+                    placeholder="sk-••••••••••••••••••••••••"
+                    formControlName="apiKey"
+                  />
+                  <button
+                    type="button"
+                    class="pc-key-toggle material-symbols-outlined"
+                    (click)="toggleApiKeyVisible()"
+                    [attr.aria-pressed]="apiKeyVisible()"
+                    [attr.aria-label]="apiKeyVisible() ? 'Hide API key' : 'Show API key'"
+                    [disabled]="aiSettingsForm.controls.clearApiKey.value"
+                  >
+                    {{ apiKeyVisible() ? 'visibility' : 'visibility_off' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="pc-actions pe-ai-actions">
+                <button type="button" class="pc-btn pc-btn-ghost" (click)="fetchProviderModels()" [disabled]="!canFetchModels()">
+                  <span class="pc-btn-text">{{ aiSettingsLoading() ? 'Fetching…' : 'Fetch models' }}</span>
+                </button>
+              </div>
+
+              <div class="pc-field">
+                <span class="pc-label">Selected Model</span>
+                @if (availableModels().length > 0) {
+                  <div class="pe-model-list">
+                    @for (model of availableModels(); track model) {
+                      <label class="pe-model-row">
+                        <input
+                          type="checkbox"
+                          class="pc-checkbox"
+                          [checked]="isModelSelected(model)"
+                          (change)="onModelChecked(model, $any($event.target).checked)"
+                          [disabled]="aiSettingsForm.controls.clearApiKey.value"
+                        />
+                        <span>{{ model }}</span>
+                      </label>
+                    }
+                  </div>
+                } @else {
+                  <p class="pc-hint">Enter an API key and fetch models before saving AI settings.</p>
+                }
+              </div>
+
+              <div class="pc-field">
+                <label class="pc-label" for="edit-ai-monthly-limit">
+                  Monthly Token Limit <span class="pc-opt">(Optional)</span>
+                </label>
+                <input
+                  id="edit-ai-monthly-limit"
+                  class="pc-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="No limit"
+                  formControlName="monthlyTokenLimit"
+                />
+              </div>
+
+              <div class="pc-checkbox-row">
+                <input
+                  id="edit-ai-usage-tracking"
+                  type="checkbox"
+                  class="pc-checkbox"
+                  formControlName="usageTrackingEnabled"
+                />
+                <label class="pc-checkbox-label" for="edit-ai-usage-tracking">Enable AI usage tracking for this project</label>
+              </div>
+
+              @if (hadAiApiKey()) {
+                <div class="pc-checkbox-row">
+                  <input
+                    id="edit-clear-ai-key"
+                    type="checkbox"
+                    class="pc-checkbox"
+                    formControlName="clearApiKey"
+                    (change)="onClearKeyChecked($any($event.target).checked)"
+                  />
+                  <label class="pc-checkbox-label" for="edit-clear-ai-key">Remove stored API key and AI settings from this project</label>
+                </div>
+              }
+
+              <div class="pc-actions">
+                <button type="submit" class="pc-btn pc-btn-primary" [disabled]="aiSettingsSubmitting() || aiSettingsLoading()">
+                  <span class="pc-btn-text">{{ aiSettingsSubmitting() ? 'Saving…' : 'Save AI settings' }}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        }
       </section>
 
       <aside class="pc-aside" aria-label="Guidance">

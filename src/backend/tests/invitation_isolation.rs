@@ -57,13 +57,11 @@ async fn invitations_pending_unique_and_cancel_scoped_by_company(
     .execute(&mut *tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO company_users (company_id, user_id) VALUES ($1, $2)",
-    )
-    .bind(company_id)
-    .bind(inviter_id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO company_users (company_id, user_id) VALUES ($1, $2)")
+        .bind(company_id)
+        .bind(inviter_id)
+        .execute(&mut *tx)
+        .await?;
 
     let token_hash = "a".repeat(64);
     let expires = chrono::Utc::now() + chrono::Duration::hours(24);
@@ -103,7 +101,10 @@ async fn invitations_pending_unique_and_cancel_scoped_by_company(
     .execute(&mut *tx)
     .await;
 
-    assert!(dup.is_err(), "expected duplicate pending invitation to violate unique index");
+    assert!(
+        dup.is_err(),
+        "expected duplicate pending invitation to violate unique index"
+    );
 
     let rows = sqlx::query(
         r#"
@@ -136,7 +137,11 @@ async fn invitations_pending_unique_and_cancel_scoped_by_company(
     .fetch_all(&mut *tx)
     .await?;
 
-    assert_eq!(rows.len(), 1, "cancel with matching company_id should succeed");
+    assert_eq!(
+        rows.len(),
+        1,
+        "cancel with matching company_id should succeed"
+    );
 
     tx.rollback().await?;
     Ok(())

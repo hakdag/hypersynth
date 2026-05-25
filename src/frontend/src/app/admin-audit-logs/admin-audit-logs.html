@@ -1,0 +1,212 @@
+<div class="au-page">
+  <header class="au-header">
+    <div class="au-header-text">
+      <h1 class="au-title">Audit logs</h1>
+      <p class="au-subtitle">Browse platform audit events and investigate incidents.</p>
+    </div>
+    <div class="au-filters">
+      <select
+        class="au-select"
+        [formControl]="filterForm.controls.companyId"
+        aria-label="Filter by company"
+      >
+        <option value="">All companies</option>
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+      <input
+        class="au-search"
+        type="search"
+        [formControl]="filterForm.controls.userId"
+        placeholder="User ID (UUID)"
+        aria-label="Filter by user ID"
+      />
+      <select
+        class="au-select"
+        [formControl]="filterForm.controls.actionType"
+        aria-label="Filter by action type"
+      >
+        <option value="">All action types</option>
+        @for (opt of actionTypeOptions; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+      <label class="aal-date-label">
+        <span class="aal-date-caption">From</span>
+        <input
+          class="au-select aal-date-input"
+          type="datetime-local"
+          [formControl]="filterForm.controls.from"
+        />
+      </label>
+      <label class="aal-date-label">
+        <span class="aal-date-caption">To</span>
+        <input
+          class="au-select aal-date-input"
+          type="datetime-local"
+          [formControl]="filterForm.controls.to"
+        />
+      </label>
+    </div>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="au-muted">Loading audit logs…</p>
+    }
+    @case ('error') {
+      <div class="au-banner au-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="au-btn au-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (items().length === 0) {
+        <div class="au-empty">
+          <p>No audit records match your filters.</p>
+        </div>
+      } @else {
+        <div class="au-table-wrap">
+          <table class="au-table aal-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>Company</th>
+                <th>Entity</th>
+                <th>IP</th>
+                <th>User agent</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (entry of items(); track entry.id) {
+                <tr [class.aal-row-expanded]="isExpanded(entry)">
+                  <td>{{ entry.createdAt | date: 'medium' }}</td>
+                  <td>{{ actionLabel(entry.actionType) }}</td>
+                  <td>{{ actorLabel(entry) }}</td>
+                  <td>
+                    @if (entry.companyId) {
+                      <a [routerLink]="['/app/admin/companies', entry.companyId]" class="au-link">
+                        {{ companyLabel(entry.companyId) }}
+                      </a>
+                    } @else {
+                      —
+                    }
+                  </td>
+                  <td>
+                    <span class="aal-entity-type">{{ entry.entityType }}</span>
+                    @if (entry.entityId) {
+                      <span class="aal-entity-id" [title]="entry.entityId">{{
+                        truncate(entry.entityId)
+                      }}</span>
+                    }
+                  </td>
+                  <td [title]="entry.ipAddress ?? ''">{{ truncate(entry.ipAddress, 18) }}</td>
+                  <td [title]="entry.userAgent ?? ''">{{ truncate(entry.userAgent, 24) }}</td>
+                  <td>
+                    @if (canExpand(entry)) {
+                      <button
+                        type="button"
+                        class="aal-expand-btn"
+                        [attr.aria-expanded]="isExpanded(entry)"
+                        (click)="toggleExpand(entry)"
+                      >
+                        {{ expandToggleLabel(entry) }}
+                      </button>
+                    } @else {
+                      <span class="au-muted">—</span>
+                    }
+                  </td>
+                </tr>
+                @if (isExpanded(entry)) {
+                  @let display = metadataDisplay(entry);
+                  <tr class="aal-expand-row">
+                    <td [attr.colspan]="tableColumnCount">
+                      @if (display.kind === 'row_change') {
+                        @if (!display.showPrevious && !display.showNext) {
+                          <p class="aal-detail-empty">No field data recorded for this event.</p>
+                        } @else {
+                          <div
+                            class="aal-detail-grid"
+                            [class.aal-detail-grid--single]="
+                              display.showPrevious !== display.showNext
+                            "
+                          >
+                            @if (display.showPrevious) {
+                              <section class="aal-detail-panel">
+                                <h3 class="aal-detail-heading">Previous</h3>
+                                <dl class="aal-field-list">
+                                  @for (field of display.previous; track field.key) {
+                                    <div class="aal-field-row">
+                                      <dt>{{ field.label }}</dt>
+                                      <dd>{{ field.value }}</dd>
+                                    </div>
+                                  }
+                                </dl>
+                              </section>
+                            }
+                            @if (display.showNext) {
+                              <section class="aal-detail-panel">
+                                <h3 class="aal-detail-heading">New</h3>
+                                <dl class="aal-field-list">
+                                  @for (field of display.next; track field.key) {
+                                    <div class="aal-field-row">
+                                      <dt>{{ field.label }}</dt>
+                                      <dd>{{ field.value }}</dd>
+                                    </div>
+                                  }
+                                </dl>
+                              </section>
+                            }
+                          </div>
+                        }
+                      } @else {
+                        <section class="aal-detail-panel aal-detail-panel--full">
+                          <h3 class="aal-detail-heading">Details</h3>
+                          @if (display.details.length === 0) {
+                            <p class="aal-detail-empty">No additional details recorded.</p>
+                          } @else {
+                            <dl class="aal-field-list">
+                              @for (field of display.details; track field.key) {
+                                <div class="aal-field-row">
+                                  <dt>{{ field.label }}</dt>
+                                  <dd>{{ field.value }}</dd>
+                                </div>
+                              }
+                            </dl>
+                          }
+                        </section>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="aal-pagination">
+          <span class="au-muted">{{ pageRangeLabel() }}</span>
+          <div class="aal-pagination-actions">
+            <button
+              type="button"
+              class="au-btn au-btn-ghost"
+              [disabled]="!canGoPrevious()"
+              (click)="previousPage()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="au-btn au-btn-ghost"
+              [disabled]="!canGoNext()"
+              (click)="nextPage()"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

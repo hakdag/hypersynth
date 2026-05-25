@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use axum::http::StatusCode;
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -7,48 +8,137 @@ use crate::ai::build_feature_requirements_user_content;
 use crate::ai::build_generate_tasks_messages;
 use crate::ai::build_project_enhancement_system_prompt;
 use crate::ai::build_project_enhancement_user_content;
-use crate::ai::AiError;
-use crate::types::{DocumentContextItem, GeneratedTaskCandidate, TaskGenerationTurn};
+use crate::ai::{AiError, AiProvider};
+use crate::types::{
+    AiCompletion, AiTokenUsage, DocumentContextItem, GeneratedTaskCandidate, ProviderId,
+    TaskGenerationTurn,
+};
 
-#[derive(Clone)]
-pub struct AnthropicClient {
+pub struct AnthropicProvider {
     http: Client,
     base_url: String,
-    model: String,
     max_tokens: u32,
 }
 
-impl AnthropicClient {
-    pub fn new(http: Client, base_url: String, model: String, max_tokens: u32) -> Self {
+impl AnthropicProvider {
+    pub fn new(http: Client, base_url: String, _model: String, max_tokens: u32) -> Self {
         Self {
             http,
             base_url,
-            model,
             max_tokens,
         }
     }
 
-    pub async fn enhance_requirements(
+    async fn complete_enhancement(
         &self,
         api_key: &str,
+        selected_model: &str,
+        system: &str,
+        user_content: Vec<Value>,
+    ) -> Result<AiCompletion<String>, AiError> {
+        let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
+        let body = json!({
+            "model": selected_model,
+            "max_tokens": self.max_tokens,
+            "system": system,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_content
+                }
+            ]
+        });
+
+        let response = self
+            .http
+            .post(url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| AiError::Network)?;
+
+        if !response.status().is_success() {
+            return Err(AiError::Provider(
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            ));
+        }
+
+        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
+        extract_assistant_completion(&payload)
+    }
+
+    async fn fetch_model_ids(&self, api_key: &str) -> Result<Vec<String>, AiError> {
+        let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
+        let response = self
+            .http
+            .get(url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .await
+            .map_err(|_| AiError::Network)?;
+
+        if !response.status().is_success() {
+            return Err(AiError::Provider(
+                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+            ));
+        }
+
+        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
+        let Some(models) = payload.get("data").and_then(|data| data.as_array()) else {
+            return Err(AiError::Decode);
+        };
+
+        let model_ids: Vec<String> = models
+            .iter()
+            .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
+            .map(str::to_owned)
+            .collect();
+
+        if model_ids.is_empty() {
+            return Err(AiError::Empty);
+        }
+
+        Ok(model_ids)
+    }
+}
+
+#[async_trait]
+impl AiProvider for AnthropicProvider {
+    fn id(&self) -> ProviderId {
+        ProviderId::Anthropic
+    }
+
+    async fn list_models(&self, api_key: &str) -> Result<Vec<String>, AiError> {
+        self.fetch_model_ids(api_key).await
+    }
+
+    async fn enhance_requirements(
+        &self,
+        api_key: &str,
+        selected_model: &str,
         project_name: &str,
         requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_project_enhancement_system_prompt();
         let user = build_project_enhancement_user_content(project_name, requirements, documents);
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
-    pub async fn enhance_feature_requirements(
+    async fn enhance_feature_requirements(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
         feature_requirements: &str,
         documents: &[DocumentContextItem],
-    ) -> Result<String, AiError> {
+    ) -> Result<AiCompletion<String>, AiError> {
         let system = build_feature_requirements_system_prompt();
         let user = build_feature_requirements_user_content(
             project_name,
@@ -57,19 +147,21 @@ impl AnthropicClient {
             feature_requirements,
             documents,
         );
-        self.complete_enhancement(api_key, &system, user).await
+        self.complete_enhancement(api_key, selected_model, &system, user)
+            .await
     }
 
-    pub async fn generate_tasks(
+    async fn generate_tasks(
         &self,
         api_key: &str,
+        selected_model: &str,
         project_name: &str,
         project_requirements: Option<&str>,
         feature_title: &str,
         feature_requirements: &str,
         feedback_history: &[TaskGenerationTurn],
         document_context_items: &[DocumentContextItem],
-    ) -> Result<Vec<GeneratedTaskCandidate>, AiError> {
+    ) -> Result<AiCompletion<Vec<GeneratedTaskCandidate>>, AiError> {
         let (system, message_pairs) = build_generate_tasks_messages(
             project_name,
             project_requirements,
@@ -78,7 +170,6 @@ impl AnthropicClient {
             feedback_history,
             document_context_items,
         );
-        let selected_model = self.resolve_haiku_model(api_key).await?;
         let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let mut messages: Vec<Value> = Vec::with_capacity(message_pairs.len());
         for (role, content) in message_pairs {
@@ -113,91 +204,16 @@ impl AnthropicClient {
         }
 
         let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let text = extract_assistant_text(&payload)?;
-        parse_generated_tasks(&text)
-    }
-
-    async fn complete_enhancement(
-        &self,
-        api_key: &str,
-        system: &str,
-        user_content: Vec<Value>,
-    ) -> Result<String, AiError> {
-        let selected_model = self.resolve_haiku_model(api_key).await?;
-        let url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
-        let body = json!({
-            "model": selected_model,
-            "max_tokens": self.max_tokens,
-            "system": system,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": user_content
-                }
-            ]
-        });
-
-        let response = self
-            .http
-            .post(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|_| AiError::Network)?;
-
-        if !response.status().is_success() {
-            return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
-            ));
-        }
-
-        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        extract_assistant_text(&payload)
-    }
-
-    async fn resolve_haiku_model(&self, api_key: &str) -> Result<String, AiError> {
-        let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
-        let response = self
-            .http
-            .get(url)
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01")
-            .send()
-            .await
-            .map_err(|_| AiError::Network)?;
-
-        if !response.status().is_success() {
-            return Err(AiError::Provider(
-                StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
-            ));
-        }
-
-        let payload: Value = response.json().await.map_err(|_| AiError::Decode)?;
-        let Some(models) = payload.get("data").and_then(|data| data.as_array()) else {
-            return Err(AiError::Decode);
-        };
-
-        let best_haiku = models
-            .iter()
-            .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
-            .filter(|id| id.starts_with("claude-haiku-"))
-            .max_by_key(|id| parse_model_rank(id));
-
-        if let Some(model_id) = best_haiku {
-            return Ok(model_id.to_string());
-        }
-
-        if self.model.starts_with("claude-haiku-") {
-            return Ok(self.model.clone());
-        }
-
-        Err(AiError::Empty)
+        let completion = extract_assistant_completion(&payload)?;
+        let tasks = parse_generated_tasks(&completion.value)?;
+        Ok(AiCompletion {
+            value: tasks,
+            usage: completion.usage,
+        })
     }
 }
 
-fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
+fn extract_assistant_completion(payload: &Value) -> Result<AiCompletion<String>, AiError> {
     let content = payload
         .get("content")
         .and_then(|c| c.as_array())
@@ -218,27 +234,26 @@ fn extract_assistant_text(payload: &Value) -> Result<String, AiError> {
     if trimmed.is_empty() {
         return Err(AiError::Empty);
     }
-    Ok(trimmed)
+    Ok(AiCompletion {
+        value: trimmed,
+        usage: parse_anthropic_usage(payload),
+    })
 }
 
-fn parse_model_rank(model_id: &str) -> (u32, u32, u32) {
-    let version = model_id.strip_prefix("claude-haiku-").unwrap_or("");
-    let mut parts = version.split('-');
-
-    let major = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
+fn parse_anthropic_usage(payload: &Value) -> AiTokenUsage {
+    let usage = payload.get("usage");
+    let input_tokens = usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    let minor = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
+    let output_tokens = usage
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    let snapshot = parts
-        .next()
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(0);
-
-    (major, minor, snapshot)
+    AiTokenUsage {
+        input_tokens: u32::try_from(input_tokens).unwrap_or(u32::MAX),
+        output_tokens: u32::try_from(output_tokens).unwrap_or(u32::MAX),
+    }
 }
 
 fn strip_markdown_code_fence(s: &str) -> &str {

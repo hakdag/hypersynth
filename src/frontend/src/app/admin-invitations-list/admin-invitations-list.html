@@ -1,0 +1,141 @@
+<div class="au-page">
+  <header class="au-header">
+    <div class="au-header-text">
+      <h1 class="au-title">Invitations</h1>
+      <p class="au-subtitle">Monitor pending and expired invitations across all companies.</p>
+    </div>
+    <div class="au-filters">
+      <select
+        class="au-select"
+        [formControl]="filterForm.controls.companyId"
+        aria-label="Filter by company"
+      >
+        <option value="">All companies</option>
+        @for (c of companies(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+      <select
+        class="au-select"
+        [formControl]="filterForm.controls.status"
+        aria-label="Filter by status"
+      >
+        @for (opt of statusOptions; track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+      <label class="ail-date-label">
+        <span class="ail-date-caption">From</span>
+        <input
+          class="au-select ail-date-input"
+          type="date"
+          [formControl]="filterForm.controls.from"
+        />
+        @if (filterForm.controls.from.value) {
+          <span class="ail-date-day">{{ dayLabel(filterForm.controls.from.value) }}</span>
+        }
+      </label>
+      <label class="ail-date-label">
+        <span class="ail-date-caption">To</span>
+        <input
+          class="au-select ail-date-input"
+          type="date"
+          [formControl]="filterForm.controls.to"
+        />
+        @if (filterForm.controls.to.value) {
+          <span class="ail-date-day">{{ dayLabel(filterForm.controls.to.value) }}</span>
+        }
+      </label>
+    </div>
+  </header>
+
+  @if (actionError(); as ae) {
+    <div class="au-banner au-banner-error" role="alert">{{ ae }}</div>
+  }
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="au-muted">Loading invitations…</p>
+    }
+    @case ('error') {
+      <div class="au-banner au-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="au-btn au-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (items().length === 0) {
+        <div class="au-empty">
+          <p>No invitations match your filters.</p>
+        </div>
+      } @else {
+        <div class="au-table-wrap">
+          <table class="au-table">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Inviter</th>
+                <th>Invited email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Expires</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (inv of items(); track inv.id) {
+                <tr>
+                  <td>
+                    <a [routerLink]="['/app/admin/companies', inv.companyId]" class="au-link">
+                      {{ inv.companyName }}
+                    </a>
+                  </td>
+                  <td>{{ inviterLabel(inv) }}</td>
+                  <td>{{ inv.invitedEmail }}</td>
+                  <td>{{ roleLabel(inv.invitedRole) }}</td>
+                  <td>
+                    <span [class]="statusClass(inv.status)">{{ statusLabel(inv.status) }}</span>
+                  </td>
+                  <td>{{ inv.expiresAt | date: 'medium' }}</td>
+                  <td>{{ inv.createdAt | date: 'medium' }}</td>
+                  <td>
+                    @if (inv.status === 'pending') {
+                      <button
+                        type="button"
+                        class="au-btn au-btn-ghost"
+                        [disabled]="cancellingId() === inv.id"
+                        (click)="cancel(inv)"
+                      >
+                        {{ cancellingId() === inv.id ? 'Cancelling…' : 'Cancel' }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="ail-pagination">
+          <span class="au-muted">{{ pageRangeLabel() }}</span>
+          <div class="ail-pagination-actions">
+            <button
+              type="button"
+              class="au-btn au-btn-ghost"
+              [disabled]="!canGoPrevious()"
+              (click)="previousPage()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="au-btn au-btn-ghost"
+              [disabled]="!canGoNext()"
+              (click)="nextPage()"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

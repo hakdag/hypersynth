@@ -10,15 +10,18 @@ use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{Duration as ChronoDuration, Utc};
 use rand_core::{OsRng, RngCore};
+use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use time::Duration as CookieDuration;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::audit_events_service::AuditEventsService;
+use crate::tx_extractor::{AuditCtx, CommitAuditOnFailure};
 use crate::types::{
-    AccountType, ApiErrorBody, CompanyRole, CompanyStatus, CurrentUserBody, LoginRequest,
-    SessionPrincipal, SessionUser, UserStatus, ERROR_CODE_COMPANY_DISABLED,
+    AccountType, ApiErrorBody, AuditEventType, CompanyRole, CompanyStatus, CurrentUserBody,
+    LoginRequest, SessionPrincipal, SessionUser, Tx, UserStatus, ERROR_CODE_COMPANY_DISABLED,
     ERROR_CODE_USER_DISABLED,
 };
 use crate::user_registration::email_contains_at_and_dot;
@@ -69,9 +72,11 @@ pub async fn login(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
+    auditctx: AuditCtx,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ApiErrorBody>)> {
+) -> Result<Response, (StatusCode, Json<ApiErrorBody>)> {
     let email = payload.email.trim();
     let password = payload.password.as_str();
 
@@ -86,28 +91,45 @@ pub async fn login(
     }
 
     let normalized_email = email.to_lowercase();
+    let ip = client_ip(&peer, &headers);
+    let ua = user_agent(&headers);
 
     if state.system_admin.enabled && normalized_email == state.system_admin.email {
-        let ip = client_ip(&peer, &headers);
-        let ua = user_agent(&headers);
-
         if !verify_password_hash(state.system_admin.password_hash.as_str(), password) {
-            // Temporary until SF-24 audit logging persists these events.
-            log_system_admin_attempt(&normalized_email, &ip, &ua, "failure");
-            return Err(unauthorized_auth());
+            AuditEventsService::record_with_pool(
+                &state.pool,
+                AuditEventType::SystemAdminLoginFailure,
+                &auditctx.0,
+                json!({ "attempted_email": normalized_email, "ip": ip, "user_agent": ua }),
+            )
+            .await;
+            let mut resp = unauthorized_auth().into_response();
+            resp.extensions_mut().insert(CommitAuditOnFailure);
+            return Ok(resp);
         }
 
-        log_system_admin_attempt(&normalized_email, &ip, &ua, "success");
-
-        let (jar, body) = establish_session_for_system_admin(
+        AuditEventsService::record_with_pool(
             &state.pool,
+            AuditEventType::SystemAdminLoginSuccess,
+            &auditctx.0,
+            json!({ "email": normalized_email, "ip": ip, "user_agent": ua }),
+        )
+        .await;
+
+        let mut guard = tx.0.lock().await;
+        let conn = guard.as_mut().ok_or_else(internal_error)?;
+        let (jar, body) = establish_session_for_system_admin(
+            conn,
             state.session_max_age_secs,
             jar,
             &normalized_email,
         )
         .await?;
-        return Ok((jar, Json(body)));
+        return Ok((jar, Json(body)).into_response());
     }
+
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(internal_error)?;
 
     let row = sqlx::query_as::<_, UserAuthRow>(
         r#"
@@ -121,7 +143,7 @@ pub async fn login(
         "#,
     )
     .bind(email)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -138,23 +160,18 @@ pub async fn login(
         return Err(unauthorized_auth());
     }
 
-    if user.account_type == "company" && user_company_is_disabled(&state.pool, user.id).await? {
+    if user.account_type == "company" && user_company_is_disabled(conn, user.id).await? {
         return Err(company_disabled_error());
     }
 
-    let (jar, body) = establish_session_for_user(
-        &state.pool,
-        state.session_max_age_secs,
-        jar,
-        user.id,
-    )
-    .await?;
-    Ok((jar, Json(body)))
+    let (jar, body) =
+        establish_session_for_user(conn, state.session_max_age_secs, jar, user.id).await?;
+    Ok((jar, Json(body)).into_response())
 }
 
 /// Creates a new session row and session cookie for the given user (e.g. after login or invitation acceptance).
 pub async fn establish_session_for_user(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     session_max_age_secs: i64,
     jar: CookieJar,
     user_id: Uuid,
@@ -175,7 +192,7 @@ pub async fn establish_session_for_user(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?
     .ok_or_else(internal_error)?;
@@ -194,12 +211,12 @@ pub async fn establish_session_for_user(
     .bind(row.id)
     .bind(&token_hash)
     .bind(expires_at)
-    .execute(pool)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
-    let account_type = AccountType::from_db_value(row.account_type.as_str())
-        .ok_or_else(internal_error)?;
+    let account_type =
+        AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
     let user = SessionUser {
@@ -217,7 +234,7 @@ pub async fn establish_session_for_user(
 }
 
 async fn establish_session_for_system_admin(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     session_max_age_secs: i64,
     jar: CookieJar,
     email: &str,
@@ -242,7 +259,7 @@ async fn establish_session_for_system_admin(
     .bind(&token_hash)
     .bind(expires_at)
     .bind(email)
-    .execute(pool)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -255,15 +272,18 @@ async fn establish_session_for_system_admin(
     ))
 }
 
-pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
+pub async fn logout(tx: Tx, jar: CookieJar) -> impl IntoResponse {
     if let Some(cookie) = jar.get(SESSION_COOKIE) {
         if let Ok(bytes) = hex::decode(cookie.value()) {
             if let Ok(raw) = <[u8; 32]>::try_from(bytes.as_slice()) {
                 let token_hash = hash_session_token(&raw);
-                let _ = sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
-                    .bind(&token_hash)
-                    .execute(&state.pool)
-                    .await;
+                let mut guard = tx.0.lock().await;
+                if let Some(conn) = guard.as_mut() {
+                    let _ = sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
+                        .bind(&token_hash)
+                        .execute(&mut **conn)
+                        .await;
+                }
             }
         }
     }
@@ -277,10 +297,12 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> impl IntoR
 }
 
 pub async fn current_user(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
 ) -> Result<Response, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_principal(&state.pool, &jar).await {
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(internal_error)?;
+    match resolve_current_principal(conn, &jar).await {
         Ok(Some(principal)) => Ok(Json(principal_to_body(principal)).into_response()),
         Ok(None) => Err(unauthenticated()),
         Err(err) if is_company_disabled_error(&err) || is_user_disabled_error(&err) => {
@@ -291,10 +313,10 @@ pub async fn current_user(
 }
 
 pub(crate) async fn require_authenticated_user(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     jar: &CookieJar,
 ) -> Result<SessionUser, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_principal(pool, jar).await? {
+    match resolve_current_principal(conn, jar).await? {
         Some(SessionPrincipal::User(user)) => Ok(user),
         Some(SessionPrincipal::SystemAdmin { .. }) => Err(admin_forbidden()),
         None => Err(unauthenticated()),
@@ -302,18 +324,18 @@ pub(crate) async fn require_authenticated_user(
 }
 
 pub(crate) async fn require_system_admin(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     jar: &CookieJar,
 ) -> Result<String, (StatusCode, Json<ApiErrorBody>)> {
-    match resolve_current_principal(pool, jar).await? {
+    match resolve_current_principal(conn, jar).await? {
         Some(SessionPrincipal::SystemAdmin { email }) => Ok(email),
         Some(SessionPrincipal::User(_)) => Err(non_admin_forbidden()),
         None => Err(unauthenticated()),
     }
 }
 
-async fn resolve_current_principal(
-    pool: &PgPool,
+pub(crate) async fn resolve_current_principal(
+    conn: &mut PgConnection,
     jar: &CookieJar,
 ) -> Result<Option<SessionPrincipal>, (StatusCode, Json<ApiErrorBody>)> {
     let Some(cookie) = jar.get(SESSION_COOKIE) else {
@@ -349,7 +371,7 @@ async fn resolve_current_principal(
         "#,
     )
     .bind(&token_hash)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -377,12 +399,12 @@ async fn resolve_current_principal(
     if account_type == AccountType::Company
         && row.company_status.as_deref() == Some(CompanyStatus::Disabled.as_db_value())
     {
-        revoke_session_by_token_hash(pool, &token_hash).await?;
+        revoke_session_by_token_hash(conn, &token_hash).await?;
         return Err(company_disabled_error());
     }
 
     if row.user_status.as_deref() == Some(UserStatus::Disabled.as_db_value()) {
-        revoke_session_by_token_hash(pool, &token_hash).await?;
+        revoke_session_by_token_hash(conn, &token_hash).await?;
         return Err(user_disabled_error());
     }
 
@@ -398,7 +420,7 @@ async fn resolve_current_principal(
 }
 
 async fn user_company_is_disabled(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
 ) -> Result<bool, (StatusCode, Json<ApiErrorBody>)> {
     let status: Option<String> = sqlx::query_scalar(
@@ -410,7 +432,7 @@ async fn user_company_is_disabled(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -418,12 +440,12 @@ async fn user_company_is_disabled(
 }
 
 async fn revoke_session_by_token_hash(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     token_hash: &str,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
     sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
         .bind(token_hash)
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(|_| internal_error())?;
     Ok(())
@@ -440,13 +462,11 @@ fn clear_session_jar(jar: CookieJar) -> CookieJar {
 }
 
 fn is_company_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
-    err.0 == StatusCode::FORBIDDEN
-        && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
+    err.0 == StatusCode::FORBIDDEN && err.1.code.as_deref() == Some(ERROR_CODE_COMPANY_DISABLED)
 }
 
 fn is_user_disabled_error(err: &(StatusCode, Json<ApiErrorBody>)) -> bool {
-    err.0 == StatusCode::FORBIDDEN
-        && err.1.code.as_deref() == Some(ERROR_CODE_USER_DISABLED)
+    err.0 == StatusCode::FORBIDDEN && err.1.code.as_deref() == Some(ERROR_CODE_USER_DISABLED)
 }
 
 fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
@@ -457,10 +477,7 @@ fn company_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
 }
 
 fn user_disabled_error() -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::FORBIDDEN,
-        Json(ApiErrorBody::user_disabled()),
-    )
+    (StatusCode::FORBIDDEN, Json(ApiErrorBody::user_disabled()))
 }
 
 fn principal_to_body(principal: SessionPrincipal) -> CurrentUserBody {
@@ -508,7 +525,7 @@ fn decode_role(
     }
 }
 
-fn hash_session_token(raw: &[u8; 32]) -> String {
+pub(crate) fn hash_session_token(raw: &[u8; 32]) -> String {
     hex::encode(Sha256::digest(raw))
 }
 
@@ -521,7 +538,7 @@ fn verify_password_hash(hash: &str, password: &str) -> bool {
         .is_ok()
 }
 
-fn client_ip(peer: &SocketAddr, headers: &HeaderMap) -> String {
+pub(crate) fn client_ip(peer: &SocketAddr, headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
@@ -532,35 +549,12 @@ fn client_ip(peer: &SocketAddr, headers: &HeaderMap) -> String {
         .unwrap_or_else(|| peer.ip().to_string())
 }
 
-fn user_agent(headers: &HeaderMap) -> String {
+pub(crate) fn user_agent(headers: &HeaderMap) -> String {
     headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string()
-}
-
-/// Temporary until SF-24 audit logging persists System Admin login attempts.
-fn log_system_admin_attempt(email: &str, ip: &str, ua: &str, outcome: &str) {
-    if outcome == "success" {
-        tracing::info!(
-            target: "system_admin_auth",
-            email = %email,
-            ip = %ip,
-            ua = %ua,
-            outcome = %outcome,
-            "system admin login attempt"
-        );
-    } else {
-        tracing::warn!(
-            target: "system_admin_auth",
-            email = %email,
-            ip = %ip,
-            ua = %ua,
-            outcome = %outcome,
-            "system admin login attempt"
-        );
-    }
 }
 
 fn unauthorized_auth() -> (StatusCode, Json<ApiErrorBody>) {

@@ -4,20 +4,21 @@ use axum::response::IntoResponse;
 use axum::Json;
 use axum_extra::extract::cookie::CookieJar;
 use chrono::Utc;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgConnection;
 use tracing::warn;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth_route;
 use crate::invitation_token_service::{decode_invitation_token_hex, hash_invitation_token};
-use crate::user_registration::{
-    hash_password_argon2, password_policy_error, username_is_valid, USERNAME_VALIDATION_MESSAGE,
-};
+use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     AcceptInvitationConfirmRequest, AcceptInvitationRegisterRequest, AccountType, ApiErrorBody,
     CompanyRole, CurrentUserBody, Invitation, InvitationAcceptPreviewQuery,
-    InvitationPreviewResponse, InvitationStatus, ProjectMembershipRole,
+    InvitationPreviewResponse, InvitationStatus, ProjectMembershipRole, Tx,
+};
+use crate::user_registration::{
+    hash_password_argon2, password_policy_error, username_is_valid, USERNAME_VALIDATION_MESSAGE,
 };
 
 #[derive(sqlx::FromRow)]
@@ -32,7 +33,7 @@ struct InvitationPreviewDbRow {
 }
 
 pub async fn preview_invitation(
-    State(state): State<AppState>,
+    tx: Tx,
     Query(query): Query<InvitationAcceptPreviewQuery>,
 ) -> Result<Json<InvitationPreviewResponse>, (StatusCode, Json<ApiErrorBody>)> {
     let token_hex = query.token.trim();
@@ -45,6 +46,9 @@ pub async fn preview_invitation(
         None => return Err(not_found_invitation()),
     };
     let token_hash = hash_invitation_token(&raw);
+
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
 
     let row = sqlx::query_as::<_, InvitationPreviewDbRow>(
         r#"
@@ -63,7 +67,7 @@ pub async fn preview_invitation(
         "#,
     )
     .bind(&token_hash)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -71,8 +75,8 @@ pub async fn preview_invitation(
         return Err(not_found_invitation());
     };
 
-    let status = InvitationStatus::from_db_value(row.status.as_str())
-        .ok_or_else(|| internal_error())?;
+    let status =
+        InvitationStatus::from_db_value(row.status.as_str()).ok_or_else(internal_error)?;
 
     if status == InvitationStatus::Pending && row.expires_at < Utc::now() {
         let _ = sqlx::query(
@@ -85,7 +89,7 @@ pub async fn preview_invitation(
         .bind(row.id)
         .bind(InvitationStatus::Expired.as_db_value())
         .bind(InvitationStatus::Pending.as_db_value())
-        .execute(&state.pool)
+        .execute(&mut **conn)
         .await;
 
         return Err(gone_invitation(
@@ -95,22 +99,18 @@ pub async fn preview_invitation(
     }
 
     if status != InvitationStatus::Pending {
-        return Err(gone_invitation(
-            invitation_inactive_message(status),
-            status,
-        ));
+        return Err(gone_invitation(invitation_inactive_message(status), status));
     }
 
     let invited_role =
         CompanyRole::from_db_value(row.invited_role.as_str()).ok_or_else(internal_error)?;
 
-    let existing_user_present: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
-    )
-    .bind(&row.invited_email)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|_| internal_error())?;
+    let existing_user_present: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&row.invited_email)
+            .fetch_one(&mut **conn)
+            .await
+            .map_err(|_| internal_error())?;
 
     Ok(Json(InvitationPreviewResponse {
         company_name: row.company_name,
@@ -134,6 +134,7 @@ fn invitation_inactive_message(status: InvitationStatus) -> &'static str {
 
 pub async fn accept_invitation_register(
     State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<AcceptInvitationRegisterRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ApiErrorBody>)> {
@@ -178,19 +179,16 @@ pub async fn accept_invitation_register(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
 
-    let invitation = match lock_pending_invitation(&mut tx, &token_hash).await? {
+    let invitation = match lock_pending_invitation(conn, &token_hash).await? {
         Some(inv) => inv,
-        None => {
-            tx.rollback().await.ok();
-            return Err(not_found_invitation());
-        }
+        None => return Err(not_found_invitation()),
     };
 
     if invitation.expires_at < Utc::now() {
-        expire_invitation_if_pending(&mut tx, invitation.id).await?;
-        tx.commit().await.map_err(|_| internal_error())?;
+        expire_invitation_if_pending(conn, invitation.id).await?;
         return Err(gone_invitation(
             "This invitation has expired.",
             InvitationStatus::Expired,
@@ -199,24 +197,20 @@ pub async fn accept_invitation_register(
 
     let st = match InvitationStatus::from_db_value(invitation.status.as_str()) {
         Some(s) => s,
-        None => {
-            tx.rollback().await.ok();
-            return Err(internal_error());
-        }
+        None => return Err(internal_error()),
     };
     if st != InvitationStatus::Pending {
-        tx.rollback().await.ok();
         return Err(gone_invitation(invitation_inactive_message(st), st));
     }
 
-    let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
-        .bind(&invitation.invited_email)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|_| internal_error())?;
+    let user_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&invitation.invited_email)
+            .fetch_one(&mut **conn)
+            .await
+            .map_err(|_| internal_error())?;
 
     if user_exists {
-        tx.rollback().await.ok();
         return Err((
             StatusCode::CONFLICT,
             Json(ApiErrorBody::msg(
@@ -225,13 +219,7 @@ pub async fn accept_invitation_register(
         ));
     }
 
-    let password_hash = match hash_password_argon2(password) {
-        Ok(h) => h,
-        Err(()) => {
-            tx.rollback().await.ok();
-            return Err(internal_error());
-        }
-    };
+    let password_hash = hash_password_argon2(password).map_err(|_| internal_error())?;
 
     let user_id = match sqlx::query_scalar::<_, Uuid>(
         r#"
@@ -255,12 +243,11 @@ pub async fn accept_invitation_register(
     .bind(&password_hash)
     .bind(&invitation.invited_role)
     .bind(timezone)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **conn)
     .await
     {
         Ok(id) => id,
         Err(e) => {
-            tx.rollback().await.ok();
             if let Some(db) = e.as_database_error() {
                 if db.code().as_deref() == Some("23505") {
                     return Err((
@@ -273,29 +260,24 @@ pub async fn accept_invitation_register(
         }
     };
 
-    accept_invitation_in_tx(&mut tx, &invitation, user_id).await?;
+    accept_invitation_in_tx(conn, &invitation, user_id).await?;
 
-    tx.commit().await.map_err(|_| internal_error())?;
-
-    // SF-24: audit log "Invitation accepted" for this user/company.
-
-    let (jar, body) = auth_route::establish_session_for_user(
-        &state.pool,
-        state.session_max_age_secs,
-        jar,
-        user_id,
-    )
-    .await?;
+    let (jar, body) =
+        auth_route::establish_session_for_user(conn, state.session_max_age_secs, jar, user_id)
+            .await?;
 
     Ok((jar, Json(body)))
 }
 
 pub async fn accept_invitation_confirm(
-    State(state): State<AppState>,
+    tx: Tx,
     jar: CookieJar,
     Json(payload): Json<AcceptInvitationConfirmRequest>,
 ) -> Result<Json<CurrentUserBody>, (StatusCode, Json<ApiErrorBody>)> {
-    let user = auth_route::require_authenticated_user(&state.pool, &jar).await?;
+    let mut guard = tx.0.lock().await;
+    let conn = guard.as_mut().ok_or_else(missing_tx_error)?;
+
+    let user = auth_route::require_authenticated_user(conn, &jar).await?;
 
     let token_hex = payload.token.trim();
     if token_hex.is_empty() {
@@ -308,18 +290,12 @@ pub async fn accept_invitation_confirm(
     };
     let token_hash = hash_invitation_token(&raw);
 
-    let mut tx = state.pool.begin().await.map_err(|_| internal_error())?;
-
-    let invitation = match lock_pending_invitation(&mut tx, &token_hash).await? {
+    let invitation = match lock_pending_invitation(conn, &token_hash).await? {
         Some(inv) => inv,
-        None => {
-            tx.rollback().await.ok();
-            return Err(not_found_invitation());
-        }
+        None => return Err(not_found_invitation()),
     };
 
     if user.email != invitation.invited_email {
-        tx.rollback().await.ok();
         return Err((
             StatusCode::FORBIDDEN,
             Json(ApiErrorBody::msg(
@@ -329,8 +305,7 @@ pub async fn accept_invitation_confirm(
     }
 
     if invitation.expires_at < Utc::now() {
-        expire_invitation_if_pending(&mut tx, invitation.id).await?;
-        tx.commit().await.map_err(|_| internal_error())?;
+        expire_invitation_if_pending(conn, invitation.id).await?;
         return Err(gone_invitation(
             "This invitation has expired.",
             InvitationStatus::Expired,
@@ -339,28 +314,22 @@ pub async fn accept_invitation_confirm(
 
     let st = match InvitationStatus::from_db_value(invitation.status.as_str()) {
         Some(s) => s,
-        None => {
-            tx.rollback().await.ok();
-            return Err(internal_error());
-        }
+        None => return Err(internal_error()),
     };
     if st != InvitationStatus::Pending {
-        tx.rollback().await.ok();
         return Err(gone_invitation(invitation_inactive_message(st), st));
     }
 
-    let existing_company_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT company_id FROM company_users WHERE user_id = $1",
-    )
-    .bind(user.id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|_| internal_error())?
-    .flatten();
+    let existing_company_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT company_id FROM company_users WHERE user_id = $1")
+            .bind(user.id)
+            .fetch_optional(&mut **conn)
+            .await
+            .map_err(|_| internal_error())?
+            .flatten();
 
     if let Some(cid) = existing_company_id {
         if cid != invitation.company_id {
-            tx.rollback().await.ok();
             return Err((
                 StatusCode::CONFLICT,
                 Json(ApiErrorBody::msg(
@@ -381,7 +350,7 @@ pub async fn accept_invitation_confirm(
     )
     .bind(user.id)
     .bind(&invitation.invited_role)
-    .execute(&mut *tx)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -394,12 +363,12 @@ pub async fn accept_invitation_confirm(
         )
         .bind(invitation.company_id)
         .bind(user.id)
-        .execute(&mut *tx)
+        .execute(&mut **conn)
         .await
         .map_err(|_| internal_error())?;
     }
 
-    maybe_insert_project_membership(&mut tx, &invitation, user.id).await?;
+    maybe_insert_project_membership(conn, &invitation, user.id).await?;
 
     let updated_rows = sqlx::query(
         r#"
@@ -412,26 +381,21 @@ pub async fn accept_invitation_confirm(
     .bind(invitation.id)
     .bind(InvitationStatus::Accepted.as_db_value())
     .bind(InvitationStatus::Pending.as_db_value())
-    .execute(&mut *tx)
+    .execute(&mut **conn)
     .await
     .map_err(|_| internal_error())?
     .rows_affected();
 
     if updated_rows != 1 {
-        tx.rollback().await.ok();
         return Err(internal_error());
     }
 
-    tx.commit().await.map_err(|_| internal_error())?;
-
-    // SF-24: audit log "Invitation accepted".
-
-    let body = load_current_user_body(&state.pool, user.id).await?;
+    let body = load_current_user_body(conn, user.id).await?;
     Ok(Json(body))
 }
 
 async fn load_current_user_body(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
 ) -> Result<CurrentUserBody, (StatusCode, Json<ApiErrorBody>)> {
     let row = sqlx::query_as::<_, UserRowForBody>(
@@ -450,12 +414,13 @@ async fn load_current_user_body(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?
     .ok_or_else(internal_error)?;
 
-    let account_type = AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
+    let account_type =
+        AccountType::from_db_value(row.account_type.as_str()).ok_or_else(internal_error)?;
     let role = decode_role(row.role.as_deref())?;
 
     Ok(CurrentUserBody {
@@ -493,7 +458,7 @@ fn decode_role(
 }
 
 async fn lock_pending_invitation(
-    tx: &mut Transaction<'_, Postgres>,
+    conn: &mut PgConnection,
     token_hash: &str,
 ) -> Result<Option<Invitation>, (StatusCode, Json<ApiErrorBody>)> {
     let row = sqlx::query_as::<_, Invitation>(
@@ -516,7 +481,7 @@ async fn lock_pending_invitation(
         "#,
     )
     .bind(token_hash)
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -524,7 +489,7 @@ async fn lock_pending_invitation(
 }
 
 async fn expire_invitation_if_pending(
-    tx: &mut Transaction<'_, Postgres>,
+    conn: &mut PgConnection,
     invitation_id: Uuid,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
     sqlx::query(
@@ -537,14 +502,14 @@ async fn expire_invitation_if_pending(
     .bind(invitation_id)
     .bind(InvitationStatus::Expired.as_db_value())
     .bind(InvitationStatus::Pending.as_db_value())
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
     Ok(())
 }
 
 async fn accept_invitation_in_tx(
-    tx: &mut Transaction<'_, Postgres>,
+    conn: &mut PgConnection,
     invitation: &Invitation,
     user_id: Uuid,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
@@ -556,11 +521,11 @@ async fn accept_invitation_in_tx(
     )
     .bind(invitation.company_id)
     .bind(user_id)
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
-    maybe_insert_project_membership(tx, invitation, user_id).await?;
+    maybe_insert_project_membership(conn, invitation, user_id).await?;
 
     let updated_rows = sqlx::query(
         r#"
@@ -573,7 +538,7 @@ async fn accept_invitation_in_tx(
     .bind(invitation.id)
     .bind(InvitationStatus::Accepted.as_db_value())
     .bind(InvitationStatus::Pending.as_db_value())
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?
     .rows_affected();
@@ -586,7 +551,7 @@ async fn accept_invitation_in_tx(
 }
 
 async fn maybe_insert_project_membership(
-    tx: &mut Transaction<'_, Postgres>,
+    conn: &mut PgConnection,
     invitation: &Invitation,
     user_id: Uuid,
 ) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
@@ -618,7 +583,7 @@ async fn maybe_insert_project_membership(
     )
     .bind(pid)
     .bind(invitation.company_id)
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -641,7 +606,7 @@ async fn maybe_insert_project_membership(
     .bind(pid)
     .bind(user_id)
     .bind(pm_role.as_db_value())
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await
     .map_err(|_| internal_error())?;
 
@@ -668,10 +633,7 @@ fn gone_invitation(
 }
 
 fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ApiErrorBody::msg(message)),
-    )
+    (StatusCode::BAD_REQUEST, Json(ApiErrorBody::msg(message)))
 }
 
 fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {

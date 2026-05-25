@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use base64::engine::general_purpose::STANDARD as B64_STD;
 use base64::Engine;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::types::{DocumentContentKind, DocumentContextError, DocumentContextItem, TenantScope};
@@ -12,7 +12,7 @@ pub struct DocumentContextService;
 
 impl DocumentContextService {
     pub async fn load_for_project(
-        pool: &PgPool,
+        conn: &mut PgConnection,
         project_id: Uuid,
         scope: TenantScope,
         document_ids: &[Uuid],
@@ -48,7 +48,7 @@ impl DocumentContextService {
         .bind(scope.is_company_admin())
         .bind(scope.session_user_id())
         .bind(&ordered)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await
         .map_err(|_| DocumentContextError::ContentUnavailable)?;
 
@@ -74,10 +74,7 @@ impl DocumentContextService {
 
     fn dedupe_preserve_order(ids: &[Uuid]) -> Vec<Uuid> {
         let mut seen = HashSet::new();
-        ids.iter()
-            .copied()
-            .filter(|u| seen.insert(*u))
-            .collect()
+        ids.iter().copied().filter(|u| seen.insert(*u)).collect()
     }
 
     async fn load_one(
@@ -87,7 +84,12 @@ impl DocumentContextService {
         let original_filename = metadata_as_str(&metadata, "originalFilename")
             .unwrap_or_else(|| "document".to_string());
         let mime_raw = metadata_as_str(&metadata, "contentType").unwrap_or_default();
-        let mime = mime_raw.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let mime = mime_raw
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
 
         let bytes = tokio::fs::read(&file_path)
             .await
@@ -116,9 +118,7 @@ fn sniff_image_media_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() >= 3 && bytes[0..3] == [0xFF, 0xD8, 0xFF] {
         return Some("image/jpeg");
     }
-    if bytes.len() >= 8
-        && bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-    {
+    if bytes.len() >= 8 && bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
         return Some("image/png");
     }
     if bytes.len() >= 6 && (&bytes[0..6] == b"GIF87a" || &bytes[0..6] == b"GIF89a") {

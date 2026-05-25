@@ -2,7 +2,9 @@ import { Routes } from '@angular/router';
 
 import { AccountPlaceholder } from './account-placeholder/account-placeholder';
 import { authGuard } from './auth.guard';
+import { companyAdminGuard } from './company-admin.guard';
 import { companyGuard } from './company.guard';
+import { CompanyAiUsage } from './company-ai-usage/company-ai-usage';
 import { CompanyProfile } from './company-profile/company-profile';
 import { InvitationAccept } from './invitation-accept/invitation-accept';
 import { InvitationCreate } from './invitation-create/invitation-create';
@@ -14,6 +16,11 @@ import { FeatureView } from './feature-view/feature-view';
 import { AdminCompaniesList } from './admin-companies-list/admin-companies-list';
 import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail';
 import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
+import { AdminAuditLogs } from './admin-audit-logs/admin-audit-logs';
+import { AdminPlatformConfig } from './admin-platform-config/admin-platform-config';
+import { AdminSystemHealth } from './admin-system-health/admin-system-health';
+import { AdminAiUsage } from './admin-ai-usage/admin-ai-usage';
+import { AdminInvitationsList } from './admin-invitations-list/admin-invitations-list';
 import { AdminUsersList } from './admin-users-list/admin-users-list';
 import { CompanyDisabled } from './company-disabled/company-disabled';
 import { Login } from './login/login';
@@ -52,6 +59,11 @@ export const routes: Routes = [
           { path: 'companies/:companyId', component: AdminCompanyDetail },
           { path: 'users', component: AdminUsersList },
           { path: 'users/:userId', component: AdminUserDetail },
+          { path: 'invitations', component: AdminInvitationsList },
+          { path: 'ai-usage', component: AdminAiUsage },
+          { path: 'audit-logs', component: AdminAuditLogs },
+          { path: 'health', component: AdminSystemHealth },
+          { path: 'config', component: AdminPlatformConfig },
         ],
       },
       { path: 'projects', component: ProjectList },
@@ -68,6 +80,11 @@ export const routes: Routes = [
       { path: 'projects/:projectId/edit', component: ProjectEdit },
       { path: 'projects/:projectId', component: ProjectDetail },
       { path: 'company', component: CompanyProfile, canActivate: [companyGuard] },
+      {
+        path: 'company/ai-usage',
+        component: CompanyAiUsage,
+        canActivate: [companyGuard, companyAdminGuard],
+      },
       {
         path: 'team/invitations',
         component: InvitationList,
