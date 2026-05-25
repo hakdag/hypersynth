@@ -1,8 +1,11 @@
 mod admin_audit_route;
 mod admin_ai_usage_route;
 mod admin_company_route;
+mod admin_config_route;
+mod admin_health_route;
 mod admin_invitation_route;
 mod admin_user_route;
+mod platform_config_service;
 mod ai;
 mod ai_provider_route;
 mod ai_usage_query_helpers;
@@ -47,6 +50,8 @@ use admin_ai_usage_route::{
 };
 use admin_company_route::{get_admin_company, list_admin_companies, set_admin_company_status};
 use admin_invitation_route::{cancel_admin_invitation, list_admin_invitations};
+use admin_config_route::{get_admin_platform_config, patch_admin_platform_config};
+use admin_health_route::get_admin_health;
 use admin_user_route::{
     get_admin_user, list_admin_users, reset_admin_user_access, set_admin_user_status,
 };
@@ -266,6 +271,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/admin/invitations/{invitation_id}/cancel",
             post(cancel_admin_invitation),
         )
+        .route("/api/v1/admin/health", get(get_admin_health))
+        .route(
+            "/api/v1/admin/platform-config",
+            get(get_admin_platform_config).patch(patch_admin_platform_config),
+        )
         .route(
             "/api/v1/company/ai-usage/summary",
             get(company_ai_usage_summary),
@@ -404,9 +414,38 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
     })
 }
 
-async fn bootstrap() -> Json<BootstrapResponse> {
+async fn bootstrap(State(state): State<AppState>) -> Json<BootstrapResponse> {
+    let platform = sqlx::query_as::<_, (Option<String>, sqlx::types::Json<serde_json::Value>)>(
+        r#"
+        SELECT platform_announcement, feature_flags
+        FROM platform_config
+        WHERE id = 1
+        "#,
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten();
+
+    let (platform_announcement, feature_flags) = match platform {
+        Some((announcement, flags)) => {
+            let mut map = std::collections::HashMap::new();
+            if let Some(obj) = flags.0.as_object() {
+                for (k, v) in obj {
+                    if let Some(b) = v.as_bool() {
+                        map.insert(k.clone(), b);
+                    }
+                }
+            }
+            (announcement, map)
+        }
+        None => (None, std::collections::HashMap::new()),
+    };
+
     Json(BootstrapResponse {
         app_name: "HyperSynth",
         status_labels: ["Pending", "In Progress", "Done"],
+        platform_announcement,
+        feature_flags,
     })
 }

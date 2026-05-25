@@ -16,6 +16,7 @@ use crate::app_state::AppState;
 use crate::audit_events_service::AuditEventsService;
 use crate::auth_route;
 use crate::document_context_service::DocumentContextService;
+use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::tx_extractor::{missing_tx_error, AuditCtx};
@@ -545,6 +546,7 @@ pub async fn enhance_project_requirements(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    PlatformConfigService::require_ai_requests_enabled(conn).await?;
 
     let project_row = sqlx::query_as::<_, (String, Option<String>)>(
         r#"
@@ -728,6 +730,7 @@ pub async fn enhance_feature_requirements(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    PlatformConfigService::require_ai_requests_enabled(conn).await?;
 
     let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
         r#"
@@ -932,6 +935,7 @@ pub async fn generate_feature_tasks(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    PlatformConfigService::require_ai_requests_enabled(conn).await?;
 
     let row = sqlx::query_as::<_, (String, Option<String>, String, Option<String>)>(
         r#"

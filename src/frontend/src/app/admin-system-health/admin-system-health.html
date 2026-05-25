@@ -1,0 +1,37 @@
+<div class="ash-page">
+  <header class="ash-header">
+    <div>
+      <h1 class="ash-title">System health</h1>
+      <p class="ash-subtitle">Platform status at a glance for operations and incident response.</p>
+    </div>
+    <button type="button" class="ash-btn ash-btn-primary" (click)="refresh()">Refresh</button>
+  </header>
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="ash-muted">Loading health indicators…</p>
+    }
+    @case ('error') {
+      <div class="ash-banner ash-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="ash-btn ash-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      <section class="ash-grid" aria-label="Health indicators">
+        @for (card of cards(); track card.key) {
+          <article class="ash-card">
+            <div class="ash-card-head">
+              <h2 class="ash-card-title">{{ card.label }}</h2>
+              <span [class]="statusClass(card.indicator.status)">
+                {{ statusLabel(card.indicator.status) }}
+              </span>
+            </div>
+            <p class="ash-summary">{{ card.indicator.summary }}</p>
+            @if (card.indicator.detail) {
+              <p class="ash-detail">{{ card.indicator.detail }}</p>
+            }
+          </article>
+        }
+      </section>
+    }
+  }
+</div>

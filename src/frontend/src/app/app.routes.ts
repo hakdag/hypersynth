@@ -17,6 +17,8 @@ import { AdminCompaniesList } from './admin-companies-list/admin-companies-list'
 import { AdminCompanyDetail } from './admin-company-detail/admin-company-detail';
 import { AdminUserDetail } from './admin-user-detail/admin-user-detail';
 import { AdminAuditLogs } from './admin-audit-logs/admin-audit-logs';
+import { AdminPlatformConfig } from './admin-platform-config/admin-platform-config';
+import { AdminSystemHealth } from './admin-system-health/admin-system-health';
 import { AdminAiUsage } from './admin-ai-usage/admin-ai-usage';
 import { AdminInvitationsList } from './admin-invitations-list/admin-invitations-list';
 import { AdminUsersList } from './admin-users-list/admin-users-list';
@@ -60,6 +62,8 @@ export const routes: Routes = [
           { path: 'invitations', component: AdminInvitationsList },
           { path: 'ai-usage', component: AdminAiUsage },
           { path: 'audit-logs', component: AdminAuditLogs },
+          { path: 'health', component: AdminSystemHealth },
+          { path: 'config', component: AdminPlatformConfig },
         ],
       },
       { path: 'projects', component: ProjectList },

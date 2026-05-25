@@ -7,6 +7,7 @@ use tracing::{info, warn};
 use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::platform_config_service::PlatformConfigService;
 use crate::tx_extractor::missing_tx_error;
 use crate::types::{
     ApiErrorBody, ListProviderModelsRequest, ListProviderModelsResponse, ProviderCatalogResponse,
@@ -34,9 +35,12 @@ pub async fn list_supported_providers(
             );
             (status, json)
         })?;
+    let config = PlatformConfigService::load(conn)
+        .await
+        .map_err(|_| internal_error())?;
     drop(guard);
 
-    let providers = state.ai_providers.supported();
+    let providers = PlatformConfigService::allowed_providers(&config, &state.ai_providers);
     info!(
         user_id = %user.id,
         provider_count = providers.len(),
@@ -131,6 +135,16 @@ fn bad_request(message: impl Into<String>) -> (StatusCode, Json<ApiErrorBody>) {
         StatusCode::BAD_REQUEST,
         Json(ApiErrorBody {
             message: message.into(),
+            ..Default::default()
+        }),
+    )
+}
+
+fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiErrorBody {
+            message: "Something went wrong. Please try again.".into(),
             ..Default::default()
         }),
     )

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::ai::AiError;
 use crate::app_state::AppState;
 use crate::auth_route;
+use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::tx_extractor::missing_tx_error;
@@ -102,6 +103,13 @@ pub async fn update_project_ai_settings(
         })?;
     let scope = TenantScopeService::from_session(&user)?;
     ProjectAiSettingsService::authorize_manage(conn, project_id, scope).await?;
+
+    let platform_config = PlatformConfigService::load(conn)
+        .await
+        .map_err(|_| internal_error())?;
+    if !PlatformConfigService::is_provider_allowed(&platform_config, payload.provider) {
+        return Err(bad_request("This AI provider is not allowed on the platform."));
+    }
 
     if payload.clear_api_key {
         if payload

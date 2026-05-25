@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::crypto::ApiKeyCipher;
+use crate::platform_config_service::PlatformConfigService;
 use crate::project_api_key_service::ProjectApiKeyService;
 use crate::runtime_decrypt_error::RuntimeDecryptError;
 use crate::types::{
@@ -171,6 +172,15 @@ impl ProjectAiSettingsService {
         .await
         .map_err(|_| internal_error())?;
         let had_existing = existing.is_some();
+
+        let monthly_token_limit = if monthly_token_limit.is_some() || had_existing {
+            monthly_token_limit
+        } else {
+            PlatformConfigService::load(conn)
+                .await
+                .map_err(|_| internal_error())?
+                .default_monthly_token_limit
+        };
 
         if clear_api_key {
             if had_existing {
