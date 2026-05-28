@@ -15,6 +15,7 @@ import {
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
 } from '../project-api.service';
+import { AuthApiService, CurrentUser } from '../auth-api.service';
 import { TaskAiGenerateDialog } from '../task-ai-generate-dialog/task-ai-generate-dialog';
 
 const VALID_FEATURE_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
@@ -33,7 +34,13 @@ function normalizeTaskStatus(raw: string): string {
 
 type PageResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; project: ProjectDetailModel; feature: CreatedFeature; tasks: CreatedTask[] }
+  | {
+      kind: 'ok';
+      project: ProjectDetailModel;
+      feature: CreatedFeature;
+      tasks: CreatedTask[];
+      currentUser: CurrentUser;
+    }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -45,12 +52,14 @@ type PageResult =
 export class FeatureView implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly projectApi = inject(ProjectApiService);
+  private readonly authApi = inject(AuthApiService);
   private sub: Subscription | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly project = signal<ProjectDetailModel | null>(null);
   protected readonly featureMeta = signal<CreatedFeature | null>(null);
   protected readonly taskList = signal<CreatedTask[]>([]);
+  protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly requirementsExpanded = signal(false);
   protected readonly requirementsCopyFlash = signal(false);
@@ -75,6 +84,7 @@ export class FeatureView implements OnInit, OnDestroy {
             project: this.projectApi.getProject(projectId),
             feature: this.projectApi.getFeature(projectId, featureId),
             tasks: this.projectApi.listTasks(projectId, featureId),
+            currentUser: this.authApi.me(),
           }).pipe(
             map(
               (data): PageResult => ({
@@ -82,6 +92,7 @@ export class FeatureView implements OnInit, OnDestroy {
                 project: data.project,
                 feature: data.feature,
                 tasks: data.tasks,
+                currentUser: data.currentUser,
               }),
             ),
             catchError((err: unknown) =>
@@ -99,6 +110,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.project.set(null);
           this.featureMeta.set(null);
           this.taskList.set([]);
+          this.currentUser.set(null);
           this.requirementsExpanded.set(false);
           this.aiTaskDialogOpen.set(false);
           this.loadState.set('error');
@@ -109,6 +121,7 @@ export class FeatureView implements OnInit, OnDestroy {
           this.project.set(null);
           this.featureMeta.set(null);
           this.taskList.set([]);
+          this.currentUser.set(null);
           this.requirementsExpanded.set(false);
           this.aiTaskDialogOpen.set(false);
           this.loadState.set('error');
@@ -117,6 +130,7 @@ export class FeatureView implements OnInit, OnDestroy {
         this.project.set(res.project);
         this.featureMeta.set(res.feature);
         this.taskList.set(res.tasks);
+        this.currentUser.set(res.currentUser);
         this.pageError.set(null);
           this.requirementsExpanded.set(false);
           this.aiTaskDialogOpen.set(false);
@@ -269,6 +283,22 @@ export class FeatureView implements OnInit, OnDestroy {
 
   protected taskTitleRowClass(status: string): string {
     return normalizeTaskStatus(status) === 'Done' ? 'fv-task-title fv-task-title--done' : 'fv-task-title';
+  }
+
+  protected canManageTasks(): boolean {
+    const user = this.currentUser();
+    if (!user) {
+      return false;
+    }
+    return user.accountType !== 'company' || user.role !== 'viewer';
+  }
+
+  protected taskAssigneeLabel(task: CreatedTask): string {
+    const name = task.assigneeFullname?.trim();
+    if (name && name.length > 0) {
+      return name;
+    }
+    return task.assigneeUserId ? 'Assigned' : 'Unassigned';
   }
 
   protected openAiTaskDialog(): void {

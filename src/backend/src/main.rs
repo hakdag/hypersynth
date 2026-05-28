@@ -33,6 +33,7 @@ mod project_membership_route;
 mod project_route;
 mod register_route;
 mod runtime_decrypt_error;
+mod task_assignee_service;
 mod tenant_scope_service;
 mod tx_extractor;
 mod types;

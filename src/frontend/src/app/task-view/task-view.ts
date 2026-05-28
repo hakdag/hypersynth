@@ -1,6 +1,7 @@
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, map, of, Subscription, switchMap } from 'rxjs';
+import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
+import { AuthApiService, CurrentUser } from '../auth-api.service';
 
 import {
   TASK_PRIORITY_OPTIONS,
@@ -23,7 +24,7 @@ function normalizeTaskPriority(raw: string): string {
 
 type PageResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; detail: TaskDetail }
+  | { kind: 'ok'; detail: TaskDetail; currentUser: CurrentUser }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -35,10 +36,12 @@ type PageResult =
 export class TaskView implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly projectApi = inject(ProjectApiService);
+  private readonly authApi = inject(AuthApiService);
   private sub: Subscription | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly taskDetail = signal<TaskDetail | null>(null);
+  protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly descriptionExpanded = signal(false);
 
@@ -59,8 +62,11 @@ export class TaskView implements OnInit, OnDestroy {
           this.loadState.set('loading');
           this.pageError.set(null);
           this.descriptionExpanded.set(false);
-          return this.projectApi.getTask(projectId, featureId, taskId).pipe(
-            map((detail): PageResult => ({ kind: 'ok', detail })),
+          return forkJoin({
+            detail: this.projectApi.getTask(projectId, featureId, taskId),
+            currentUser: this.authApi.me(),
+          }).pipe(
+            map((data): PageResult => ({ kind: 'ok', detail: data.detail, currentUser: data.currentUser })),
             catchError((err: unknown) =>
               of<PageResult>({
                 kind: 'error',
@@ -74,6 +80,7 @@ export class TaskView implements OnInit, OnDestroy {
         if (res.kind === 'invalid') {
           this.pageError.set('Missing project, feature, or task identifier.');
           this.taskDetail.set(null);
+          this.currentUser.set(null);
           this.descriptionExpanded.set(false);
           this.loadState.set('error');
           return;
@@ -81,11 +88,13 @@ export class TaskView implements OnInit, OnDestroy {
         if (res.kind === 'error') {
           this.pageError.set(res.message);
           this.taskDetail.set(null);
+          this.currentUser.set(null);
           this.descriptionExpanded.set(false);
           this.loadState.set('error');
           return;
         }
         this.taskDetail.set(res.detail);
+        this.currentUser.set(res.currentUser);
         this.pageError.set(null);
         this.descriptionExpanded.set(false);
         this.loadState.set('ok');
@@ -182,5 +191,30 @@ export class TaskView implements OnInit, OnDestroy {
       default:
         return `${base} pd-priority__icon--std`;
     }
+  }
+
+  protected canManageTasks(): boolean {
+    const user = this.currentUser();
+    if (!user) {
+      return false;
+    }
+    return user.accountType !== 'company' || user.role !== 'viewer';
+  }
+
+  protected assigneeDisplayName(task: TaskDetail): string {
+    const name = task.assigneeFullname?.trim();
+    if (name && name.length > 0) {
+      return name;
+    }
+    return task.assigneeUserId ? 'Assigned' : 'Unassigned';
+  }
+
+  protected useAssigneePhoto(task: TaskDetail): boolean {
+    const url = task.assigneeAvatarUrl?.trim();
+    return !!url && /^https?:\/\//i.test(url);
+  }
+
+  protected assigneePhotoSrc(task: TaskDetail): string {
+    return task.assigneeAvatarUrl?.trim() ?? '';
   }
 }

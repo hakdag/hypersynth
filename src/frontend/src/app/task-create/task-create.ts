@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 
 import { AuthApiService, CurrentUser } from '../auth-api.service';
+import { ProjectMember, ProjectMembersApiService } from '../project-members-api.service';
 import {
   CreatedFeature,
   ProjectApiService,
@@ -15,7 +16,13 @@ import {
 
 type PageLoadResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; project: ProjectDetailModel; feature: CreatedFeature; currentUser: CurrentUser }
+  | {
+      kind: 'ok';
+      project: ProjectDetailModel;
+      feature: CreatedFeature;
+      currentUser: CurrentUser;
+      assigneeOptions: Array<{ id: string; label: string }>;
+    }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -28,6 +35,7 @@ export class TaskCreate implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly projectApi = inject(ProjectApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly membersApi = inject(ProjectMembersApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private sub: Subscription | null = null;
@@ -37,6 +45,7 @@ export class TaskCreate implements OnInit, OnDestroy {
   protected readonly feature = signal<CreatedFeature | null>(null);
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
+  protected readonly assigneeOptions = signal<Array<{ id: string; label: string }>>([]);
 
   protected readonly priorityOptions = [...TASK_PRIORITY_OPTIONS];
 
@@ -48,7 +57,7 @@ export class TaskCreate implements OnInit, OnDestroy {
     title: ['', [Validators.required, Validators.maxLength(512)]],
     description: [''],
     priority: this.fb.nonNullable.control<string>('Standard', Validators.required),
-    assigneeMode: this.fb.nonNullable.control<'self' | 'none'>('self'),
+    assigneeUserId: this.fb.nonNullable.control<string>(''),
   });
 
   ngOnInit(): void {
@@ -62,18 +71,26 @@ export class TaskCreate implements OnInit, OnDestroy {
           }
           this.loadState.set('loading');
           this.pageError.set(null);
-          return forkJoin({
-            project: this.projectApi.getProject(projectId),
-            feature: this.projectApi.getFeature(projectId, featureId),
-            currentUser: this.authApi.me(),
-          }).pipe(
-            map(
-              (data): PageLoadResult => ({
-                kind: 'ok',
-                project: data.project,
-                feature: data.feature,
-                currentUser: data.currentUser,
-              }),
+          return this.authApi.me().pipe(
+            switchMap((currentUser) =>
+              forkJoin({
+                project: this.projectApi.getProject(projectId),
+                feature: this.projectApi.getFeature(projectId, featureId),
+                members:
+                  currentUser.accountType === 'company'
+                    ? this.membersApi.listMembers(projectId)
+                    : of([] as ProjectMember[]),
+              }).pipe(
+                map(
+                  (data): PageLoadResult => ({
+                    kind: 'ok',
+                    project: data.project,
+                    feature: data.feature,
+                    currentUser,
+                    assigneeOptions: this.buildAssigneeOptions(currentUser, data.members),
+                  }),
+                ),
+              ),
             ),
             catchError((err: unknown) =>
               of<PageLoadResult>({
@@ -93,6 +110,7 @@ export class TaskCreate implements OnInit, OnDestroy {
           this.project.set(null);
           this.feature.set(null);
           this.currentUser.set(null);
+          this.assigneeOptions.set([]);
           this.loadState.set('error');
           return;
         }
@@ -101,12 +119,20 @@ export class TaskCreate implements OnInit, OnDestroy {
           this.project.set(null);
           this.feature.set(null);
           this.currentUser.set(null);
+          this.assigneeOptions.set([]);
           this.loadState.set('error');
           return;
         }
         this.project.set(res.project);
         this.feature.set(res.feature);
         this.currentUser.set(res.currentUser);
+        this.assigneeOptions.set(res.assigneeOptions);
+        const hasCurrentAssigneeOption = res.assigneeOptions.some(
+          (option) => option.id === res.currentUser.id,
+        );
+        this.form.controls.assigneeUserId.setValue(
+          hasCurrentAssigneeOption ? res.currentUser.id : '',
+        );
         this.pageError.set(null);
         this.loadState.set('ok');
       });
@@ -128,8 +154,8 @@ export class TaskCreate implements OnInit, OnDestroy {
       return;
     }
 
-    const { title, description, priority, assigneeMode } = this.form.getRawValue();
-    const unassigned = assigneeMode === 'none';
+    const { title, description, priority, assigneeUserId } = this.form.getRawValue();
+    const unassigned = assigneeUserId === '';
     if (!unassigned && !cu) {
       this.serverError.set('Could not resolve the current account. Please reload and sign in.');
       return;
@@ -143,7 +169,7 @@ export class TaskCreate implements OnInit, OnDestroy {
         description: description.trim().length > 0 ? description : undefined,
         priority,
         unassigned,
-        assigneeUserId: !unassigned && cu ? cu.id : undefined,
+        assigneeUserId: !unassigned ? assigneeUserId : undefined,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
@@ -199,8 +225,24 @@ export class TaskCreate implements OnInit, OnDestroy {
     return '';
   }
 
-  protected assigneeMeLabel(): string {
-    const u = this.currentUser();
-    return u?.fullname?.trim() ? u.fullname.trim() : 'Me';
+  private buildAssigneeOptions(
+    currentUser: CurrentUser,
+    members: ProjectMember[],
+  ): Array<{ id: string; label: string }> {
+    if (currentUser.accountType !== 'company') {
+      return [
+        { id: '', label: 'Unassigned' },
+        { id: currentUser.id, label: currentUser.fullname.trim() || 'Me' },
+      ];
+    }
+
+    const options: Array<{ id: string; label: string }> = [{ id: '', label: 'Unassigned' }];
+    for (const member of members) {
+      options.push({
+        id: member.userId,
+        label: member.fullname.trim().length > 0 ? member.fullname.trim() : member.email,
+      });
+    }
+    return options;
   }
 }

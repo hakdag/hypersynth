@@ -105,11 +105,12 @@
 
         <div class="fc-field">
           <label class="fc-label" for="task-assignee-edit">Assignee</label>
-          <select id="task-assignee-edit" class="fc-input" formControlName="assigneeMode">
-            <option value="self">{{ assigneeMeLabel() }}</option>
-            <option value="none">Unassigned</option>
+          <select id="task-assignee-edit" class="fc-input" formControlName="assigneeUserId">
+            @for (option of assigneeOptions(); track option.id) {
+              <option [value]="option.id">{{ option.label }}</option>
+            }
           </select>
-          <p class="fc-hint">Only your account can be assigned in this workspace.</p>
+          <p class="fc-hint">Assignees are limited to users in this project workspace.</p>
         </div>
 
         <div class="fc-field">

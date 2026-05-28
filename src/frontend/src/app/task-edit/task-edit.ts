@@ -21,6 +21,7 @@ import {
 } from 'rxjs';
 
 import { AuthApiService, CurrentUser } from '../auth-api.service';
+import { ProjectMember, ProjectMembersApiService } from '../project-members-api.service';
 import {
   ProjectApiService,
   TaskDetail,
@@ -42,17 +43,14 @@ function normalizeTaskPriority(raw: string): string {
     : 'Standard';
 }
 
-function assigneeModeForTask(task: TaskDetail, currentUserId: string): 'self' | 'none' {
-  const aid = task.assigneeUserId;
-  if (aid === null || aid === '') {
-    return 'none';
-  }
-  return aid === currentUserId ? 'self' : 'none';
-}
-
 type PageResult =
   | { kind: 'invalid' }
-  | { kind: 'ok'; task: TaskDetail; currentUser: CurrentUser }
+  | {
+      kind: 'ok';
+      task: TaskDetail;
+      currentUser: CurrentUser;
+      assigneeOptions: Array<{ id: string; label: string }>;
+    }
   | { kind: 'error'; message: string };
 
 @Component({
@@ -72,6 +70,7 @@ export class TaskEdit implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly projectApi = inject(ProjectApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly membersApi = inject(ProjectMembersApiService);
   private sub: Subscription | null = null;
 
   /** Local-only status change before Save; cleared on load and after successful PATCH. */
@@ -81,6 +80,7 @@ export class TaskEdit implements OnInit, OnDestroy {
   protected readonly taskMeta = signal<TaskDetail | null>(null);
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
+  protected readonly assigneeOptions = signal<Array<{ id: string; label: string }>>([]);
 
   protected readonly priorityOptions = [...TASK_PRIORITY_OPTIONS];
 
@@ -101,7 +101,7 @@ export class TaskEdit implements OnInit, OnDestroy {
     title: ['', [Validators.required, Validators.maxLength(512)]],
     description: [''],
     priority: this.fb.nonNullable.control<string>('Standard', Validators.required),
-    assigneeMode: this.fb.nonNullable.control<'self' | 'none'>('self'),
+    assigneeUserId: this.fb.nonNullable.control<string>(''),
   });
 
   ngOnInit(): void {
@@ -123,15 +123,23 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.serverError.set(null);
           this.saveNotice.set(false);
           this.statusLocalOverride.set(null);
-          return forkJoin({
-            task: this.projectApi.getTask(projectId, featureId, taskId),
-            currentUser: this.authApi.me(),
-          }).pipe(
-            map((data): PageResult => ({
-              kind: 'ok',
-              task: data.task,
-              currentUser: data.currentUser,
-            })),
+          return this.authApi.me().pipe(
+            switchMap((currentUser) =>
+              forkJoin({
+                task: this.projectApi.getTask(projectId, featureId, taskId),
+                members:
+                  currentUser.accountType === 'company'
+                    ? this.membersApi.listMembers(projectId)
+                    : of([] as ProjectMember[]),
+              }).pipe(
+                map((data): PageResult => ({
+                  kind: 'ok',
+                  task: data.task,
+                  currentUser,
+                  assigneeOptions: this.buildAssigneeOptions(currentUser, data.members, data.task),
+                })),
+              ),
+            ),
             catchError((err: unknown) =>
               of<PageResult>({
                 kind: 'error',
@@ -149,6 +157,7 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.pageError.set('Missing project, feature, or task identifier.');
           this.taskMeta.set(null);
           this.currentUser.set(null);
+          this.assigneeOptions.set([]);
           this.statusLocalOverride.set(null);
           this.loadState.set('error');
           return;
@@ -157,18 +166,20 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.pageError.set(res.message);
           this.taskMeta.set(null);
           this.currentUser.set(null);
+          this.assigneeOptions.set([]);
           this.statusLocalOverride.set(null);
           this.loadState.set('error');
           return;
         }
         this.taskMeta.set(res.task);
         this.currentUser.set(res.currentUser);
+        this.assigneeOptions.set(res.assigneeOptions);
         this.pageError.set(null);
         this.form.patchValue({
           title: res.task.title,
           description: res.task.description ?? '',
           priority: normalizeTaskPriority(res.task.priority),
-          assigneeMode: assigneeModeForTask(res.task, res.currentUser.id),
+          assigneeUserId: res.task.assigneeUserId ?? '',
         });
         this.form.markAsPristine();
         this.saveNotice.set(false);
@@ -206,7 +217,7 @@ export class TaskEdit implements OnInit, OnDestroy {
     }
 
     const raw = this.form.getRawValue();
-    const unassigned = raw.assigneeMode === 'none';
+    const unassigned = raw.assigneeUserId === '';
     this.submitting.set(true);
 
     this.projectApi
@@ -216,20 +227,18 @@ export class TaskEdit implements OnInit, OnDestroy {
         status: normalizeTaskStatus(this.effectiveStatus()),
         priority: raw.priority,
         unassigned,
-        assigneeUserId: !unassigned ? cu.id : undefined,
+        assigneeUserId: !unassigned ? raw.assigneeUserId : undefined,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
         next: (updated) => {
-          const u = this.currentUser();
           this.statusLocalOverride.set(null);
           this.taskMeta.set(updated);
           this.form.patchValue({
             title: updated.title,
             description: updated.description ?? '',
             priority: normalizeTaskPriority(updated.priority),
-            assigneeMode:
-              u === null ? 'none' : assigneeModeForTask(updated, u.id),
+            assigneeUserId: updated.assigneeUserId ?? '',
           });
           this.form.markAsPristine();
           this.saveNotice.set(true);
@@ -265,9 +274,36 @@ export class TaskEdit implements OnInit, OnDestroy {
     return '';
   }
 
-  protected assigneeMeLabel(): string {
-    const u = this.currentUser();
-    return u?.fullname?.trim() ? u.fullname.trim() : 'Me';
+  private buildAssigneeOptions(
+    currentUser: CurrentUser,
+    members: ProjectMember[],
+    task: TaskDetail,
+  ): Array<{ id: string; label: string }> {
+    if (currentUser.accountType !== 'company') {
+      return [
+        { id: '', label: 'Unassigned' },
+        { id: currentUser.id, label: currentUser.fullname.trim() || 'Me' },
+      ];
+    }
+
+    const options: Array<{ id: string; label: string }> = [{ id: '', label: 'Unassigned' }];
+    for (const member of members) {
+      options.push({
+        id: member.userId,
+        label: member.fullname.trim().length > 0 ? member.fullname.trim() : member.email,
+      });
+    }
+
+    if (
+      task.assigneeUserId !== null &&
+      !options.some((option) => option.id === task.assigneeUserId)
+    ) {
+      options.push({
+        id: task.assigneeUserId,
+        label: task.assigneeFullname?.trim() || 'Current assignee',
+      });
+    }
+    return options;
   }
 
   protected shortTaskId(id: string): string {

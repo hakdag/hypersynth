@@ -12,6 +12,7 @@ pub enum AuditEventType {
     AiEnhanceFeatureRequirementsRequested,
     AiGenerateTasksRequested,
     GlobalConfigurationChanged,
+    TaskAssigneeChanged,
 }
 
 impl AuditEventType {
@@ -27,6 +28,7 @@ impl AuditEventType {
             }
             AuditEventType::AiGenerateTasksRequested => "ai_generate_tasks_requested",
             AuditEventType::GlobalConfigurationChanged => "global_configuration_changed",
+            AuditEventType::TaskAssigneeChanged => "task_assignee_changed",
         }
     }
 }

@@ -9,6 +9,11 @@ pub const MANAGE_COMPANY_PROFILE: &[CompanyRole] = &[CompanyRole::CompanyAdmin];
 pub const INVITE_USERS: &[CompanyRole] = &[CompanyRole::CompanyAdmin, CompanyRole::ProjectManager];
 
 pub const VIEW_COMPANY_AI_USAGE: &[CompanyRole] = &[CompanyRole::CompanyAdmin];
+pub const CREATE_EDIT_TASKS: &[CompanyRole] = &[
+    CompanyRole::CompanyAdmin,
+    CompanyRole::ProjectManager,
+    CompanyRole::Contributor,
+];
 
 pub async fn require_company_role(
     user: &SessionUser,

@@ -15,14 +15,16 @@ use crate::ai_usage_service::AiUsageService;
 use crate::app_state::AppState;
 use crate::audit_events_service::AuditEventsService;
 use crate::auth_route;
+use crate::authorization;
 use crate::document_context_service::DocumentContextService;
 use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
+use crate::task_assignee_service;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::tx_extractor::{missing_tx_error, AuditCtx};
 use crate::types::{
-    AcceptGeneratedTasksRequest, AiOperationType, AiUsageScope, ApiErrorBody, AuditEventType,
-    CompanyRole, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest,
+    AcceptGeneratedTasksRequest, AccountType, AiOperationType, AiUsageScope, ApiErrorBody,
+    AuditEventType, CompanyRole, CreateFeatureRequest, CreateProjectRequest, CreateTaskRequest,
     DocumentContextError, EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
@@ -2052,6 +2054,7 @@ pub async fn get_project_task(
 pub async fn create_task(
     State(state): State<AppState>,
     tx: Tx,
+    auditctx: AuditCtx,
     jar: CookieJar,
     Path((project_id, feature_id)): Path<(Uuid, Uuid)>,
     Json(payload): Json<CreateTaskRequest>,
@@ -2080,6 +2083,9 @@ pub async fn create_task(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    if user.account_type == AccountType::Company {
+        authorization::require_company_role(&user, authorization::CREATE_EDIT_TASKS).await?;
+    }
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -2120,24 +2126,14 @@ pub async fn create_task(
         }
     };
 
-    let assignee_bind: Option<Uuid> = if payload.unassigned {
-        None
-    } else if let Some(id) = payload.assignee_user_id {
-        if id != user.id {
-            warn!(
-                user_id = %user.id,
-                %project_id,
-                %feature_id,
-                "api: POST /api/v1/projects/:id/features/:feature_id/tasks -> 400 foreign assignee"
-            );
-            return Err(bad_request(
-                "You can only assign tasks to yourself in this workspace.",
-            ));
-        }
-        Some(id)
-    } else {
-        Some(user.id)
-    };
+    let assignee_bind = task_assignee_service::resolve_assignee(
+        &mut **conn,
+        scope,
+        project_id,
+        payload.unassigned,
+        payload.assignee_user_id,
+    )
+    .await?;
 
     let row = sqlx::query_as::<_, TaskResponse>(
         r#"
@@ -2232,6 +2228,23 @@ pub async fn create_task(
         );
         return Err(not_found("Feature not found."));
     };
+
+    if assignee_bind.is_some() {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskAssigneeChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_assignee_user_id": serde_json::Value::Null,
+                "new_assignee_user_id": assignee_bind,
+            }),
+        )
+        .await;
+    }
 
     info!(
         task_id = %row.id,
@@ -2375,6 +2388,7 @@ pub async fn update_project_feature(
 pub async fn update_project_task(
     State(state): State<AppState>,
     tx: Tx,
+    auditctx: AuditCtx,
     jar: CookieJar,
     Path((project_id, feature_id, task_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(payload): Json<UpdateTaskRequest>,
@@ -2402,6 +2416,9 @@ pub async fn update_project_task(
             (status, json)
         })?;
     let scope = TenantScopeService::from_session(&user)?;
+    if user.account_type == AccountType::Company {
+        authorization::require_company_role(&user, authorization::CREATE_EDIT_TASKS).await?;
+    }
 
     let title = payload.title.trim();
     if title.is_empty() {
@@ -2456,25 +2473,58 @@ pub async fn update_project_task(
         }
     };
 
-    let assignee_bind: Option<Uuid> = if payload.unassigned {
-        None
-    } else if let Some(id) = payload.assignee_user_id {
-        if id != user.id {
-            warn!(
-                user_id = %user.id,
-                %project_id,
-                %feature_id,
-                %task_id,
-                "api: PATCH task -> 400 foreign assignee"
-            );
-            return Err(bad_request(
-                "You can only assign tasks to yourself in this workspace.",
-            ));
-        }
-        Some(id)
-    } else {
-        Some(user.id)
-    };
+    let assignee_bind = task_assignee_service::resolve_assignee(
+        &mut **conn,
+        scope,
+        project_id,
+        payload.unassigned,
+        payload.assignee_user_id,
+    )
+    .await?;
+
+    let old_assignee_user_id = sqlx::query_scalar::<_, Option<Uuid>>(
+        r#"
+        SELECT t.assignee_user_id
+        FROM tasks t
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE t.id = $1
+          AND t.feature_id = $2
+          AND f.project_id = $3
+          AND (
+            ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            OR
+            ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                $6::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $7
+                )
+            ))
+          )
+        "#,
+    )
+    .bind(task_id)
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
+    .fetch_optional(&mut **conn)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "update_project_task: old assignee lookup failed"
+        );
+        internal_error()
+    })?
+    .ok_or_else(|| not_found("Task not found."))?;
 
     let row = sqlx::query_as::<_, TaskDetailResponse>(
         r#"
@@ -2565,6 +2615,23 @@ pub async fn update_project_task(
         );
         return Err(not_found("Task not found."));
     };
+
+    if old_assignee_user_id != assignee_bind {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskAssigneeChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_assignee_user_id": old_assignee_user_id,
+                "new_assignee_user_id": assignee_bind,
+            }),
+        )
+        .await;
+    }
 
     info!(
         user_id = %user.id,

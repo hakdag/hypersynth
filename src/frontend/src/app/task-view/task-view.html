@@ -37,21 +37,23 @@
           </div>
           <div class="pd-hero-aside">
             <div class="pd-hero-aside__row">
-              <a
-                [routerLink]="[
-                  '/app/projects',
-                  task.projectId,
-                  'features',
-                  task.featureId,
-                  'tasks',
-                  task.id,
-                  'edit',
-                ]"
-                class="pd-edit-link"
-              >
-                <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
-                Edit
-              </a>
+              @if (canManageTasks()) {
+                <a
+                  [routerLink]="[
+                    '/app/projects',
+                    task.projectId,
+                    'features',
+                    task.featureId,
+                    'tasks',
+                    task.id,
+                    'edit',
+                  ]"
+                  class="pd-edit-link"
+                >
+                  <span class="material-symbols-outlined pd-edit-link__icon" aria-hidden="true">edit</span>
+                  Edit
+                </a>
+              }
               <span [class]="statusBadgeClass(task.status)">{{ statusForDisplay(task.status) }}</span>
             </div>
           </div>
@@ -96,6 +98,33 @@
               taskPriorityIcon(task.priority)
             }}</span>
             <span class="pd-priority__text">{{ taskPriorityLabel(task.priority) }}</span>
+          </div>
+        </div>
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">assignee</span>
+          <div class="tv-origin-inline">
+            @if (task.assigneeUserId === null) {
+              <span class="fv-task-origin fv-task-origin--manual">Unassigned</span>
+            } @else {
+              <div class="tv-origin-user">
+                @if (useAssigneePhoto(task)) {
+                  <img
+                    class="tv-origin-avatar"
+                    [src]="assigneePhotoSrc(task)"
+                    [attr.alt]="'Profile photo of ' + assigneeDisplayName(task)"
+                    width="40"
+                    height="40"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                } @else {
+                  <span class="tv-origin-placeholder" aria-hidden="true">
+                    <span class="material-symbols-outlined">person</span>
+                  </span>
+                }
+                <span class="tv-origin-name">{{ assigneeDisplayName(task) }}</span>
+              </div>
+            }
           </div>
         </div>
       </div>

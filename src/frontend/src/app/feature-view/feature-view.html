@@ -136,15 +136,17 @@
                     >
                     Generate Tasks with AI
                   </button>
-                  <a
-                    [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
-                    class="pd-features__new-feature fv-tasks__create"
-                  >
-                    <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
-                      >add_task</span
+                  @if (canManageTasks()) {
+                    <a
+                      [routerLink]="['/app/projects', proj.id, 'features', meta.id, 'tasks', 'new']"
+                      class="pd-features__new-feature fv-tasks__create"
                     >
-                    Create task
-                  </a>
+                      <span class="material-symbols-outlined pd-features__new-feature-icon" aria-hidden="true"
+                        >add_task</span
+                      >
+                      Create task
+                    </a>
+                  }
                 </div>
               </div>
 
@@ -157,6 +159,7 @@
                       <tr>
                         <th scope="col" class="fv-tasks__th fv-tasks__th--task">Task</th>
                         <th scope="col" class="fv-tasks__th">Status</th>
+                        <th scope="col" class="fv-tasks__th">Assignee</th>
                         <th scope="col" class="fv-tasks__th">Origin</th>
                         <th scope="col" class="fv-tasks__th fv-tasks__th--actions">
                           Actions
@@ -185,6 +188,9 @@
                             }}</span>
                           </td>
                           <td class="fv-tasks__td">
+                            {{ taskAssigneeLabel(task) }}
+                          </td>
+                          <td class="fv-tasks__td">
                             @switch (taskCreatedByPresentation(task.createdBy)) {
                               @case ('ai') {
                                 <span class="fv-task-origin fv-task-origin--ai">
@@ -205,24 +211,26 @@
                             }
                           </td>
                           <td class="fv-tasks__td fv-tasks__td--actions">
-                            <a
-                              [routerLink]="[
-                                '/app/projects',
-                                proj.id,
-                                'features',
-                                meta.id,
-                                'tasks',
-                                task.id,
-                                'edit',
-                              ]"
-                              class="fv-tasks__edit"
-                              [attr.aria-label]="'Edit task: ' + task.title"
-                              [attr.title]="'Edit ' + task.title"
-                            >
-                              <span class="material-symbols-outlined fv-tasks__edit-symbol" aria-hidden="true"
-                                >edit</span
+                            @if (canManageTasks()) {
+                              <a
+                                [routerLink]="[
+                                  '/app/projects',
+                                  proj.id,
+                                  'features',
+                                  meta.id,
+                                  'tasks',
+                                  task.id,
+                                  'edit',
+                                ]"
+                                class="fv-tasks__edit"
+                                [attr.aria-label]="'Edit task: ' + task.title"
+                                [attr.title]="'Edit ' + task.title"
                               >
-                            </a>
+                                <span class="material-symbols-outlined fv-tasks__edit-symbol" aria-hidden="true"
+                                  >edit</span
+                                >
+                              </a>
+                            }
                           </td>
                         </tr>
                       }
