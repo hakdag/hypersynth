@@ -1,7 +1,9 @@
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 import { AuthApiService, CurrentUser } from '../auth-api.service';
+import { CommentsApiService, TaskComment } from '../comments-api.service';
 
 import {
   TASK_STATUS_OPTIONS,
@@ -29,7 +31,7 @@ type PageResult =
 
 @Component({
   selector: 'app-task-view',
-  imports: [RouterLink],
+  imports: [RouterLink, FormsModule],
   templateUrl: './task-view.html',
   styleUrls: ['./task-view.scss', '../project-detail/project-detail.scss'],
 })
@@ -37,13 +39,25 @@ export class TaskView implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly projectApi = inject(ProjectApiService);
   private readonly authApi = inject(AuthApiService);
+  private readonly commentsApi = inject(CommentsApiService);
   private sub: Subscription | null = null;
+  private routeIds: { projectId: string; featureId: string; taskId: string } | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly taskDetail = signal<TaskDetail | null>(null);
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly descriptionExpanded = signal(false);
+  protected readonly comments = signal<TaskComment[]>([]);
+  protected readonly commentsLoadState = signal<'loading' | 'ok' | 'error'>('loading');
+  protected readonly commentsError = signal<string | null>(null);
+  protected readonly commentActionError = signal<string | null>(null);
+  protected readonly creatingComment = signal(false);
+  protected readonly deletingCommentId = signal<string | null>(null);
+  protected readonly savingCommentId = signal<string | null>(null);
+  protected readonly draftComment = signal('');
+  protected readonly editingCommentId = signal<string | null>(null);
+  protected readonly editCommentContent = signal('');
 
   ngOnInit(): void {
     this.sub = this.route.paramMap
@@ -89,15 +103,31 @@ export class TaskView implements OnInit, OnDestroy {
           this.pageError.set(res.message);
           this.taskDetail.set(null);
           this.currentUser.set(null);
+          this.comments.set([]);
+          this.commentsError.set(null);
+          this.commentsLoadState.set('loading');
+          this.commentActionError.set(null);
           this.descriptionExpanded.set(false);
           this.loadState.set('error');
           return;
         }
+        const projectId = this.route.snapshot.paramMap.get('projectId') ?? '';
+        const featureId = this.route.snapshot.paramMap.get('featureId') ?? '';
+        const taskId = this.route.snapshot.paramMap.get('taskId') ?? '';
+        this.routeIds = { projectId, featureId, taskId };
         this.taskDetail.set(res.detail);
         this.currentUser.set(res.currentUser);
         this.pageError.set(null);
         this.descriptionExpanded.set(false);
+        this.comments.set([]);
+        this.commentsLoadState.set('loading');
+        this.commentsError.set(null);
+        this.commentActionError.set(null);
+        this.draftComment.set('');
+        this.editingCommentId.set(null);
+        this.editCommentContent.set('');
         this.loadState.set('ok');
+        this.loadComments();
       });
   }
 
@@ -249,5 +279,147 @@ export class TaskView implements OnInit, OnDestroy {
 
   protected assigneePhotoSrc(task: TaskDetail): string {
     return task.assigneeAvatarUrl?.trim() ?? '';
+  }
+
+  protected commentAuthorDisplayName(comment: TaskComment): string {
+    const name = comment.authorFullname?.trim();
+    return name && name.length > 0 ? name : 'Recorded user';
+  }
+
+  protected useCommentAuthorPhoto(comment: TaskComment): boolean {
+    const url = comment.authorAvatarUrl?.trim();
+    return !!url && /^https?:\/\//i.test(url);
+  }
+
+  protected commentAuthorPhotoSrc(comment: TaskComment): string {
+    return comment.authorAvatarUrl?.trim() ?? '';
+  }
+
+  protected canEditComment(comment: TaskComment): boolean {
+    const user = this.currentUser();
+    if (!user) {
+      return false;
+    }
+    return comment.userId === user.id || user.role === 'company_admin';
+  }
+
+  protected isCommentEdited(comment: TaskComment): boolean {
+    return comment.updatedAt !== comment.createdAt;
+  }
+
+  protected beginEditComment(comment: TaskComment): void {
+    if (!this.canEditComment(comment)) {
+      return;
+    }
+    this.commentActionError.set(null);
+    this.editingCommentId.set(comment.id);
+    this.editCommentContent.set(comment.content);
+  }
+
+  protected cancelEditComment(): void {
+    this.editingCommentId.set(null);
+    this.editCommentContent.set('');
+  }
+
+  protected saveCommentEdit(comment: TaskComment): void {
+    const ids = this.routeIds;
+    if (!ids || !this.canEditComment(comment)) {
+      return;
+    }
+    const content = this.editCommentContent().trim();
+    if (!content) {
+      this.commentActionError.set('Comment content is required.');
+      return;
+    }
+    this.commentActionError.set(null);
+    this.savingCommentId.set(comment.id);
+    this.commentsApi
+      .updateComment(ids.projectId, ids.featureId, ids.taskId, comment.id, { content })
+      .subscribe({
+        next: (updated) => {
+          this.comments.update((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+          this.savingCommentId.set(null);
+          this.editingCommentId.set(null);
+          this.editCommentContent.set('');
+        },
+        error: (err: unknown) => {
+          this.commentActionError.set(CommentsApiService.errorMessage(err));
+          this.savingCommentId.set(null);
+        },
+      });
+  }
+
+  protected removeComment(comment: TaskComment): void {
+    const ids = this.routeIds;
+    if (!ids || !this.canEditComment(comment)) {
+      return;
+    }
+    this.commentActionError.set(null);
+    this.deletingCommentId.set(comment.id);
+    this.commentsApi.deleteComment(ids.projectId, ids.featureId, ids.taskId, comment.id).subscribe({
+      next: () => {
+        this.comments.update((rows) => rows.filter((row) => row.id !== comment.id));
+        this.deletingCommentId.set(null);
+        if (this.editingCommentId() === comment.id) {
+          this.cancelEditComment();
+        }
+      },
+      error: (err: unknown) => {
+        this.commentActionError.set(CommentsApiService.errorMessage(err));
+        this.deletingCommentId.set(null);
+      },
+    });
+  }
+
+  protected submitComment(): void {
+    const ids = this.routeIds;
+    if (!ids) {
+      return;
+    }
+    const content = this.draftComment().trim();
+    if (!content) {
+      this.commentActionError.set('Comment content is required.');
+      return;
+    }
+    this.commentActionError.set(null);
+    this.creatingComment.set(true);
+    this.commentsApi.createComment(ids.projectId, ids.featureId, ids.taskId, { content }).subscribe({
+      next: (comment) => {
+        this.comments.update((rows) => [...rows, comment]);
+        this.draftComment.set('');
+        this.creatingComment.set(false);
+      },
+      error: (err: unknown) => {
+        this.commentActionError.set(CommentsApiService.errorMessage(err));
+        this.creatingComment.set(false);
+      },
+    });
+  }
+
+  protected reloadComments(): void {
+    this.loadComments();
+  }
+
+  private loadComments(): void {
+    const ids = this.routeIds;
+    if (!ids) {
+      this.comments.set([]);
+      this.commentsLoadState.set('error');
+      this.commentsError.set('Missing project, feature, or task identifier.');
+      return;
+    }
+    this.commentsLoadState.set('loading');
+    this.commentsError.set(null);
+    this.commentsApi.listComments(ids.projectId, ids.featureId, ids.taskId).subscribe({
+      next: (rows) => {
+        this.comments.set(rows);
+        this.commentsLoadState.set('ok');
+      },
+      error: (err: unknown) => {
+        this.comments.set([]);
+        this.commentsError.set(CommentsApiService.errorMessage(err));
+        this.commentsLoadState.set('error');
+      },
+    });
   }
 }

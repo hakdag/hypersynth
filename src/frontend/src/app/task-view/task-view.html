@@ -199,6 +199,132 @@
             }
           </div>
         </section>
+
+        <section class="pd-req tv-comments" aria-labelledby="tv-comments-heading">
+          <div class="pd-req__toolbar">
+            <h2 id="tv-comments-heading" class="pd-req__title">
+              <span class="material-symbols-outlined pd-req__title-icon" aria-hidden="true">comment</span>
+              Comments
+            </h2>
+          </div>
+          <div class="pd-req__body">
+            <div class="tv-comment-compose">
+              <textarea
+                class="fc-textarea tv-comment-compose__textarea"
+                rows="4"
+                placeholder="Write a comment..."
+                [ngModel]="draftComment()"
+                (ngModelChange)="draftComment.set($event)"
+                [disabled]="creatingComment()"
+              ></textarea>
+              <div class="tv-comment-compose__actions">
+                <button type="button" class="pd-edit-link" (click)="submitComment()" [disabled]="creatingComment()">
+                  @if (creatingComment()) {
+                    Posting...
+                  } @else {
+                    Post comment
+                  }
+                </button>
+              </div>
+            </div>
+
+            @if (commentActionError(); as actionError) {
+              <div class="pd-banner pd-banner--error" role="alert">{{ actionError }}</div>
+            }
+
+            @if (commentsLoadState() === 'loading') {
+              <p class="pd-req__empty">Loading comments…</p>
+            } @else if (commentsLoadState() === 'error' && commentsError(); as commentsError) {
+              <div class="pd-banner pd-banner--error" role="alert">{{ commentsError }}</div>
+              <button type="button" class="pd-view-more" (click)="reloadComments()">Retry</button>
+            } @else if (comments().length === 0) {
+              <p class="pd-req__empty">No comments yet. Be the first to add one.</p>
+            } @else {
+              <div class="tv-comments-list">
+                @for (comment of comments(); track comment.id) {
+                  <article class="tv-comment-card">
+                    <header class="tv-comment-card__header">
+                      <div class="tv-origin-user">
+                        @if (useCommentAuthorPhoto(comment)) {
+                          <img
+                            class="tv-origin-avatar"
+                            [src]="commentAuthorPhotoSrc(comment)"
+                            [attr.alt]="'Profile photo of ' + commentAuthorDisplayName(comment)"
+                            width="40"
+                            height="40"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        } @else {
+                          <span class="tv-origin-placeholder" aria-hidden="true">
+                            <span class="material-symbols-outlined">person</span>
+                          </span>
+                        }
+                        <div class="tv-comment-card__meta">
+                          <span class="tv-origin-name">{{ commentAuthorDisplayName(comment) }}</span>
+                          <span class="tv-comment-card__time">
+                            {{ formatDate(comment.createdAt) }}
+                            @if (isCommentEdited(comment)) {
+                              · edited
+                            }
+                          </span>
+                        </div>
+                      </div>
+                      @if (canEditComment(comment)) {
+                        <div class="tv-comment-card__actions">
+                          @if (editingCommentId() !== comment.id) {
+                            <button type="button" class="pd-view-more" (click)="beginEditComment(comment)">Edit</button>
+                          }
+                          <button
+                            type="button"
+                            class="pd-view-more"
+                            (click)="removeComment(comment)"
+                            [disabled]="deletingCommentId() === comment.id"
+                          >
+                            @if (deletingCommentId() === comment.id) {
+                              Deleting...
+                            } @else {
+                              Delete
+                            }
+                          </button>
+                        </div>
+                      }
+                    </header>
+
+                    @if (editingCommentId() === comment.id) {
+                      <div class="tv-comment-edit">
+                        <textarea
+                          class="fc-textarea tv-comment-compose__textarea"
+                          rows="4"
+                          [ngModel]="editCommentContent()"
+                          (ngModelChange)="editCommentContent.set($event)"
+                          [disabled]="savingCommentId() === comment.id"
+                        ></textarea>
+                        <div class="tv-comment-compose__actions">
+                          <button
+                            type="button"
+                            class="pd-edit-link"
+                            (click)="saveCommentEdit(comment)"
+                            [disabled]="savingCommentId() === comment.id"
+                          >
+                            @if (savingCommentId() === comment.id) {
+                              Saving...
+                            } @else {
+                              Save
+                            }
+                          </button>
+                          <button type="button" class="pd-view-more" (click)="cancelEditComment()">Cancel</button>
+                        </div>
+                      </div>
+                    } @else {
+                      <p class="tv-comment-card__content">{{ comment.content }}</p>
+                    }
+                  </article>
+                }
+              </div>
+            }
+          </div>
+        </section>
       </div>
 
       <aside class="pd-split__aside" aria-label="Parent context">

@@ -19,6 +19,8 @@ mod auth_route;
 mod authorization;
 mod company_registration_route;
 mod company_route;
+mod comment_route;
+mod comment_service;
 mod configs;
 mod crypto;
 mod document_context_service;
@@ -77,6 +79,7 @@ use company_ai_usage_route::{
 };
 use company_registration_route::register_company;
 use company_route::{get_current_company, list_company_users, update_current_company};
+use comment_route::{create_task_comment, delete_task_comment, list_task_comments, update_task_comment};
 use configs::AppConfig;
 use email::SmtpEmailSender;
 use invitation_accept_route::{
@@ -386,6 +389,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/v1/projects/{project_id}/features/{feature_id}/tasks/{task_id}",
             get(get_project_task).patch(update_project_task),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/tasks/{task_id}/comments",
+            get(list_task_comments).post(create_task_comment),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/features/{feature_id}/tasks/{task_id}/comments/{comment_id}",
+            patch(update_task_comment).delete(delete_task_comment),
         )
         .layer(from_fn_with_state(state.clone(), audit_tx_middleware));
 
