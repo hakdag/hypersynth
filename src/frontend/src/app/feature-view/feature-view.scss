@@ -304,3 +304,18 @@
   border: 1px solid #fecaca;
   font-weight: 700;
 }
+
+.fv-task-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fv-task-label-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}

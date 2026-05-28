@@ -26,6 +26,8 @@ mod email;
 mod invitation_accept_route;
 mod invitation_route;
 mod invitation_token_service;
+mod label_route;
+mod label_service;
 mod project_ai_settings_route;
 mod project_ai_settings_service;
 mod project_api_key_service;
@@ -66,7 +68,7 @@ use axum::extract::State;
 use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::HeaderValue;
 use axum::middleware::from_fn_with_state;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use audit_tx_middleware::audit_tx_middleware;
 use company_ai_usage_route::{
@@ -81,6 +83,7 @@ use invitation_accept_route::{
     accept_invitation_confirm, accept_invitation_register, preview_invitation,
 };
 use invitation_route::{cancel_invitation, create_invitation, list_invitations};
+use label_route::{create_label, delete_label, list_labels, update_label};
 use project_ai_settings_route::{
     get_project_ai_settings, list_project_ai_provider_models, update_project_ai_settings,
 };
@@ -319,6 +322,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/v1/invitations/accept/confirm",
             post(accept_invitation_confirm),
         )
+        .route("/api/v1/labels", get(list_labels).post(create_label))
+        .route("/api/v1/labels/{label_id}", patch(update_label).delete(delete_label))
         .route("/api/v1/projects", get(list_projects).post(create_project))
         .route(
             "/api/v1/projects/{project_id}",

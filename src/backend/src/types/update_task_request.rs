@@ -20,4 +20,6 @@ pub struct UpdateTaskRequest {
     pub unassigned: bool,
     #[serde(default)]
     pub assignee_user_id: Option<Uuid>,
+    #[serde(default)]
+    pub label_ids: Option<Vec<Uuid>>,
 }

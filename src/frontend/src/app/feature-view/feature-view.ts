@@ -364,6 +364,18 @@ export class FeatureView implements OnInit, OnDestroy {
     return task.isOverdue ? 'fv-task-due fv-task-due--overdue' : 'fv-task-due';
   }
 
+  protected labelTextColor(hex: string): string {
+    const upper = hex.trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(upper)) {
+      return '#111827';
+    }
+    const r = Number.parseInt(upper.slice(1, 3), 16);
+    const g = Number.parseInt(upper.slice(3, 5), 16);
+    const b = Number.parseInt(upper.slice(5, 7), 16);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luma > 165 ? '#111827' : '#ffffff';
+  }
+
   protected openAiTaskDialog(): void {
     this.aiTaskDialogOpen.set(true);
   }

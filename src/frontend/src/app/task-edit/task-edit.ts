@@ -20,6 +20,7 @@ import {
 } from 'rxjs';
 
 import { AuthApiService, CurrentUser } from '../auth-api.service';
+import { Label, LabelsApiService } from '../labels-api.service';
 import { ProjectMember, ProjectMembersApiService } from '../project-members-api.service';
 import {
   ProjectApiService,
@@ -49,6 +50,7 @@ type PageResult =
       task: TaskDetail;
       currentUser: CurrentUser;
       assigneeOptions: Array<{ id: string; label: string }>;
+      labels: Label[];
     }
   | { kind: 'error'; message: string };
 
@@ -70,6 +72,7 @@ export class TaskEdit implements OnInit, OnDestroy {
   private readonly projectApi = inject(ProjectApiService);
   private readonly authApi = inject(AuthApiService);
   private readonly membersApi = inject(ProjectMembersApiService);
+  private readonly labelsApi = inject(LabelsApiService);
   private sub: Subscription | null = null;
 
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
@@ -77,6 +80,7 @@ export class TaskEdit implements OnInit, OnDestroy {
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly assigneeOptions = signal<Array<{ id: string; label: string }>>([]);
+  protected readonly labels = signal<Label[]>([]);
 
   protected readonly statusOptions = [...TASK_STATUS_OPTIONS];
   protected readonly priorityOptions = [...TASK_PRIORITY_OPTIONS];
@@ -93,6 +97,7 @@ export class TaskEdit implements OnInit, OnDestroy {
     dueDate: this.fb.nonNullable.control<string>(''),
     dueTime: this.fb.nonNullable.control<string>(''),
     assigneeUserId: this.fb.nonNullable.control<string>(''),
+    labelIds: this.fb.nonNullable.control<string[]>([]),
   });
 
   ngOnInit(): void {
@@ -121,12 +126,14 @@ export class TaskEdit implements OnInit, OnDestroy {
                   currentUser.accountType === 'company'
                     ? this.membersApi.listMembers(projectId)
                     : of([] as ProjectMember[]),
+                labels: this.labelsApi.listLabels(),
               }).pipe(
                 map((data): PageResult => ({
                   kind: 'ok',
                   task: data.task,
                   currentUser,
                   assigneeOptions: this.buildAssigneeOptions(currentUser, data.members, data.task),
+                  labels: data.labels,
                 })),
               ),
             ),
@@ -148,6 +155,7 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.taskMeta.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
+          this.labels.set([]);
           this.loadState.set('error');
           return;
         }
@@ -156,12 +164,14 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.taskMeta.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
+          this.labels.set([]);
           this.loadState.set('error');
           return;
         }
         this.taskMeta.set(res.task);
         this.currentUser.set(res.currentUser);
         this.assigneeOptions.set(res.assigneeOptions);
+        this.labels.set(res.labels);
         this.pageError.set(null);
         this.form.patchValue({
           title: res.task.title,
@@ -171,6 +181,7 @@ export class TaskEdit implements OnInit, OnDestroy {
           dueDate: res.task.dueDate ?? '',
           dueTime: this.normalizeDueTimeForInput(res.task.dueTime),
           assigneeUserId: res.task.assigneeUserId ?? '',
+          labelIds: res.task.labels.map((label) => label.id),
         });
         this.form.markAsPristine();
         this.saveNotice.set(false);
@@ -220,6 +231,7 @@ export class TaskEdit implements OnInit, OnDestroy {
         clearDueDate: dueDateTrimmed.length === 0,
         unassigned,
         assigneeUserId: !unassigned ? raw.assigneeUserId : undefined,
+        labelIds: raw.labelIds,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
@@ -233,6 +245,7 @@ export class TaskEdit implements OnInit, OnDestroy {
             dueDate: updated.dueDate ?? '',
             dueTime: this.normalizeDueTimeForInput(updated.dueTime),
             assigneeUserId: updated.assigneeUserId ?? '',
+            labelIds: updated.labels.map((label) => label.id),
           });
           this.form.markAsPristine();
           this.saveNotice.set(true);
@@ -272,6 +285,33 @@ export class TaskEdit implements OnInit, OnDestroy {
     const dueDate = this.form.controls.dueDate.value.trim();
     const dueTime = this.form.controls.dueTime.value.trim();
     return dueDate.length === 0 && dueTime.length > 0;
+  }
+
+  protected toggleLabel(labelId: string, checked: boolean): void {
+    const current = this.form.controls.labelIds.value;
+    if (checked) {
+      if (!current.includes(labelId)) {
+        this.form.controls.labelIds.setValue([...current, labelId]);
+      }
+      return;
+    }
+    this.form.controls.labelIds.setValue(current.filter((id) => id !== labelId));
+  }
+
+  protected hasLabel(labelId: string): boolean {
+    return this.form.controls.labelIds.value.includes(labelId);
+  }
+
+  protected labelTextColor(hex: string): string {
+    const upper = hex.trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(upper)) {
+      return '#111827';
+    }
+    const r = Number.parseInt(upper.slice(1, 3), 16);
+    const g = Number.parseInt(upper.slice(3, 5), 16);
+    const b = Number.parseInt(upper.slice(5, 7), 16);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luma > 165 ? '#111827' : '#ffffff';
   }
 
   private normalizeDueTimeForInput(value: string | null): string {

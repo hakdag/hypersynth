@@ -17,6 +17,7 @@ use crate::audit_events_service::AuditEventsService;
 use crate::auth_route;
 use crate::authorization;
 use crate::document_context_service::DocumentContextService;
+use crate::label_service;
 use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::task_assignee_service;
@@ -30,8 +31,8 @@ use crate::types::{
     DocumentContextError, EnhanceFeatureRequirementsRequest, EnhanceFeatureRequirementsResponse,
     EnhanceProjectRequirementsRequest, EnhanceProjectRequirementsResponse, FeatureResponse,
     GenerateTasksRequest, GenerateTasksResponse, ProjectDetailResponse, ProjectDocumentResponse,
-    ProjectResponse, TaskDetailResponse, TaskResponse, TenantScope, Tx, UpdateFeatureRequest,
-    UpdateProjectRequest, UpdateTaskRequest,
+    ProjectResponse, TaskDetailResponse, TaskLabelSummary, TaskResponse, TenantScope, Tx,
+    UpdateFeatureRequest, UpdateProjectRequest, UpdateTaskRequest,
 };
 use uuid::Uuid;
 
@@ -1937,6 +1938,7 @@ pub async fn list_feature_tasks(
     for row in &mut rows {
         task_due_date_service::enrich_task_row(row, workspace_now);
     }
+    attach_labels_to_task_rows(&mut **conn, &mut rows).await?;
 
     info!(
         user_id = %user.id,
@@ -2057,6 +2059,7 @@ pub async fn get_project_task(
         .await?;
     let mut row = row;
     task_due_date_service::enrich_task_detail_row(&mut row, workspace_now);
+    attach_labels_to_task_detail(&mut **conn, &mut row).await?;
 
     info!(
         user_id = %user.id,
@@ -2159,6 +2162,13 @@ pub async fn create_task(
         None,
         None,
     )?;
+    let label_ids = label_service::validate_label_ids_for_task(
+        &mut **conn,
+        scope,
+        project_id,
+        &payload.label_ids,
+    )
+    .await?;
 
     let row = sqlx::query_as::<_, TaskResponse>(
         r#"
@@ -2261,6 +2271,7 @@ pub async fn create_task(
         );
         return Err(not_found("Feature not found."));
     };
+    label_service::sync_task_labels(&mut **conn, row.id, &label_ids).await?;
 
     if assignee_bind.is_some() {
         AuditEventsService::record_with_pool(
@@ -2319,6 +2330,7 @@ pub async fn create_task(
         .await?;
     let mut row = row;
     task_due_date_service::enrich_task_row(&mut row, workspace_now);
+    attach_labels_to_task_row(&mut **conn, &mut row).await?;
 
     info!(
         task_id = %row.id,
@@ -2701,6 +2713,14 @@ pub async fn update_project_task(
     if status_val == "Done" {
         task_status_service::validate_may_mark_done(&state.pool, scope, task_id, project_id).await?;
     }
+    let update_label_ids = if let Some(label_ids) = payload.label_ids.as_ref() {
+        Some(
+            label_service::validate_label_ids_for_task(&mut **conn, scope, project_id, label_ids)
+                .await?,
+        )
+    } else {
+        None
+    };
 
     let row = sqlx::query_as::<_, TaskDetailResponse>(
         r#"
@@ -2797,6 +2817,9 @@ pub async fn update_project_task(
         );
         return Err(not_found("Task not found."));
     };
+    if let Some(label_ids) = update_label_ids.as_ref() {
+        label_service::sync_task_labels(&mut **conn, row.id, label_ids).await?;
+    }
 
     if old_assignee_user_id != assignee_bind {
         AuditEventsService::record_with_pool(
@@ -2872,6 +2895,7 @@ pub async fn update_project_task(
         .await?;
     let mut row = row;
     task_due_date_service::enrich_task_detail_row(&mut row, workspace_now);
+    attach_labels_to_task_detail(&mut **conn, &mut row).await?;
 
     info!(
         user_id = %user.id,
@@ -2884,6 +2908,62 @@ pub async fn update_project_task(
     );
 
     Ok(Json(row))
+}
+
+async fn attach_labels_to_task_rows(
+    conn: &mut sqlx::PgConnection,
+    rows: &mut [TaskResponse],
+) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
+    let task_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+    let labels_by_task = label_service::fetch_labels_for_tasks(conn, &task_ids).await?;
+    for row in rows {
+        row.labels = labels_by_task
+            .get(&row.id)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(map_task_label_summary)
+            .collect();
+    }
+    Ok(())
+}
+
+async fn attach_labels_to_task_row(
+    conn: &mut sqlx::PgConnection,
+    row: &mut TaskResponse,
+) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
+    let labels_by_task = label_service::fetch_labels_for_tasks(conn, &[row.id]).await?;
+    row.labels = labels_by_task
+        .get(&row.id)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(map_task_label_summary)
+        .collect();
+    Ok(())
+}
+
+async fn attach_labels_to_task_detail(
+    conn: &mut sqlx::PgConnection,
+    row: &mut TaskDetailResponse,
+) -> Result<(), (StatusCode, Json<ApiErrorBody>)> {
+    let labels_by_task = label_service::fetch_labels_for_tasks(conn, &[row.id]).await?;
+    row.labels = labels_by_task
+        .get(&row.id)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(map_task_label_summary)
+        .collect();
+    Ok(())
+}
+
+fn map_task_label_summary(row: label_service::TaskLabelSummaryRow) -> TaskLabelSummary {
+    TaskLabelSummary {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+    }
 }
 
 fn is_allowed_document_name(file_name: &str) -> bool {

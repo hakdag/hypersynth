@@ -3,6 +3,8 @@ use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::types::TaskLabelSummary;
+
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskDetailResponse {
@@ -26,4 +28,7 @@ pub struct TaskDetailResponse {
     pub feature_title: String,
     pub project_id: Uuid,
     pub project_name: String,
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub labels: Vec<TaskLabelSummary>,
 }

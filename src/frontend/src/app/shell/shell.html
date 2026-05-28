@@ -37,6 +37,14 @@
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">folder_open</span>
           <span>Projects</span>
         </a>
+        <a
+          routerLink="/app/labels"
+          class="sidebar-link"
+          [class.sidebar-link-active]="labelsNavActive()"
+        >
+          <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">sell</span>
+          <span>Labels</span>
+        </a>
         <span class="sidebar-link sidebar-link-disabled">
           <span class="material-symbols-outlined sidebar-link-icon" aria-hidden="true">task_alt</span>
           <span>Tasks</span>

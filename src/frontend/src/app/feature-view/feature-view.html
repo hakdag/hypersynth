@@ -161,6 +161,7 @@
                         <th scope="col" class="fv-tasks__th">Status</th>
                         <th scope="col" class="fv-tasks__th">Priority</th>
                         <th scope="col" class="fv-tasks__th">Assignee</th>
+                        <th scope="col" class="fv-tasks__th">Labels</th>
                         <th scope="col" class="fv-tasks__th">Due</th>
                         <th scope="col" class="fv-tasks__th">Origin</th>
                         <th scope="col" class="fv-tasks__th fv-tasks__th--actions">
@@ -199,6 +200,23 @@
                           </td>
                           <td class="fv-tasks__td">
                             {{ taskAssigneeLabel(task) }}
+                          </td>
+                          <td class="fv-tasks__td">
+                            @if (task.labels.length === 0) {
+                              <span class="fv-task-origin fv-task-origin--manual">None</span>
+                            } @else {
+                              <div class="fv-task-labels">
+                                @for (label of task.labels; track label.id) {
+                                  <span
+                                    class="fv-task-label-chip"
+                                    [style.backgroundColor]="label.color"
+                                    [style.color]="labelTextColor(label.color)"
+                                  >
+                                    {{ label.name }}
+                                  </span>
+                                }
+                              </div>
+                            }
                           </td>
                           <td class="fv-tasks__td">
                             <span [class]="taskDueClass(task)">

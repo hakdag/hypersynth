@@ -111,6 +111,7 @@ export interface UpdateTaskPayload {
   clearDueDate?: boolean;
   unassigned: boolean;
   assigneeUserId?: string;
+  labelIds?: string[];
 }
 
 export const TASK_STATUS_OPTIONS = [
@@ -126,6 +127,12 @@ export const TERMINAL_TASK_STATUSES = ['Done', 'Cancelled'] as const;
 
 export const TASK_PRIORITY_OPTIONS = ['Standard', 'Elevated', 'Critical'] as const;
 export type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
+
+export interface TaskLabelSummary {
+  id: string;
+  name: string;
+  color: string;
+}
 
 export interface CreatedTask {
   id: string;
@@ -144,6 +151,7 @@ export interface CreatedTask {
   assigneeAvatarUrl: string | null;
   creatorFullname: string | null;
   creatorAvatarUrl: string | null;
+  labels: TaskLabelSummary[];
 }
 
 export interface TaskDetail extends CreatedTask {
@@ -342,6 +350,7 @@ export class ProjectApiService {
       dueTime?: string;
       unassigned: boolean;
       assigneeUserId?: string;
+      labelIds?: string[];
     },
   ): Observable<CreatedTask> {
     const b = encodeURIComponent;
@@ -362,6 +371,9 @@ export class ProjectApiService {
     }
     if (!payload.unassigned && payload.assigneeUserId !== undefined) {
       body['assigneeUserId'] = payload.assigneeUserId;
+    }
+    if (payload.labelIds !== undefined) {
+      body['labelIds'] = payload.labelIds;
     }
     return this.http.post<CreatedTask>(url, body);
   }
@@ -403,6 +415,9 @@ export class ProjectApiService {
     }
     if (!payload.unassigned && payload.assigneeUserId !== undefined) {
       body['assigneeUserId'] = payload.assigneeUserId;
+    }
+    if (payload.labelIds !== undefined) {
+      body['labelIds'] = payload.labelIds;
     }
     return this.http.patch<TaskDetail>(url, body);
   }

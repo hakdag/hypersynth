@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 
 import { AuthApiService, CurrentUser } from '../auth-api.service';
+import { Label, LabelsApiService } from '../labels-api.service';
 import { ProjectMember, ProjectMembersApiService } from '../project-members-api.service';
 import {
   CreatedFeature,
@@ -22,6 +23,7 @@ type PageLoadResult =
       feature: CreatedFeature;
       currentUser: CurrentUser;
       assigneeOptions: Array<{ id: string; label: string }>;
+      labels: Label[];
     }
   | { kind: 'error'; message: string };
 
@@ -36,6 +38,7 @@ export class TaskCreate implements OnInit, OnDestroy {
   private readonly projectApi = inject(ProjectApiService);
   private readonly authApi = inject(AuthApiService);
   private readonly membersApi = inject(ProjectMembersApiService);
+  private readonly labelsApi = inject(LabelsApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private sub: Subscription | null = null;
@@ -46,6 +49,7 @@ export class TaskCreate implements OnInit, OnDestroy {
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly assigneeOptions = signal<Array<{ id: string; label: string }>>([]);
+  protected readonly labels = signal<Label[]>([]);
 
   protected readonly priorityOptions = [...TASK_PRIORITY_OPTIONS];
 
@@ -60,6 +64,7 @@ export class TaskCreate implements OnInit, OnDestroy {
     dueDate: this.fb.nonNullable.control<string>(''),
     dueTime: this.fb.nonNullable.control<string>(''),
     assigneeUserId: this.fb.nonNullable.control<string>(''),
+    labelIds: this.fb.nonNullable.control<string[]>([]),
   });
 
   ngOnInit(): void {
@@ -82,6 +87,7 @@ export class TaskCreate implements OnInit, OnDestroy {
                   currentUser.accountType === 'company'
                     ? this.membersApi.listMembers(projectId)
                     : of([] as ProjectMember[]),
+                labels: this.labelsApi.listLabels(),
               }).pipe(
                 map(
                   (data): PageLoadResult => ({
@@ -90,6 +96,7 @@ export class TaskCreate implements OnInit, OnDestroy {
                     feature: data.feature,
                     currentUser,
                     assigneeOptions: this.buildAssigneeOptions(currentUser, data.members),
+                    labels: data.labels,
                   }),
                 ),
               ),
@@ -113,6 +120,7 @@ export class TaskCreate implements OnInit, OnDestroy {
           this.feature.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
+          this.labels.set([]);
           this.loadState.set('error');
           return;
         }
@@ -122,6 +130,7 @@ export class TaskCreate implements OnInit, OnDestroy {
           this.feature.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
+          this.labels.set([]);
           this.loadState.set('error');
           return;
         }
@@ -129,6 +138,7 @@ export class TaskCreate implements OnInit, OnDestroy {
         this.feature.set(res.feature);
         this.currentUser.set(res.currentUser);
         this.assigneeOptions.set(res.assigneeOptions);
+        this.labels.set(res.labels);
         const hasCurrentAssigneeOption = res.assigneeOptions.some(
           (option) => option.id === res.currentUser.id,
         );
@@ -157,6 +167,7 @@ export class TaskCreate implements OnInit, OnDestroy {
     }
 
     const { title, description, priority, dueDate, dueTime, assigneeUserId } = this.form.getRawValue();
+    const labelIds = this.form.controls.labelIds.value;
     const unassigned = assigneeUserId === '';
     const dueDateTrimmed = dueDate.trim();
     const dueTimeTrimmed = dueTime.trim();
@@ -180,6 +191,7 @@ export class TaskCreate implements OnInit, OnDestroy {
         dueTime: dueDateTrimmed.length > 0 && dueTimeTrimmed.length > 0 ? dueTimeTrimmed : undefined,
         unassigned,
         assigneeUserId: !unassigned ? assigneeUserId : undefined,
+        labelIds,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
@@ -239,6 +251,33 @@ export class TaskCreate implements OnInit, OnDestroy {
     const dueDate = this.form.controls.dueDate.value.trim();
     const dueTime = this.form.controls.dueTime.value.trim();
     return dueDate.length === 0 && dueTime.length > 0;
+  }
+
+  protected toggleLabel(labelId: string, checked: boolean): void {
+    const current = this.form.controls.labelIds.value;
+    if (checked) {
+      if (!current.includes(labelId)) {
+        this.form.controls.labelIds.setValue([...current, labelId]);
+      }
+      return;
+    }
+    this.form.controls.labelIds.setValue(current.filter((id) => id !== labelId));
+  }
+
+  protected hasLabel(labelId: string): boolean {
+    return this.form.controls.labelIds.value.includes(labelId);
+  }
+
+  protected labelTextColor(hex: string): string {
+    const upper = hex.trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(upper)) {
+      return '#111827';
+    }
+    const r = Number.parseInt(upper.slice(1, 3), 16);
+    const g = Number.parseInt(upper.slice(3, 5), 16);
+    const b = Number.parseInt(upper.slice(5, 7), 16);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luma > 165 ? '#111827' : '#ffffff';
   }
 
   private buildAssigneeOptions(

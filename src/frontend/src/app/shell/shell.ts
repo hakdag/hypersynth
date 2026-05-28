@@ -22,6 +22,7 @@ export class Shell implements OnInit {
   readonly hasCompanyAssociation = this.companyAccess.hasCompanyAssociation;
   readonly canInviteUsers = this.auth.canInviteUsers;
   readonly isCompanyAdmin = this.auth.isCompanyAdmin;
+  readonly canManageLabels = this.auth.canManageLabels;
 
   protected readonly announcementDismissed = signal(false);
 
@@ -54,6 +55,11 @@ export class Shell implements OnInit {
   protected teamInvitationsNavActive(): boolean {
     const path = this.router.url.split('?')[0];
     return path === '/app/team/invitations' || path.startsWith('/app/team/invitations/');
+  }
+
+  protected labelsNavActive(): boolean {
+    const path = this.router.url.split('?')[0];
+    return path === '/app/labels' || path.startsWith('/app/labels/');
   }
 
   protected adminNavActive(): boolean {

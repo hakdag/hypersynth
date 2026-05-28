@@ -1,0 +1,166 @@
+:host {
+  display: block;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #191c1e;
+}
+
+.ll-page {
+  max-width: 960px;
+}
+
+.ll-header {
+  margin-bottom: 1rem;
+}
+
+.ll-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #00236f;
+}
+
+.ll-subtitle {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+}
+
+.ll-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #334155;
+}
+
+.ll-create {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.ll-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ll-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+}
+
+.ll-color {
+  width: 44px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.ll-code {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.ll-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.ll-banner-error {
+  background: #fde8e8;
+  color: #7f1d1d;
+}
+
+.ll-muted {
+  color: #64748b;
+}
+
+.ll-empty {
+  padding: 1.5rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  color: #64748b;
+  text-align: center;
+}
+
+.ll-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.ll-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.ll-table th,
+.ll-table td {
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ll-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.ll-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ll-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ll-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.ll-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+}
+
+.ll-btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 13px;
+}
+
+.ll-btn-primary {
+  background: #00236f;
+  color: #ffffff;
+}
+
+.ll-btn-ghost {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}

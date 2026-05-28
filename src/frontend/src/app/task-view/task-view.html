@@ -141,6 +141,24 @@
             }
           </div>
         </div>
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">labels</span>
+          @if (task.labels.length === 0) {
+            <span class="fv-task-origin fv-task-origin--manual">No labels</span>
+          } @else {
+            <div class="tv-labels">
+              @for (label of task.labels; track label.id) {
+                <span
+                  class="tv-label-chip"
+                  [style.backgroundColor]="label.color"
+                  [style.color]="labelTextColor(label.color)"
+                >
+                  {{ label.name }}
+                </span>
+              }
+            </div>
+          }
+        </div>
       </div>
     </div>
 

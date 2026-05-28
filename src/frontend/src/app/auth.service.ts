@@ -24,6 +24,14 @@ export class AuthService {
     const role = this.user()?.role;
     return role === 'company_admin' || role === 'project_manager';
   });
+  readonly canManageLabels = computed(() => {
+    const current = this.user();
+    if (current?.accountType === 'personal') {
+      return true;
+    }
+    const role = current?.role;
+    return role === 'company_admin' || role === 'project_manager' || role === 'contributor';
+  });
 
   /** Resolves session with GET /me when user is not cached. */
   ensureAuthenticated(): Observable<boolean> {

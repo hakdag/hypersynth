@@ -14,6 +14,7 @@ pub const CREATE_EDIT_TASKS: &[CompanyRole] = &[
     CompanyRole::ProjectManager,
     CompanyRole::Contributor,
 ];
+pub const MANAGE_LABELS: &[CompanyRole] = CREATE_EDIT_TASKS;
 
 pub async fn require_company_role(
     user: &SessionUser,

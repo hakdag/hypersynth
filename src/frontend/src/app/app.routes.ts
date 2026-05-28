@@ -24,6 +24,7 @@ import { AdminInvitationsList } from './admin-invitations-list/admin-invitations
 import { AdminUsersList } from './admin-users-list/admin-users-list';
 import { CompanyDisabled } from './company-disabled/company-disabled';
 import { Login } from './login/login';
+import { LabelList } from './label-list/label-list';
 import { SystemAdminDashboard } from './system-admin-dashboard/system-admin-dashboard';
 import { systemAdminGuard } from './system-admin.guard';
 import { NotFound } from './not-found/not-found';
@@ -67,6 +68,7 @@ export const routes: Routes = [
         ],
       },
       { path: 'projects', component: ProjectList },
+      { path: 'labels', component: LabelList },
       { path: 'projects/new', component: ProjectCreate },
       { path: 'projects/:projectId/features/new', component: FeatureCreate },
       { path: 'projects/:projectId/features/:featureId/tasks/new', component: TaskCreate },

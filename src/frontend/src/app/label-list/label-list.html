@@ -1,0 +1,138 @@
+<div class="ll-page">
+  <header class="ll-header">
+    <div>
+      <h1 class="ll-title">Labels</h1>
+      <p class="ll-subtitle">Create reusable labels and apply them to tasks.</p>
+    </div>
+  </header>
+
+  @if (actionError(); as err) {
+    <div class="ll-banner ll-banner-error" role="alert">{{ err }}</div>
+  }
+
+  @if (canManageLabels()) {
+    <section class="ll-create">
+      <h2 class="ll-section-title">New label</h2>
+      <div class="ll-row">
+        <input
+          class="ll-input"
+          type="text"
+          placeholder="Label name"
+          [ngModel]="createName()"
+          (ngModelChange)="createName.set($event)"
+        />
+        <input
+          class="ll-color"
+          type="color"
+          [ngModel]="createColor()"
+          (ngModelChange)="createColor.set($event)"
+        />
+        <button type="button" class="ll-btn ll-btn-primary" [disabled]="saving()" (click)="create()">
+          {{ saving() ? 'Saving…' : 'Create' }}
+        </button>
+      </div>
+    </section>
+  }
+
+  @switch (loadState()) {
+    @case ('loading') {
+      <p class="ll-muted">Loading…</p>
+    }
+    @case ('error') {
+      <div class="ll-banner ll-banner-error" role="alert">{{ loadError() }}</div>
+      <button type="button" class="ll-btn ll-btn-ghost" (click)="refresh()">Retry</button>
+    }
+    @case ('ok') {
+      @if (sortedLabels().length === 0) {
+        <div class="ll-empty">No labels yet.</div>
+      } @else {
+        <div class="ll-table-wrap">
+          <table class="ll-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Color</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (label of sortedLabels(); track label.id) {
+                <tr>
+                  <td>
+                    @if (editingId() === label.id) {
+                      <input
+                        class="ll-input"
+                        type="text"
+                        [ngModel]="editName()"
+                        (ngModelChange)="editName.set($event)"
+                      />
+                    } @else {
+                      {{ label.name }}
+                    }
+                  </td>
+                  <td>
+                    @if (editingId() === label.id) {
+                      <div class="ll-row">
+                        <input
+                          class="ll-color"
+                          type="color"
+                          [ngModel]="editColor()"
+                          (ngModelChange)="editColor.set($event)"
+                        />
+                        <span class="ll-code">{{ editColor().toUpperCase() }}</span>
+                      </div>
+                    } @else {
+                      <span
+                        class="ll-badge"
+                        [style.backgroundColor]="label.color"
+                        [style.color]="textColor(label.color)"
+                      >
+                        {{ label.color }}
+                      </span>
+                    }
+                  </td>
+                  <td>{{ label.createdAt | date: 'mediumDate' }}</td>
+                  <td class="ll-actions">
+                    @if (canManageLabels()) {
+                      @if (editingId() === label.id) {
+                        <button
+                          type="button"
+                          class="ll-btn ll-btn-primary ll-btn-sm"
+                          [disabled]="saving()"
+                          (click)="saveEdit(label)"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          class="ll-btn ll-btn-ghost ll-btn-sm"
+                          [disabled]="saving()"
+                          (click)="cancelEdit()"
+                        >
+                          Cancel
+                        </button>
+                      } @else {
+                        <button type="button" class="ll-btn ll-btn-ghost ll-btn-sm" (click)="startEdit(label)">
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          class="ll-btn ll-btn-ghost ll-btn-sm"
+                          [disabled]="deletingId() === label.id"
+                          (click)="delete(label)"
+                        >
+                          {{ deletingId() === label.id ? 'Deleting…' : 'Delete' }}
+                        </button>
+                      }
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</div>

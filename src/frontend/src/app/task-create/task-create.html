@@ -86,6 +86,30 @@
           </div>
 
           <div class="fc-field">
+            <label class="fc-label">Labels <span class="fc-opt">(Optional)</span></label>
+            @if (labels().length === 0) {
+              <p class="fc-hint">No labels available yet.</p>
+            } @else {
+              <div class="tc-labels">
+                @for (label of labels(); track label.id) {
+                  <label
+                    class="tc-label-chip"
+                    [style.backgroundColor]="label.color"
+                    [style.color]="labelTextColor(label.color)"
+                  >
+                    <input
+                      type="checkbox"
+                      [checked]="hasLabel(label.id)"
+                      (change)="toggleLabel(label.id, $any($event.target).checked)"
+                    />
+                    <span>{{ label.name }}</span>
+                  </label>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="fc-field">
             <label class="fc-label" for="task-due-date">Due date <span class="fc-opt">(Optional)</span></label>
             <input id="task-due-date" class="fc-input" type="date" formControlName="dueDate" />
           </div>
