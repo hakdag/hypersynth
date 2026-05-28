@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -14,6 +14,10 @@ pub struct TaskDetailResponse {
     pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub priority: String,
+    pub due_date: Option<NaiveDate>,
+    pub due_time: Option<NaiveTime>,
+    #[sqlx(default)]
+    pub is_overdue: bool,
     pub assignee_user_id: Option<Uuid>,
     pub assignee_fullname: Option<String>,
     pub assignee_avatar_url: Option<String>,

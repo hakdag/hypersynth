@@ -114,6 +114,23 @@
         </div>
 
         <div class="fc-field">
+          <label class="fc-label" for="task-due-date-edit">
+            Due date <span class="fc-opt">(Optional)</span>
+          </label>
+          <input id="task-due-date-edit" class="fc-input" type="date" formControlName="dueDate" />
+        </div>
+
+        <div class="fc-field">
+          <label class="fc-label" for="task-due-time-edit">
+            Due time <span class="fc-opt">(Optional)</span>
+          </label>
+          <input id="task-due-time-edit" class="fc-input" type="time" formControlName="dueTime" />
+          @if (dueDateMissingForTime()) {
+            <p class="fc-hint fc-hint-error">Set a due date before setting a due time.</p>
+          }
+        </div>
+
+        <div class="fc-field">
           <label class="fc-label" for="task-desc">
             Description <span class="fc-opt">(Optional)</span>
           </label>

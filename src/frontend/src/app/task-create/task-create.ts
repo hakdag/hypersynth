@@ -57,6 +57,8 @@ export class TaskCreate implements OnInit, OnDestroy {
     title: ['', [Validators.required, Validators.maxLength(512)]],
     description: [''],
     priority: this.fb.nonNullable.control<string>('Standard', Validators.required),
+    dueDate: this.fb.nonNullable.control<string>(''),
+    dueTime: this.fb.nonNullable.control<string>(''),
     assigneeUserId: this.fb.nonNullable.control<string>(''),
   });
 
@@ -154,8 +156,14 @@ export class TaskCreate implements OnInit, OnDestroy {
       return;
     }
 
-    const { title, description, priority, assigneeUserId } = this.form.getRawValue();
+    const { title, description, priority, dueDate, dueTime, assigneeUserId } = this.form.getRawValue();
     const unassigned = assigneeUserId === '';
+    const dueDateTrimmed = dueDate.trim();
+    const dueTimeTrimmed = dueTime.trim();
+    if (dueDateTrimmed.length === 0 && dueTimeTrimmed.length > 0) {
+      this.serverError.set('Due time cannot be set without a due date.');
+      return;
+    }
     if (!unassigned && !cu) {
       this.serverError.set('Could not resolve the current account. Please reload and sign in.');
       return;
@@ -168,6 +176,8 @@ export class TaskCreate implements OnInit, OnDestroy {
         title: title.trim(),
         description: description.trim().length > 0 ? description : undefined,
         priority,
+        dueDate: dueDateTrimmed.length > 0 ? dueDateTrimmed : undefined,
+        dueTime: dueDateTrimmed.length > 0 && dueTimeTrimmed.length > 0 ? dueTimeTrimmed : undefined,
         unassigned,
         assigneeUserId: !unassigned ? assigneeUserId : undefined,
       })
@@ -223,6 +233,12 @@ export class TaskCreate implements OnInit, OnDestroy {
       return 'Title is too long.';
     }
     return '';
+  }
+
+  protected dueDateMissingForTime(): boolean {
+    const dueDate = this.form.controls.dueDate.value.trim();
+    const dueTime = this.form.controls.dueTime.value.trim();
+    return dueDate.length === 0 && dueTime.length > 0;
   }
 
   private buildAssigneeOptions(

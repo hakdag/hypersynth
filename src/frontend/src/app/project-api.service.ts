@@ -106,6 +106,9 @@ export interface UpdateTaskPayload {
   description: string;
   status: string;
   priority: string;
+  dueDate?: string;
+  dueTime?: string;
+  clearDueDate?: boolean;
   unassigned: boolean;
   assigneeUserId?: string;
 }
@@ -122,6 +125,9 @@ export interface CreatedTask {
   createdBy: string;
   createdAt: string;
   priority: string;
+  dueDate: string | null;
+  dueTime: string | null;
+  isOverdue: boolean;
   assigneeUserId: string | null;
   assigneeFullname: string | null;
   assigneeAvatarUrl: string | null;
@@ -321,6 +327,8 @@ export class ProjectApiService {
       title: string;
       description?: string;
       priority: string;
+      dueDate?: string;
+      dueTime?: string;
       unassigned: boolean;
       assigneeUserId?: string;
     },
@@ -334,6 +342,12 @@ export class ProjectApiService {
     };
     if (payload.description !== undefined && payload.description.trim().length > 0) {
       body['description'] = payload.description.trim();
+    }
+    if (payload.dueDate !== undefined && payload.dueDate.trim().length > 0) {
+      body['dueDate'] = payload.dueDate.trim();
+      if (payload.dueTime !== undefined && payload.dueTime.trim().length > 0) {
+        body['dueTime'] = payload.dueTime.trim();
+      }
     }
     if (!payload.unassigned && payload.assigneeUserId !== undefined) {
       body['assigneeUserId'] = payload.assigneeUserId;
@@ -365,10 +379,17 @@ export class ProjectApiService {
       title: payload.title.trim(),
       status: payload.status,
       priority: payload.priority,
+      clearDueDate: payload.clearDueDate === true,
       unassigned: payload.unassigned,
     };
     body['description'] =
       payload.description.trim().length > 0 ? payload.description.trim() : null;
+    if (payload.clearDueDate !== true && payload.dueDate !== undefined && payload.dueDate.trim().length > 0) {
+      body['dueDate'] = payload.dueDate.trim();
+      if (payload.dueTime !== undefined && payload.dueTime.trim().length > 0) {
+        body['dueTime'] = payload.dueTime.trim();
+      }
+    }
     if (!payload.unassigned && payload.assigneeUserId !== undefined) {
       body['assigneeUserId'] = payload.assigneeUserId;
     }

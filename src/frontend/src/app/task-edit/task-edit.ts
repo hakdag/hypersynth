@@ -101,6 +101,8 @@ export class TaskEdit implements OnInit, OnDestroy {
     title: ['', [Validators.required, Validators.maxLength(512)]],
     description: [''],
     priority: this.fb.nonNullable.control<string>('Standard', Validators.required),
+    dueDate: this.fb.nonNullable.control<string>(''),
+    dueTime: this.fb.nonNullable.control<string>(''),
     assigneeUserId: this.fb.nonNullable.control<string>(''),
   });
 
@@ -179,6 +181,8 @@ export class TaskEdit implements OnInit, OnDestroy {
           title: res.task.title,
           description: res.task.description ?? '',
           priority: normalizeTaskPriority(res.task.priority),
+          dueDate: res.task.dueDate ?? '',
+          dueTime: this.normalizeDueTimeForInput(res.task.dueTime),
           assigneeUserId: res.task.assigneeUserId ?? '',
         });
         this.form.markAsPristine();
@@ -218,6 +222,12 @@ export class TaskEdit implements OnInit, OnDestroy {
 
     const raw = this.form.getRawValue();
     const unassigned = raw.assigneeUserId === '';
+    const dueDateTrimmed = raw.dueDate.trim();
+    const dueTimeTrimmed = raw.dueTime.trim();
+    if (dueDateTrimmed.length === 0 && dueTimeTrimmed.length > 0) {
+      this.serverError.set('Due time cannot be set without a due date.');
+      return;
+    }
     this.submitting.set(true);
 
     this.projectApi
@@ -226,6 +236,9 @@ export class TaskEdit implements OnInit, OnDestroy {
         description: raw.description,
         status: normalizeTaskStatus(this.effectiveStatus()),
         priority: raw.priority,
+        dueDate: dueDateTrimmed.length > 0 ? dueDateTrimmed : undefined,
+        dueTime: dueDateTrimmed.length > 0 && dueTimeTrimmed.length > 0 ? dueTimeTrimmed : undefined,
+        clearDueDate: dueDateTrimmed.length === 0,
         unassigned,
         assigneeUserId: !unassigned ? raw.assigneeUserId : undefined,
       })
@@ -238,6 +251,8 @@ export class TaskEdit implements OnInit, OnDestroy {
             title: updated.title,
             description: updated.description ?? '',
             priority: normalizeTaskPriority(updated.priority),
+            dueDate: updated.dueDate ?? '',
+            dueTime: this.normalizeDueTimeForInput(updated.dueTime),
             assigneeUserId: updated.assigneeUserId ?? '',
           });
           this.form.markAsPristine();
@@ -272,6 +287,19 @@ export class TaskEdit implements OnInit, OnDestroy {
       return 'Title is too long.';
     }
     return '';
+  }
+
+  protected dueDateMissingForTime(): boolean {
+    const dueDate = this.form.controls.dueDate.value.trim();
+    const dueTime = this.form.controls.dueTime.value.trim();
+    return dueDate.length === 0 && dueTime.length > 0;
+  }
+
+  private normalizeDueTimeForInput(value: string | null): string {
+    if (!value) {
+      return '';
+    }
+    return value.length >= 5 ? value.slice(0, 5) : value;
   }
 
   private buildAssigneeOptions(

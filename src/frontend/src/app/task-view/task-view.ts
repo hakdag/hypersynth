@@ -148,6 +148,21 @@ export class TaskView implements OnInit, OnDestroy {
     });
   }
 
+  protected dueLabel(task: TaskDetail): string {
+    if (!task.dueDate) {
+      return 'No due date';
+    }
+    const value = task.dueTime ? `${task.dueDate}T${task.dueTime}` : `${task.dueDate}T00:00:00`;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      return task.dueTime ? `${task.dueDate} ${task.dueTime}` : task.dueDate;
+    }
+    if (task.dueTime) {
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    return d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  }
+
   protected creatorPhotoSrc(task: TaskDetail): string {
     return task.creatorAvatarUrl?.trim() ?? '';
   }

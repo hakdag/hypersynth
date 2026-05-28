@@ -159,7 +159,9 @@
                       <tr>
                         <th scope="col" class="fv-tasks__th fv-tasks__th--task">Task</th>
                         <th scope="col" class="fv-tasks__th">Status</th>
+                        <th scope="col" class="fv-tasks__th">Priority</th>
                         <th scope="col" class="fv-tasks__th">Assignee</th>
+                        <th scope="col" class="fv-tasks__th">Due</th>
                         <th scope="col" class="fv-tasks__th">Origin</th>
                         <th scope="col" class="fv-tasks__th fv-tasks__th--actions">
                           Actions
@@ -188,7 +190,20 @@
                             }}</span>
                           </td>
                           <td class="fv-tasks__td">
+                            <div class="pd-priority">
+                              <span [class]="taskPriorityIconClass(task.priority)" aria-hidden="true">{{
+                                taskPriorityIcon(task.priority)
+                              }}</span>
+                              <span class="pd-priority__text">{{ taskPriorityLabel(task.priority) }}</span>
+                            </div>
+                          </td>
+                          <td class="fv-tasks__td">
                             {{ taskAssigneeLabel(task) }}
+                          </td>
+                          <td class="fv-tasks__td">
+                            <span [class]="taskDueClass(task)">
+                              {{ taskDueLabel(task) }}
+                            </span>
                           </td>
                           <td class="fv-tasks__td">
                             @switch (taskCreatedByPresentation(task.createdBy)) {

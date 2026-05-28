@@ -14,6 +14,7 @@ import {
   CreatedTask,
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
+  TASK_PRIORITY_OPTIONS,
 } from '../project-api.service';
 import { AuthApiService, CurrentUser } from '../auth-api.service';
 import { TaskAiGenerateDialog } from '../task-ai-generate-dialog/task-ai-generate-dialog';
@@ -30,6 +31,14 @@ type ValidTaskStatus = (typeof VALID_TASK_STATUSES)[number];
 
 function normalizeTaskStatus(raw: string): string {
   return VALID_TASK_STATUSES.includes(raw as ValidTaskStatus) ? raw : 'Pending';
+}
+
+type ValidTaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
+
+function normalizeTaskPriority(raw: string): string {
+  return (TASK_PRIORITY_OPTIONS as readonly string[]).includes(raw as ValidTaskPriority)
+    ? raw
+    : 'Standard';
 }
 
 type PageResult =
@@ -261,6 +270,32 @@ export class FeatureView implements OnInit, OnDestroy {
     return normalizeTaskStatus(status);
   }
 
+  protected taskPriorityLabel(priority: string): string {
+    return normalizeTaskPriority(priority);
+  }
+
+  protected taskPriorityIcon(priority: string): string {
+    switch (normalizeTaskPriority(priority)) {
+      case 'Elevated':
+        return 'priority_high';
+      case 'Critical':
+        return 'warning';
+      default:
+        return 'flag';
+    }
+  }
+
+  protected taskPriorityIconClass(priority: string): string {
+    const base = 'material-symbols-outlined pd-priority__icon';
+    switch (normalizeTaskPriority(priority)) {
+      case 'Elevated':
+      case 'Critical':
+        return `${base} pd-priority__icon--high`;
+      default:
+        return `${base} pd-priority__icon--std`;
+    }
+  }
+
   protected taskCreatedByLabel(createdBy: string): string {
     if (createdBy === 'User') {
       return 'Manual';
@@ -299,6 +334,25 @@ export class FeatureView implements OnInit, OnDestroy {
       return name;
     }
     return task.assigneeUserId ? 'Assigned' : 'Unassigned';
+  }
+
+  protected taskDueLabel(task: CreatedTask): string {
+    if (!task.dueDate) {
+      return 'No due date';
+    }
+    const value = task.dueTime ? `${task.dueDate}T${task.dueTime}` : `${task.dueDate}T00:00:00`;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+      return task.dueTime ? `${task.dueDate} ${task.dueTime}` : task.dueDate;
+    }
+    if (task.dueTime) {
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    return d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  }
+
+  protected taskDueClass(task: CreatedTask): string {
+    return task.isOverdue ? 'fv-task-due fv-task-due--overdue' : 'fv-task-due';
   }
 
   protected openAiTaskDialog(): void {

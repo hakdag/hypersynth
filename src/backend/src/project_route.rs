@@ -20,6 +20,7 @@ use crate::document_context_service::DocumentContextService;
 use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::task_assignee_service;
+use crate::task_due_date_service;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::tx_extractor::{missing_tx_error, AuditCtx};
 use crate::types::{
@@ -1882,6 +1883,8 @@ pub async fn list_feature_tasks(
             t.created_by,
             t.created_at,
             t.priority,
+            t.due_date,
+            t.due_time,
             t.assignee_user_id,
             au.fullname AS assignee_fullname,
             au.avatar_url AS assignee_avatar_url,
@@ -1926,6 +1929,13 @@ pub async fn list_feature_tasks(
         );
         internal_error()
     })?;
+
+    let workspace_now = task_due_date_service::resolve_workspace_now(&mut **conn, scope, project_id)
+        .await?;
+    let mut rows = rows;
+    for row in &mut rows {
+        task_due_date_service::enrich_task_row(row, workspace_now);
+    }
 
     info!(
         user_id = %user.id,
@@ -1979,6 +1989,8 @@ pub async fn get_project_task(
             t.created_by,
             t.created_at,
             t.priority,
+            t.due_date,
+            t.due_time,
             t.assignee_user_id,
             au.fullname AS assignee_fullname,
             au.avatar_url AS assignee_avatar_url,
@@ -2039,6 +2051,11 @@ pub async fn get_project_task(
         );
         return Err(not_found("Task not found."));
     };
+
+    let workspace_now = task_due_date_service::resolve_workspace_now(&mut **conn, scope, project_id)
+        .await?;
+    let mut row = row;
+    task_due_date_service::enrich_task_detail_row(&mut row, workspace_now);
 
     info!(
         user_id = %user.id,
@@ -2134,6 +2151,13 @@ pub async fn create_task(
         payload.assignee_user_id,
     )
     .await?;
+    let (due_date_bind, due_time_bind) = task_due_date_service::resolve_due_fields(
+        payload.due_date.as_deref(),
+        payload.due_time.as_deref(),
+        false,
+        None,
+        None,
+    )?;
 
     let row = sqlx::query_as::<_, TaskResponse>(
         r#"
@@ -2145,10 +2169,12 @@ pub async fn create_task(
                 status,
                 created_by,
                 priority,
+                due_date,
+                due_time,
                 assignee_user_id,
                 creator_user_id
             )
-            SELECT f.id, $7, $8, 'Pending', 'User', $9, $10, $11
+            SELECT f.id, $7, $8, 'Pending', 'User', $9, $10, $11, $12, $13
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
             WHERE f.id = $1
@@ -2173,6 +2199,8 @@ pub async fn create_task(
                 created_by,
                 created_at,
                 priority,
+                due_date,
+                due_time,
                 assignee_user_id,
                 creator_user_id
         )
@@ -2185,6 +2213,8 @@ pub async fn create_task(
             ins.created_by,
             ins.created_at,
             ins.priority,
+            ins.due_date,
+            ins.due_time,
             ins.assignee_user_id,
             au.fullname AS assignee_fullname,
             au.avatar_url AS assignee_avatar_url,
@@ -2204,6 +2234,8 @@ pub async fn create_task(
     .bind(title)
     .bind(description.as_ref())
     .bind(priority_val)
+    .bind(due_date_bind)
+    .bind(due_time_bind)
     .bind(assignee_bind)
     .bind(user.id)
     .fetch_optional(&mut **conn)
@@ -2245,6 +2277,47 @@ pub async fn create_task(
         )
         .await;
     }
+
+    if priority_val != "Standard" {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskPriorityChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_priority": serde_json::Value::Null,
+                "new_priority": priority_val,
+            }),
+        )
+        .await;
+    }
+
+    if due_date_bind.is_some() || due_time_bind.is_some() {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskDueDateChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_due_date": serde_json::Value::Null,
+                "old_due_time": serde_json::Value::Null,
+                "new_due_date": due_date_bind,
+                "new_due_time": due_time_bind,
+            }),
+        )
+        .await;
+    }
+
+    let workspace_now = task_due_date_service::resolve_workspace_now(&mut **conn, scope, project_id)
+        .await?;
+    let mut row = row;
+    task_due_date_service::enrich_task_row(&mut row, workspace_now);
 
     info!(
         task_id = %row.id,
@@ -2481,6 +2554,57 @@ pub async fn update_project_task(
         payload.assignee_user_id,
     )
     .await?;
+    let old_due_fields = sqlx::query_as::<_, (Option<chrono::NaiveDate>, Option<chrono::NaiveTime>)>(
+        r#"
+        SELECT t.due_date, t.due_time
+        FROM tasks t
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE t.id = $1
+          AND t.feature_id = $2
+          AND f.project_id = $3
+          AND (
+            ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            OR
+            ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                $6::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $7
+                )
+            ))
+          )
+        "#,
+    )
+    .bind(task_id)
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
+    .fetch_optional(&mut **conn)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "update_project_task: old due fields lookup failed"
+        );
+        internal_error()
+    })?
+    .ok_or_else(|| not_found("Task not found."))?;
+    let (old_due_date, old_due_time) = old_due_fields;
+    let (due_date_bind, due_time_bind) = task_due_date_service::resolve_due_fields(
+        payload.due_date.as_deref(),
+        payload.due_time.as_deref(),
+        payload.clear_due_date,
+        old_due_date,
+        old_due_time,
+    )?;
 
     let old_assignee_user_id = sqlx::query_scalar::<_, Option<Uuid>>(
         r#"
@@ -2526,6 +2650,50 @@ pub async fn update_project_task(
     })?
     .ok_or_else(|| not_found("Task not found."))?;
 
+    let old_priority = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT t.priority
+        FROM tasks t
+        INNER JOIN features f ON f.id = t.feature_id
+        INNER JOIN projects p ON p.id = f.project_id
+        WHERE t.id = $1
+          AND t.feature_id = $2
+          AND f.project_id = $3
+          AND (
+            ($5::uuid IS NOT NULL AND p.owner_user_id = $5 AND p.company_id IS NULL)
+            OR
+            ($4::uuid IS NOT NULL AND p.company_id = $4 AND (
+                $6::boolean
+                OR EXISTS (
+                    SELECT 1 FROM project_memberships pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $7
+                )
+            ))
+          )
+        "#,
+    )
+    .bind(task_id)
+    .bind(feature_id)
+    .bind(project_id)
+    .bind(scope.company_id_or_null())
+    .bind(scope.owner_user_id_or_null())
+    .bind(scope.is_company_admin())
+    .bind(scope.session_user_id())
+    .fetch_optional(&mut **conn)
+    .await
+    .map_err(|e| {
+        warn!(
+            error = %e,
+            user_id = %user.id,
+            %project_id,
+            %feature_id,
+            %task_id,
+            "update_project_task: old priority lookup failed"
+        );
+        internal_error()
+    })?
+    .ok_or_else(|| not_found("Task not found."))?;
+
     let row = sqlx::query_as::<_, TaskDetailResponse>(
         r#"
         WITH updated AS (
@@ -2534,7 +2702,9 @@ pub async fn update_project_task(
                 description = $9,
                 status = $10,
                 priority = $11,
-                assignee_user_id = $12
+                assignee_user_id = $12,
+                due_date = $13,
+                due_time = $14
             FROM features f
             INNER JOIN projects p ON p.id = f.project_id
             WHERE t.id = $1
@@ -2563,6 +2733,8 @@ pub async fn update_project_task(
             t.created_by,
             t.created_at,
             t.priority,
+            t.due_date,
+            t.due_time,
             t.assignee_user_id,
             au.fullname AS assignee_fullname,
             au.avatar_url AS assignee_avatar_url,
@@ -2591,6 +2763,8 @@ pub async fn update_project_task(
     .bind(status_trimmed)
     .bind(priority_val)
     .bind(assignee_bind)
+    .bind(due_date_bind)
+    .bind(due_time_bind)
     .fetch_optional(&mut **conn)
     .await
     .map_err(|e| {
@@ -2632,6 +2806,47 @@ pub async fn update_project_task(
         )
         .await;
     }
+
+    if old_priority != priority_val {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskPriorityChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_priority": old_priority,
+                "new_priority": priority_val,
+            }),
+        )
+        .await;
+    }
+
+    if old_due_date != due_date_bind || old_due_time != due_time_bind {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskDueDateChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_due_date": old_due_date,
+                "old_due_time": old_due_time,
+                "new_due_date": due_date_bind,
+                "new_due_time": due_time_bind,
+            }),
+        )
+        .await;
+    }
+
+    let workspace_now = task_due_date_service::resolve_workspace_now(&mut **conn, scope, project_id)
+        .await?;
+    let mut row = row;
+    task_due_date_service::enrich_task_detail_row(&mut row, workspace_now);
 
     info!(
         user_id = %user.id,

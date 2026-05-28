@@ -13,6 +13,8 @@ pub enum AuditEventType {
     AiGenerateTasksRequested,
     GlobalConfigurationChanged,
     TaskAssigneeChanged,
+    TaskPriorityChanged,
+    TaskDueDateChanged,
 }
 
 impl AuditEventType {
@@ -29,6 +31,8 @@ impl AuditEventType {
             AuditEventType::AiGenerateTasksRequested => "ai_generate_tasks_requested",
             AuditEventType::GlobalConfigurationChanged => "global_configuration_changed",
             AuditEventType::TaskAssigneeChanged => "task_assignee_changed",
+            AuditEventType::TaskPriorityChanged => "task_priority_changed",
+            AuditEventType::TaskDueDateChanged => "task_due_date_changed",
         }
     }
 }

@@ -55,6 +55,9 @@
                 </a>
               }
               <span [class]="statusBadgeClass(task.status)">{{ statusForDisplay(task.status) }}</span>
+              @if (task.isOverdue) {
+                <span class="tv-overdue-pill">OVERDUE</span>
+              }
             </div>
           </div>
         </div>
@@ -124,6 +127,17 @@
                 }
                 <span class="tv-origin-name">{{ assigneeDisplayName(task) }}</span>
               </div>
+            }
+          </div>
+        </div>
+        <div class="pd-bento__card">
+          <span class="pd-bento__label">due</span>
+          <div class="tv-due-wrap">
+            <span [class]="task.isOverdue ? 'tv-due-text tv-due-text--overdue' : 'tv-due-text'">
+              {{ dueLabel(task) }}
+            </span>
+            @if (task.isOverdue) {
+              <span class="tv-overdue-inline">Needs attention</span>
             }
           </div>
         </div>

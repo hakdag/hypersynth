@@ -270,3 +270,19 @@
   color: #3124b8;
   background: #e1e0ff;
 }
+
+.fv-task-due {
+  color: #334155;
+  font-weight: 500;
+}
+
+.fv-task-due--overdue {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  font-weight: 700;
+}
