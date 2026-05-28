@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, FromRow)]
+use crate::types::CommentMentionSummary;
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentResponse {
     pub id: Uuid,
@@ -14,4 +15,5 @@ pub struct CommentResponse {
     pub content: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub mentions: Vec<CommentMentionSummary>,
 }

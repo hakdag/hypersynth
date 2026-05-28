@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 import { AuthApiService, CurrentUser } from '../auth-api.service';
-import { CommentsApiService, TaskComment } from '../comments-api.service';
+import { CommentMention, CommentsApiService, TaskComment } from '../comments-api.service';
 
 import {
   TASK_STATUS_OPTIONS,
@@ -13,6 +13,7 @@ import {
 } from '../project-api.service';
 
 type ValidTaskStatus = (typeof TASK_STATUS_OPTIONS)[number];
+type RenderedCommentSegment = { text: string; mentioned: boolean };
 
 const VALID_TASK_PRIORITIES = TASK_PRIORITY_OPTIONS;
 
@@ -295,6 +296,64 @@ export class TaskView implements OnInit, OnDestroy {
     return comment.authorAvatarUrl?.trim() ?? '';
   }
 
+  protected mentionDisplayLabel(mention: CommentMention): string {
+    const username = mention.username?.trim();
+    if (username) {
+      return `@${username}`;
+    }
+    const fullname = mention.fullname?.trim();
+    return fullname && fullname.length > 0 ? fullname : 'Mentioned user';
+  }
+
+  protected renderCommentSegments(comment: TaskComment): RenderedCommentSegment[] {
+    const mentions = new Set(
+      (comment.mentions ?? [])
+        .map((mention) => mention.username?.trim().toLowerCase())
+        .filter((username): username is string => !!username),
+    );
+    if (mentions.size === 0) {
+      return [{ text: comment.content, mentioned: false }];
+    }
+
+    const text = comment.content;
+    const chars = Array.from(text);
+    const segments: RenderedCommentSegment[] = [];
+    let cursor = 0;
+    let idx = 0;
+
+    while (idx < chars.length) {
+      if (chars[idx] !== '@') {
+        idx += 1;
+        continue;
+      }
+
+      let end = idx + 1;
+      while (end < chars.length && this.isUsernameChar(chars[end])) {
+        end += 1;
+      }
+
+      const len = end - (idx + 1);
+      if (len >= 3 && len <= 64) {
+        const username = chars.slice(idx + 1, end).join('').toLowerCase();
+        if (mentions.has(username)) {
+          if (cursor < idx) {
+            segments.push({ text: chars.slice(cursor, idx).join(''), mentioned: false });
+          }
+          segments.push({ text: chars.slice(idx, end).join(''), mentioned: true });
+          cursor = end;
+        }
+      }
+
+      idx = end;
+    }
+
+    if (cursor < chars.length) {
+      segments.push({ text: chars.slice(cursor).join(''), mentioned: false });
+    }
+
+    return segments.length > 0 ? segments : [{ text, mentioned: false }];
+  }
+
   protected canEditComment(comment: TaskComment): boolean {
     const user = this.currentUser();
     if (!user) {
@@ -337,7 +396,8 @@ export class TaskView implements OnInit, OnDestroy {
       .updateComment(ids.projectId, ids.featureId, ids.taskId, comment.id, { content })
       .subscribe({
         next: (updated) => {
-          this.comments.update((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+          const normalized = this.normalizeComment(updated);
+          this.comments.update((rows) => rows.map((row) => (row.id === normalized.id ? normalized : row)));
           this.savingCommentId.set(null);
           this.editingCommentId.set(null);
           this.editCommentContent.set('');
@@ -385,7 +445,7 @@ export class TaskView implements OnInit, OnDestroy {
     this.creatingComment.set(true);
     this.commentsApi.createComment(ids.projectId, ids.featureId, ids.taskId, { content }).subscribe({
       next: (comment) => {
-        this.comments.update((rows) => [...rows, comment]);
+        this.comments.update((rows) => [...rows, this.normalizeComment(comment)]);
         this.draftComment.set('');
         this.creatingComment.set(false);
       },
@@ -412,7 +472,7 @@ export class TaskView implements OnInit, OnDestroy {
     this.commentsError.set(null);
     this.commentsApi.listComments(ids.projectId, ids.featureId, ids.taskId).subscribe({
       next: (rows) => {
-        this.comments.set(rows);
+        this.comments.set(rows.map((row) => this.normalizeComment(row)));
         this.commentsLoadState.set('ok');
       },
       error: (err: unknown) => {
@@ -421,5 +481,16 @@ export class TaskView implements OnInit, OnDestroy {
         this.commentsLoadState.set('error');
       },
     });
+  }
+
+  private isUsernameChar(ch: string): boolean {
+    return /^[A-Za-z0-9_.-]$/.test(ch);
+  }
+
+  private normalizeComment(comment: TaskComment): TaskComment {
+    return {
+      ...comment,
+      mentions: Array.isArray(comment.mentions) ? comment.mentions : [],
+    };
   }
 }

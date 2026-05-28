@@ -20,6 +20,7 @@ mod authorization;
 mod company_registration_route;
 mod company_route;
 mod comment_route;
+mod comment_mention_service;
 mod comment_service;
 mod configs;
 mod crypto;

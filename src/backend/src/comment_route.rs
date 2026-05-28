@@ -36,7 +36,15 @@ pub async fn create_task_comment(
     let scope = TenantScopeService::from_session(&user)?;
     comment_service::ensure_task_visible(conn, scope, project_id, feature_id, task_id).await?;
     let content = comment_service::normalize_comment_content(&payload.content)?;
-    let comment = comment_service::create_comment(conn, task_id, scope.session_user_id(), content).await?;
+    let comment = comment_service::create_comment(
+        conn,
+        scope,
+        project_id,
+        task_id,
+        scope.session_user_id(),
+        content,
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(comment)))
 }
 

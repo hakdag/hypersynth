@@ -317,7 +317,22 @@
                         </div>
                       </div>
                     } @else {
-                      <p class="tv-comment-card__content">{{ comment.content }}</p>
+                      @if (comment.mentions.length > 0) {
+                        <div class="tv-comment-mentions" aria-label="Mentions">
+                          @for (mention of comment.mentions; track mention.userId) {
+                            <span class="tv-comment-mentions__chip">{{ mentionDisplayLabel(mention) }}</span>
+                          }
+                        </div>
+                      }
+                      <p class="tv-comment-card__content">
+                        @for (segment of renderCommentSegments(comment); track $index) {
+                          @if (segment.mentioned) {
+                            <span class="tv-mention-inline">{{ segment.text }}</span>
+                          } @else {
+                            {{ segment.text }}
+                          }
+                        }
+                      </p>
                     }
                   </article>
                 }

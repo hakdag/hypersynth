@@ -1,11 +1,25 @@
 use axum::http::StatusCode;
 use axum::Json;
 use sqlx::PgConnection;
+use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::comment_mention_service;
 use crate::types::{ApiErrorBody, CommentResponse, TenantScope};
 
 pub const MAX_COMMENT_CONTENT_LEN: usize = 10000;
+
+#[derive(Debug, FromRow)]
+struct CommentRow {
+    id: Uuid,
+    task_id: Uuid,
+    user_id: Uuid,
+    author_fullname: String,
+    author_avatar_url: Option<String>,
+    content: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
 
 pub fn normalize_comment_content(raw: &str) -> Result<String, (StatusCode, Json<ApiErrorBody>)> {
     let value = raw.trim();
@@ -69,7 +83,7 @@ pub async fn list_comments_for_task(
     conn: &mut PgConnection,
     task_id: Uuid,
 ) -> Result<Vec<CommentResponse>, (StatusCode, Json<ApiErrorBody>)> {
-    sqlx::query_as::<_, CommentResponse>(
+    let rows = sqlx::query_as::<_, CommentRow>(
         r#"
         SELECT
             c.id,
@@ -89,16 +103,27 @@ pub async fn list_comments_for_task(
     .bind(task_id)
     .fetch_all(&mut *conn)
     .await
-    .map_err(|_| internal_error())
+    .map_err(|_| internal_error())?;
+
+    let comment_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+    let mentions_by_comment =
+        comment_mention_service::fetch_mentions_for_comments(conn, &comment_ids).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| map_comment_row(row, &mentions_by_comment))
+        .collect())
 }
 
 pub async fn create_comment(
     conn: &mut PgConnection,
+    scope: TenantScope,
+    project_id: Uuid,
     task_id: Uuid,
     user_id: Uuid,
     content: String,
 ) -> Result<CommentResponse, (StatusCode, Json<ApiErrorBody>)> {
-    sqlx::query_as::<_, CommentResponse>(
+    let row = sqlx::query_as::<_, CommentRow>(
         r#"
         INSERT INTO task_comments (id, task_id, user_id, content)
         VALUES ($1, $2, $3, $4)
@@ -116,10 +141,13 @@ pub async fn create_comment(
     .bind(Uuid::new_v4())
     .bind(task_id)
     .bind(user_id)
-    .bind(content)
+    .bind(&content)
     .fetch_one(&mut *conn)
     .await
-    .map_err(|_| internal_error())
+    .map_err(|_| internal_error())?;
+
+    let mentions = resolve_and_sync_mentions(conn, scope, project_id, row.id, &content).await?;
+    Ok(map_comment_row_single(row, mentions))
 }
 
 pub async fn update_comment(
@@ -136,7 +164,7 @@ pub async fn update_comment(
         return Err(forbidden("You do not have permission to modify this comment."));
     }
 
-    let updated = sqlx::query_as::<_, CommentResponse>(
+    let updated = sqlx::query_as::<_, CommentRow>(
         r#"
         UPDATE task_comments c
         SET content = $1,
@@ -172,7 +200,7 @@ pub async fn update_comment(
             c.updated_at
         "#,
     )
-    .bind(content)
+    .bind(&content)
     .bind(comment_id)
     .bind(task_id)
     .bind(feature_id)
@@ -185,7 +213,9 @@ pub async fn update_comment(
     .await
     .map_err(|_| internal_error())?;
 
-    updated.ok_or_else(|| not_found("Comment not found."))
+    let row = updated.ok_or_else(|| not_found("Comment not found."))?;
+    let mentions = resolve_and_sync_mentions(conn, scope, project_id, row.id, &content).await?;
+    Ok(map_comment_row_single(row, mentions))
 }
 
 pub async fn delete_comment(
@@ -329,4 +359,59 @@ fn internal_error() -> (StatusCode, Json<ApiErrorBody>) {
             ..Default::default()
         }),
     )
+}
+
+async fn resolve_and_sync_mentions(
+    conn: &mut PgConnection,
+    scope: TenantScope,
+    project_id: Uuid,
+    comment_id: Uuid,
+    content: &str,
+) -> Result<Vec<crate::types::CommentMentionSummary>, (StatusCode, Json<ApiErrorBody>)> {
+    let usernames = comment_mention_service::parse_mention_usernames(content);
+    let resolved = comment_mention_service::resolve_mentions(conn, scope, project_id, &usernames).await?;
+    let user_ids: Vec<Uuid> = resolved.iter().map(|row| row.user_id).collect();
+    comment_mention_service::sync_comment_mentions(conn, comment_id, &user_ids).await?;
+    Ok(resolved
+        .into_iter()
+        .map(|row| crate::types::CommentMentionSummary {
+            user_id: row.user_id,
+            username: row.username,
+            fullname: row.fullname,
+        })
+        .collect())
+}
+
+fn map_comment_row(
+    row: CommentRow,
+    mentions_by_comment: &std::collections::HashMap<Uuid, Vec<crate::types::CommentMentionSummary>>,
+) -> CommentResponse {
+    CommentResponse {
+        id: row.id,
+        task_id: row.task_id,
+        user_id: row.user_id,
+        author_fullname: row.author_fullname,
+        author_avatar_url: row.author_avatar_url,
+        content: row.content,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        mentions: mentions_by_comment.get(&row.id).cloned().unwrap_or_default(),
+    }
+}
+
+fn map_comment_row_single(
+    row: CommentRow,
+    mentions: Vec<crate::types::CommentMentionSummary>,
+) -> CommentResponse {
+    CommentResponse {
+        id: row.id,
+        task_id: row.task_id,
+        user_id: row.user_id,
+        author_fullname: row.author_fullname,
+        author_avatar_url: row.author_avatar_url,
+        content: row.content,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        mentions,
+    }
 }

@@ -4,6 +4,12 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../environments/environment';
 
+export interface CommentMention {
+  userId: string;
+  username: string;
+  fullname: string;
+}
+
 export interface TaskComment {
   id: string;
   taskId: string;
@@ -13,6 +19,7 @@ export interface TaskComment {
   content: string;
   createdAt: string;
   updatedAt: string;
+  mentions: CommentMention[];
 }
 
 @Injectable({
