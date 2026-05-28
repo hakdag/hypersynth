@@ -202,6 +202,21 @@
   color: #ffffff;
 }
 
+.pd-status--blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pd-status--review {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.pd-status--cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 /* Bento: completion + priority */
 
 .pd-bento {

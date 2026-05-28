@@ -35,6 +35,7 @@ mod register_route;
 mod runtime_decrypt_error;
 mod task_assignee_service;
 mod task_due_date_service;
+mod task_status_service;
 mod tenant_scope_service;
 mod tx_extractor;
 mod types;

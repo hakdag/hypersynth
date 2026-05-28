@@ -51,28 +51,13 @@
     <div class="fc-card tc-card">
       <form class="fc-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <div class="fc-card-head">
-          <div class="fc-status-row fc-status-row--with-action">
+          <div class="fc-status-row">
             <span class="fc-status-label">Status:</span>
-            <span
-              class="fc-status-badge"
-              [class.fd-status-badge--progress]="effectiveStatus() === 'In Progress'"
-            >
-              <span
-                class="fc-status-dot"
-                aria-hidden="true"
-                [class.fd-status-dot--progress]="effectiveStatus() === 'In Progress'"
-              ></span>
-              {{ effectiveStatus() }}
+            <span class="fc-status-badge">
+              <span class="fc-status-dot" aria-hidden="true"></span>
+              {{ form.controls.status.value }}
             </span>
           </div>
-          <button
-            type="button"
-            class="fc-btn fc-btn-start-progress"
-            [disabled]="effectiveStatus() !== 'Pending'"
-            (click)="startProgress()"
-          >
-            Start Progress
-          </button>
         </div>
 
         <div class="fc-field">
@@ -92,6 +77,15 @@
           @if (titleError(); as te) {
             <p id="task-title-hint" class="fc-hint fc-hint-error">{{ te }}</p>
           }
+        </div>
+
+        <div class="fc-field">
+          <label class="fc-label" for="task-status-edit">Status</label>
+          <select id="task-status-edit" class="fc-input" formControlName="status">
+            @for (opt of statusOptions; track opt) {
+              <option [value]="opt">{{ opt }}</option>
+            }
+          </select>
         </div>
 
         <div class="fc-field">

@@ -4,9 +4,8 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::task_status_service::TERMINAL_TASK_STATUSES;
 use crate::types::{ApiErrorBody, TaskDetailResponse, TaskResponse, TenantScope};
-
-pub const TERMINAL_TASK_STATUSES: &[&str] = &["Done"];
 
 pub fn resolve_due_fields(
     due_date_raw: Option<&str>,
@@ -201,6 +200,7 @@ mod tests {
             .expect("valid time");
         let due_date = Some(NaiveDate::from_ymd_opt(2026, 5, 20).expect("valid date"));
         assert!(!compute_is_overdue(due_date, None, "Done", now));
+        assert!(!compute_is_overdue(due_date, None, "Cancelled", now));
     }
 
     #[test]

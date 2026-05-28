@@ -4,18 +4,18 @@ import { catchError, forkJoin, map, of, Subscription, switchMap } from 'rxjs';
 import { AuthApiService, CurrentUser } from '../auth-api.service';
 
 import {
+  TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
   ProjectApiService,
   TaskDetail,
 } from '../project-api.service';
 
-const VALID_TASK_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
-type ValidTaskStatus = (typeof VALID_TASK_STATUSES)[number];
+type ValidTaskStatus = (typeof TASK_STATUS_OPTIONS)[number];
 
 const VALID_TASK_PRIORITIES = TASK_PRIORITY_OPTIONS;
 
 function normalizeTaskStatus(raw: string): string {
-  return VALID_TASK_STATUSES.includes(raw as ValidTaskStatus) ? raw : 'Pending';
+  return (TASK_STATUS_OPTIONS as readonly string[]).includes(raw as ValidTaskStatus) ? raw : 'Pending';
 }
 
 function normalizeTaskPriority(raw: string): string {
@@ -113,8 +113,14 @@ export class TaskView implements OnInit, OnDestroy {
     switch (normalizeTaskStatus(status)) {
       case 'In Progress':
         return 'pd-status pd-status--progress';
+      case 'Blocked':
+        return 'pd-status pd-status--blocked';
+      case 'In Review':
+        return 'pd-status pd-status--review';
       case 'Done':
         return 'pd-status pd-status--done';
+      case 'Cancelled':
+        return 'pd-status pd-status--cancelled';
       default:
         return 'pd-status pd-status--pending';
     }

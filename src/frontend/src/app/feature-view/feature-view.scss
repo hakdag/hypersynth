@@ -243,6 +243,24 @@
   border: 1px solid rgb(20 184 166 / 0.35);
 }
 
+.fv-task-badge--blocked {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.fv-task-badge--review {
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.fv-task-badge--cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
 .fv-task-origin {
   display: inline-flex;
   align-items: center;

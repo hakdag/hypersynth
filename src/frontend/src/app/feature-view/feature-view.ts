@@ -14,6 +14,8 @@ import {
   CreatedTask,
   ProjectApiService,
   ProjectDetail as ProjectDetailModel,
+  TASK_STATUS_OPTIONS,
+  TERMINAL_TASK_STATUSES,
   TASK_PRIORITY_OPTIONS,
 } from '../project-api.service';
 import { AuthApiService, CurrentUser } from '../auth-api.service';
@@ -26,11 +28,10 @@ function normalizeStatus(raw: string): string {
   return VALID_FEATURE_STATUSES.includes(raw as ValidFeatureStatus) ? raw : 'Pending';
 }
 
-const VALID_TASK_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
-type ValidTaskStatus = (typeof VALID_TASK_STATUSES)[number];
+type ValidTaskStatus = (typeof TASK_STATUS_OPTIONS)[number];
 
 function normalizeTaskStatus(raw: string): string {
-  return VALID_TASK_STATUSES.includes(raw as ValidTaskStatus) ? raw : 'Pending';
+  return (TASK_STATUS_OPTIONS as readonly string[]).includes(raw as ValidTaskStatus) ? raw : 'Pending';
 }
 
 type ValidTaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
@@ -259,8 +260,14 @@ export class FeatureView implements OnInit, OnDestroy {
     switch (normalizeTaskStatus(status)) {
       case 'In Progress':
         return 'fv-task-badge fv-task-badge--progress';
+      case 'Blocked':
+        return 'fv-task-badge fv-task-badge--blocked';
+      case 'In Review':
+        return 'fv-task-badge fv-task-badge--review';
       case 'Done':
         return 'fv-task-badge fv-task-badge--done';
+      case 'Cancelled':
+        return 'fv-task-badge fv-task-badge--cancelled';
       default:
         return 'fv-task-badge fv-task-badge--pending';
     }
@@ -317,7 +324,9 @@ export class FeatureView implements OnInit, OnDestroy {
   }
 
   protected taskTitleRowClass(status: string): string {
-    return normalizeTaskStatus(status) === 'Done' ? 'fv-task-title fv-task-title--done' : 'fv-task-title';
+    return (TERMINAL_TASK_STATUSES as readonly string[]).includes(normalizeTaskStatus(status))
+      ? 'fv-task-title fv-task-title--done'
+      : 'fv-task-title';
   }
 
   protected canManageTasks(): boolean {

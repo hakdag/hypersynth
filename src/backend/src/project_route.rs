@@ -21,6 +21,7 @@ use crate::platform_config_service::PlatformConfigService;
 use crate::project_ai_settings_service::ProjectAiSettingsService;
 use crate::task_assignee_service;
 use crate::task_due_date_service;
+use crate::task_status_service;
 use crate::tenant_scope_service::TenantScopeService;
 use crate::tx_extractor::{missing_tx_error, AuditCtx};
 use crate::types::{
@@ -2513,16 +2514,19 @@ pub async fn update_project_task(
         .map(|s| s.to_string());
 
     let status_trimmed = payload.status.trim();
-    if !matches!(status_trimmed, "Pending" | "In Progress" | "Done") {
-        warn!(
-            user_id = %user.id,
-            %project_id,
-            %feature_id,
-            %task_id,
-            "api: PATCH task -> 400 bad status"
-        );
-        return Err(bad_request("Status must be Pending, In Progress, or Done."));
-    }
+    let status_val = match task_status_service::validate_task_status_trimmed(status_trimmed) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(
+                user_id = %user.id,
+                %project_id,
+                %feature_id,
+                %task_id,
+                "api: PATCH task -> 400 bad status"
+            );
+            return Err(err);
+        }
+    };
 
     let priority_raw = payload.priority.trim();
     let priority_trimmed = if priority_raw.is_empty() {
@@ -2650,9 +2654,9 @@ pub async fn update_project_task(
     })?
     .ok_or_else(|| not_found("Task not found."))?;
 
-    let old_priority = sqlx::query_scalar::<_, String>(
+    let (old_status, old_priority) = sqlx::query_as::<_, (String, String)>(
         r#"
-        SELECT t.priority
+        SELECT t.status, t.priority
         FROM tasks t
         INNER JOIN features f ON f.id = t.feature_id
         INNER JOIN projects p ON p.id = f.project_id
@@ -2693,6 +2697,10 @@ pub async fn update_project_task(
         internal_error()
     })?
     .ok_or_else(|| not_found("Task not found."))?;
+
+    if status_val == "Done" {
+        task_status_service::validate_may_mark_done(&state.pool, scope, task_id, project_id).await?;
+    }
 
     let row = sqlx::query_as::<_, TaskDetailResponse>(
         r#"
@@ -2760,7 +2768,7 @@ pub async fn update_project_task(
     .bind(scope.session_user_id())
     .bind(title)
     .bind(description.as_ref())
-    .bind(status_trimmed)
+    .bind(status_val)
     .bind(priority_val)
     .bind(assignee_bind)
     .bind(due_date_bind)
@@ -2802,6 +2810,23 @@ pub async fn update_project_task(
                 "feature_id": feature_id,
                 "old_assignee_user_id": old_assignee_user_id,
                 "new_assignee_user_id": assignee_bind,
+            }),
+        )
+        .await;
+    }
+
+    if old_status != status_val {
+        AuditEventsService::record_with_pool(
+            &state.pool,
+            AuditEventType::TaskStatusChanged,
+            &auditctx.0,
+            serde_json::json!({
+                "entity_type": "task",
+                "entity_id": row.id,
+                "project_id": project_id,
+                "feature_id": feature_id,
+                "old_status": old_status,
+                "new_status": status_val,
             }),
         )
         .await;

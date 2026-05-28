@@ -2,7 +2,6 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import {
   Component,
-  computed,
   inject,
   OnDestroy,
   OnInit,
@@ -24,15 +23,15 @@ import { AuthApiService, CurrentUser } from '../auth-api.service';
 import { ProjectMember, ProjectMembersApiService } from '../project-members-api.service';
 import {
   ProjectApiService,
+  TASK_STATUS_OPTIONS,
   TaskDetail,
   TASK_PRIORITY_OPTIONS,
 } from '../project-api.service';
 
-const VALID_TASK_STATUSES = ['Pending', 'In Progress', 'Done'] as const;
-type ValidTaskStatus = (typeof VALID_TASK_STATUSES)[number];
+type ValidTaskStatus = (typeof TASK_STATUS_OPTIONS)[number];
 
 function normalizeTaskStatus(raw: string): ValidTaskStatus {
-  return VALID_TASK_STATUSES.includes(raw as ValidTaskStatus)
+  return (TASK_STATUS_OPTIONS as readonly string[]).includes(raw as ValidTaskStatus)
     ? (raw as ValidTaskStatus)
     : 'Pending';
 }
@@ -73,33 +72,23 @@ export class TaskEdit implements OnInit, OnDestroy {
   private readonly membersApi = inject(ProjectMembersApiService);
   private sub: Subscription | null = null;
 
-  /** Local-only status change before Save; cleared on load and after successful PATCH. */
-  private readonly statusLocalOverride = signal<string | null>(null);
-
   protected readonly loadState = signal<'loading' | 'ok' | 'error'>('loading');
   protected readonly taskMeta = signal<TaskDetail | null>(null);
   protected readonly currentUser = signal<CurrentUser | null>(null);
   protected readonly pageError = signal<string | null>(null);
   protected readonly assigneeOptions = signal<Array<{ id: string; label: string }>>([]);
 
+  protected readonly statusOptions = [...TASK_STATUS_OPTIONS];
   protected readonly priorityOptions = [...TASK_PRIORITY_OPTIONS];
 
   protected readonly submitting = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly saveNotice = signal(false);
 
-  protected readonly effectiveStatus = computed(() => {
-    const m = this.taskMeta();
-    if (!m) {
-      return 'Pending';
-    }
-    const o = this.statusLocalOverride();
-    return normalizeTaskStatus(o ?? m.status);
-  });
-
   protected readonly form = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.maxLength(512)]],
     description: [''],
+    status: this.fb.nonNullable.control<string>('Pending', Validators.required),
     priority: this.fb.nonNullable.control<string>('Standard', Validators.required),
     dueDate: this.fb.nonNullable.control<string>(''),
     dueTime: this.fb.nonNullable.control<string>(''),
@@ -124,7 +113,6 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.pageError.set(null);
           this.serverError.set(null);
           this.saveNotice.set(false);
-          this.statusLocalOverride.set(null);
           return this.authApi.me().pipe(
             switchMap((currentUser) =>
               forkJoin({
@@ -160,7 +148,6 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.taskMeta.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
-          this.statusLocalOverride.set(null);
           this.loadState.set('error');
           return;
         }
@@ -169,7 +156,6 @@ export class TaskEdit implements OnInit, OnDestroy {
           this.taskMeta.set(null);
           this.currentUser.set(null);
           this.assigneeOptions.set([]);
-          this.statusLocalOverride.set(null);
           this.loadState.set('error');
           return;
         }
@@ -180,6 +166,7 @@ export class TaskEdit implements OnInit, OnDestroy {
         this.form.patchValue({
           title: res.task.title,
           description: res.task.description ?? '',
+          status: normalizeTaskStatus(res.task.status),
           priority: normalizeTaskPriority(res.task.priority),
           dueDate: res.task.dueDate ?? '',
           dueTime: this.normalizeDueTimeForInput(res.task.dueTime),
@@ -187,20 +174,12 @@ export class TaskEdit implements OnInit, OnDestroy {
         });
         this.form.markAsPristine();
         this.saveNotice.set(false);
-        this.statusLocalOverride.set(null);
         this.loadState.set('ok');
       });
   }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
-  }
-
-  protected startProgress(): void {
-    if (this.effectiveStatus() !== 'Pending') {
-      return;
-    }
-    this.statusLocalOverride.set('In Progress');
   }
 
   protected submit(): void {
@@ -234,7 +213,7 @@ export class TaskEdit implements OnInit, OnDestroy {
       .updateTask(t.projectId, t.featureId, t.id, {
         title: raw.title.trim(),
         description: raw.description,
-        status: normalizeTaskStatus(this.effectiveStatus()),
+        status: normalizeTaskStatus(raw.status),
         priority: raw.priority,
         dueDate: dueDateTrimmed.length > 0 ? dueDateTrimmed : undefined,
         dueTime: dueDateTrimmed.length > 0 && dueTimeTrimmed.length > 0 ? dueTimeTrimmed : undefined,
@@ -245,11 +224,11 @@ export class TaskEdit implements OnInit, OnDestroy {
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
         next: (updated) => {
-          this.statusLocalOverride.set(null);
           this.taskMeta.set(updated);
           this.form.patchValue({
             title: updated.title,
             description: updated.description ?? '',
+            status: normalizeTaskStatus(updated.status),
             priority: normalizeTaskPriority(updated.priority),
             dueDate: updated.dueDate ?? '',
             dueTime: this.normalizeDueTimeForInput(updated.dueTime),

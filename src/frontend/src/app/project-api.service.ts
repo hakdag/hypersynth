@@ -113,6 +113,17 @@ export interface UpdateTaskPayload {
   assigneeUserId?: string;
 }
 
+export const TASK_STATUS_OPTIONS = [
+  'Pending',
+  'In Progress',
+  'Blocked',
+  'In Review',
+  'Done',
+  'Cancelled',
+] as const;
+export type TaskStatus = (typeof TASK_STATUS_OPTIONS)[number];
+export const TERMINAL_TASK_STATUSES = ['Done', 'Cancelled'] as const;
+
 export const TASK_PRIORITY_OPTIONS = ['Standard', 'Elevated', 'Critical'] as const;
 export type TaskPriority = (typeof TASK_PRIORITY_OPTIONS)[number];
 
